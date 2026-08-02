@@ -727,6 +727,38 @@ svg.spark polyline {
   stroke-linecap: round;
 }
 .spark-none { color: var(--muted); }
+
+.del-cell { width: 1px; white-space: nowrap; text-align: right; }
+.del-ex {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.lift-block tr:hover .del-ex { opacity: 1; }
+.del-ex:hover { color: var(--accent); opacity: 1; }
+
+.lift-foot { margin-top: 0.7rem; }
+.add-ex {
+  width: 100%;
+  border: 1px dashed var(--card-border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-style: italic;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.add-ex:hover { border-color: var(--accent); color: var(--accent); }
+
 .delta { font-size: 0.72rem; margin-left: 0.35rem; font-variant-numeric: tabular-nums; }
 .delta.up { color: var(--good); }
 .delta.down { color: var(--accent); }

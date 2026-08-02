@@ -34,7 +34,7 @@ layout: default
     <h3>{{ w.name }}</h3>
     <table class="log lifts">
       <thead>
-        <tr><th></th><th>exercise</th><th>sets×reps</th><th>kg</th><th>trend</th></tr>
+        <tr><th></th><th>exercise</th><th>sets×reps</th><th>kg</th><th>trend</th><th></th></tr>
       </thead>
       <tbody>
         {% for ex in w.exercises %}
@@ -55,10 +55,14 @@ layout: default
             <button class="step up" type="button" aria-label="increase">+</button>
           </td>
           <td class="spark-cell"></td>
+          <td class="del-cell"><button class="del-ex" type="button" aria-label="remove exercise">✕</button></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    <div class="lift-foot">
+      <button class="add-ex" type="button" data-workout="w{{ wi }}">+ add exercise</button>
+    </div>
     </div>
   {% endfor %}
   </div>
@@ -137,6 +141,8 @@ layout: default
   state.history = state.history || {};
   state.sessions = state.sessions || [];
   state.split = state.split || {};
+  state.exExtra = state.exExtra || {};   // rows the user added, per workout
+  state.exHidden = state.exHidden || {};  // seed rows the user removed
 
   // ---- working weights: editable name/sets/reps/kg, reorderable ----
   function recordHistory(id, val){
@@ -218,8 +224,93 @@ layout: default
     persistOrder(tr.dataset.workout);
   }
 
-  // apply saved field values
-  document.querySelectorAll('tr[data-id]').forEach(function(tr){
+  // ---- add / remove exercise rows (persisted) ----
+  function seedHistory(tr){
+    if (state.history[tr.dataset.id]) return;
+    var num = numFrom(tr.querySelector('.wt').value);
+    if (!isNaN(num)) state.history[tr.dataset.id] = [{ d: isoToday(), kg: num }];
+  }
+
+  function wireRow(tr){
+    renderSpark(tr);
+    tr.querySelectorAll('.ex-name, .ex-sets, .ex-reps').forEach(function(inp){
+      inp.addEventListener('change', function(){ commitRow(tr); });
+    });
+    var wt = tr.querySelector('.wt');
+    wt.addEventListener('change', function(){ commitRow(tr); });
+    wt.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); wt.blur(); } });
+    tr.querySelector('.step.down').addEventListener('click', function(){ bump(wt, -STEP); });
+    tr.querySelector('.step.up').addEventListener('click', function(){ bump(wt, STEP); });
+    tr.querySelector('.mv.up').addEventListener('click', function(){ move(tr, -1); });
+    tr.querySelector('.mv.down').addEventListener('click', function(){ move(tr, 1); });
+    var del = tr.querySelector('.del-ex');
+    if (del) del.addEventListener('click', function(){ deleteRow(tr); });
+  }
+
+  function makeRow(id, wid, data){
+    data = data || {};
+    var tr = document.createElement('tr');
+    tr.dataset.id = id;
+    tr.dataset.workout = wid;
+    tr.innerHTML =
+      '<td class="reorder">' +
+        '<button class="mv up" type="button" aria-label="move up">▲</button>' +
+        '<button class="mv down" type="button" aria-label="move down">▼</button>' +
+      '</td>' +
+      '<td><input class="ex-name" type="text" spellcheck="false" value="' + esc(data.name || '') + '"></td>' +
+      '<td class="sr-cell">' +
+        '<input class="ex-sets" type="text" inputmode="numeric" value="' + esc(data.sets || '') + '">' +
+        '<span class="x">×</span>' +
+        '<input class="ex-reps" type="text" value="' + esc(data.reps || '') + '">' +
+      '</td>' +
+      '<td class="wt-cell">' +
+        '<button class="step down" type="button" aria-label="decrease">−</button>' +
+        '<input class="wt" type="text" inputmode="decimal" spellcheck="false" value="' + esc(data.kg || '') + '">' +
+        '<button class="step up" type="button" aria-label="increase">+</button>' +
+      '</td>' +
+      '<td class="spark-cell"></td>' +
+      '<td class="del-cell"><button class="del-ex" type="button" aria-label="remove exercise">✕</button></td>';
+    return tr;
+  }
+
+  function addExercise(wid){
+    var block = document.querySelector('.lift-block[data-workout="' + wid + '"]');
+    if (!block) return;
+    var id = wid + '-x' + Date.now();
+    var data = { name: '', sets: '2', reps: '', kg: '' };
+    state.ex[id] = data;
+    state.exExtra[wid] = state.exExtra[wid] || [];
+    state.exExtra[wid].push(id);
+    var tr = makeRow(id, wid, data);
+    block.querySelector('tbody').appendChild(tr);
+    wireRow(tr);
+    persistOrder(wid);
+    save();
+    tr.querySelector('.ex-name').focus();
+  }
+
+  function deleteRow(tr){
+    var id = tr.dataset.id, wid = tr.dataset.workout;
+    if (!confirm('Remove "' + (tr.querySelector('.ex-name').value || 'this exercise') + '"?')) return;
+    tr.parentNode.removeChild(tr);
+    delete state.ex[id];
+    delete state.history[id];
+    if (state.exOrder[wid]) state.exOrder[wid] = state.exOrder[wid].filter(function(x){ return x !== id; });
+    var ex = state.exExtra[wid] || [];
+    if (ex.indexOf(id) !== -1) state.exExtra[wid] = ex.filter(function(x){ return x !== id; });
+    else state.exHidden[id] = true;   // a seeded row was removed
+    save();
+    refreshArrows(wid);
+  }
+
+  // remove seed rows the user deleted
+  Object.keys(state.exHidden).forEach(function(id){
+    var tr = document.querySelector('.lift-block tr[data-id="' + id + '"]');
+    if (tr) tr.parentNode.removeChild(tr);
+  });
+
+  // apply saved field values to seed rows
+  document.querySelectorAll('.lift-block tr[data-id]').forEach(function(tr){
     var saved = state.ex[tr.dataset.id];
     if (saved){
       if (saved.name !== undefined) tr.querySelector('.ex-name').value = saved.name;
@@ -227,10 +318,19 @@ layout: default
       if (saved.reps !== undefined) tr.querySelector('.ex-reps').value = saved.reps;
       if (saved.kg   !== undefined) tr.querySelector('.wt').value = saved.kg;
     }
-    if (!state.history[tr.dataset.id]){
-      var num = numFrom(tr.querySelector('.wt').value);
-      if (!isNaN(num)) state.history[tr.dataset.id] = [{ d: isoToday(), kg: num }];
-    }
+    seedHistory(tr);
+  });
+
+  // recreate rows the user added
+  Object.keys(state.exExtra).forEach(function(wid){
+    var tbody = document.querySelector('.lift-block[data-workout="' + wid + '"] tbody');
+    if (!tbody) return;
+    state.exExtra[wid].forEach(function(id){
+      if (tbody.querySelector('tr[data-id="' + id + '"]')) return;
+      var tr = makeRow(id, wid, state.ex[id] || {});
+      tbody.appendChild(tr);
+      seedHistory(tr);
+    });
   });
 
   // apply saved order
@@ -243,21 +343,12 @@ layout: default
     });
   });
 
-  // wire rows
-  document.querySelectorAll('tr[data-id]').forEach(function(tr){
-    renderSpark(tr);
-    tr.querySelectorAll('.ex-name, .ex-sets, .ex-reps').forEach(function(inp){
-      inp.addEventListener('change', function(){ commitRow(tr); });
-    });
-    var wt = tr.querySelector('.wt');
-    wt.addEventListener('change', function(){ commitRow(tr); });
-    wt.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); wt.blur(); } });
-    tr.querySelector('.step.down').addEventListener('click', function(){ bump(wt, -STEP); });
-    tr.querySelector('.step.up').addEventListener('click', function(){ bump(wt, STEP); });
-    tr.querySelector('.mv.up').addEventListener('click', function(){ move(tr, -1); });
-    tr.querySelector('.mv.down').addEventListener('click', function(){ move(tr, 1); });
-  });
+  // wire every row + the add buttons
+  document.querySelectorAll('.lift-block tr[data-id]').forEach(function(tr){ wireRow(tr); });
   document.querySelectorAll('.lift-block').forEach(function(b){ refreshArrows(b.dataset.workout); });
+  document.querySelectorAll('.add-ex').forEach(function(btn){
+    btn.addEventListener('click', function(){ addExercise(btn.dataset.workout); });
+  });
   save();
 
   // ---- sessions ----
