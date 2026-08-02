@@ -14,8 +14,6 @@ layout: default
   var SCOPES = ['daily', 'weekly', 'monthly'];
   var KINDS = ['normal', 'must', 'reward'];
   var TITLES = { daily: 'Daily Non-Negotiables', weekly: 'Weekly Achievement', monthly: 'Monthly Achievement' };
-  var RESETS = { daily: 'resets daily', weekly: 'resets weekly', monthly: 'resets monthly' };
-  var focusId = null;
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function today() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -77,68 +75,87 @@ layout: default
     return null;
   }
 
-  function render() {
-    var html = '';
-    SCOPES.forEach(function (sc) {
-      var items = state.sections[sc];
-      var done = 0;
-      items.forEach(function (x) { if (x.done) done++; });
-      var lis = items.map(function (it) {
-        return '<li class="habit ' + it.kind + (it.done ? ' done' : '') + '" data-id="' + it.id + '">' +
-          '<input type="checkbox" class="hcheck"' + (it.done ? ' checked' : '') + '>' +
-          '<input type="text" class="htext" spellcheck="false" value="' + esc(it.text) + '" placeholder="new habit…">' +
-          '<button class="kind-dot" type="button" title="tap to change type: normal / must / reward" aria-label="change type"></button>' +
-          '<button class="hdel" type="button" title="remove">✕</button>' +
-          '</li>';
-      }).join('');
-      var pct = items.length ? Math.round(done / items.length * 100) : 0;
-      html += '<section class="habit-group" data-scope="' + sc + '">' +
-        '<div class="habit-head"><h2>' + TITLES[sc] + '</h2>' +
-        '<span class="habit-meta">' + done + ' / ' + items.length + '</span></div>' +
-        '<div class="habit-bar"><span style="width:' + pct + '%"></span></div>' +
-        '<ul class="habit-list">' + lis + '</ul>' +
-        '<button class="habit-add" type="button">+ add</button>' +
-        '</section>';
-    });
-    root.innerHTML = html;
-    wire();
-    if (focusId) {
-      var inp = root.querySelector('li[data-id="' + focusId + '"] .htext');
-      if (inp) inp.focus();
-      focusId = null;
-    }
+  // Update just one section's count + progress bar (no full re-render).
+  function refreshHead(sc) {
+    var sec = root.querySelector('.habit-group[data-scope="' + sc + '"]');
+    if (!sec) return;
+    var items = state.sections[sc];
+    var done = 0;
+    items.forEach(function (x) { if (x.done) done++; });
+    var pct = items.length ? Math.round(done / items.length * 100) : 0;
+    sec.querySelector('.habit-meta').textContent = done + ' / ' + items.length;
+    sec.querySelector('.habit-bar span').style.width = pct + '%';
   }
 
-  function wire() {
-    root.querySelectorAll('.habit-group').forEach(function (sec) {
-      var sc = sec.dataset.scope;
-      sec.querySelectorAll('li.habit').forEach(function (li) {
-        var id = li.dataset.id;
-        li.querySelector('.hcheck').addEventListener('change', function (e) {
-          var it = findItem(sc, id); if (!it) return;
-          it.done = e.target.checked; save(); render();
-        });
-        li.querySelector('.htext').addEventListener('change', function (e) {
-          var it = findItem(sc, id); if (!it) return;
-          it.text = e.target.value; save();
-        });
-        li.querySelector('.kind-btn').addEventListener('click', function () {
-          var it = findItem(sc, id); if (!it) return;
-          it.kind = nextKind(it.kind); save(); render();
-        });
-        li.querySelector('.hdel').addEventListener('click', function () {
-          var it = findItem(sc, id); if (!it) return;
-          if (!confirm('Remove "' + (it.text || 'this item') + '"?')) return;
-          state.sections[sc] = state.sections[sc].filter(function (x) { return x.id !== id; });
-          save(); render();
-        });
+  function makeLi(it) {
+    var li = document.createElement('li');
+    li.className = 'habit ' + it.kind + (it.done ? ' done' : '');
+    li.dataset.id = it.id;
+    li.innerHTML =
+      '<input type="checkbox" class="hcheck"' + (it.done ? ' checked' : '') + '>' +
+      '<input type="text" class="htext" spellcheck="false" value="' + esc(it.text) + '" placeholder="new habit…">' +
+      '<button class="kind-dot" type="button" title="tap to change type: normal / must / reward" aria-label="change type"></button>' +
+      '<button class="hdel" type="button" title="remove">✕</button>';
+    return li;
+  }
+
+  // Wire a single row. Every interaction touches only that row (+ its header),
+  // so checking a box never tears down and re-attaches the other rows.
+  function wireLi(li, sc) {
+    var id = li.dataset.id;
+    li.querySelector('.hcheck').addEventListener('change', function (e) {
+      var it = findItem(sc, id); if (!it) return;
+      it.done = e.target.checked;
+      li.classList.toggle('done', it.done);
+      save(); refreshHead(sc);
+    });
+    li.querySelector('.htext').addEventListener('change', function (e) {
+      var it = findItem(sc, id); if (!it) return;
+      it.text = e.target.value; save();
+    });
+    li.querySelector('.kind-dot').addEventListener('click', function () {
+      var it = findItem(sc, id); if (!it) return;
+      it.kind = nextKind(it.kind);
+      li.className = 'habit ' + it.kind + (it.done ? ' done' : '');
+      save();
+    });
+    li.querySelector('.hdel').addEventListener('click', function () {
+      var it = findItem(sc, id); if (!it) return;
+      if (!confirm('Remove "' + (it.text || 'this item') + '"?')) return;
+      state.sections[sc] = state.sections[sc].filter(function (x) { return x.id !== id; });
+      li.parentNode.removeChild(li);
+      save(); refreshHead(sc);
+    });
+  }
+
+  function render() {
+    root.innerHTML = '';
+    SCOPES.forEach(function (sc) {
+      var sec = document.createElement('section');
+      sec.className = 'habit-group';
+      sec.dataset.scope = sc;
+      sec.innerHTML =
+        '<div class="habit-head"><h2>' + TITLES[sc] + '</h2><span class="habit-meta"></span></div>' +
+        '<div class="habit-bar"><span></span></div>' +
+        '<ul class="habit-list"></ul>' +
+        '<button class="habit-add" type="button">+ add</button>';
+      var ul = sec.querySelector('.habit-list');
+      state.sections[sc].forEach(function (it) {
+        var li = makeLi(it);
+        ul.appendChild(li);
+        wireLi(li, sc);
       });
       sec.querySelector('.habit-add').addEventListener('click', function () {
         var it = { id: uid(), text: '', kind: 'normal', done: false };
         state.sections[sc].push(it);
-        focusId = it.id;
-        save(); render();
+        var li = makeLi(it);
+        ul.appendChild(li);
+        wireLi(li, sc);
+        save(); refreshHead(sc);
+        li.querySelector('.htext').focus();
       });
+      root.appendChild(sec);
+      refreshHead(sc);
     });
   }
 
