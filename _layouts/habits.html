@@ -4,13 +4,6 @@ layout: default
 
 <article class="tracker habits">
   <h1>{{ site.data.habits.title | default: "Habits" }}</h1>
-  <p class="bar-label">
-    Tap a row to check it. Rename by typing. Tap the type pill to cycle
-    normal → <span class="k-must">must</span> → <span class="k-reward">reward</span>.
-    Everything saves in this browser. The daily list resets each day, weekly each
-    week, monthly each month (only the checks clear, your items stay).
-  </p>
-
   <div id="habits"></div>
 </article>
 
@@ -94,13 +87,15 @@ layout: default
         return '<li class="habit ' + it.kind + (it.done ? ' done' : '') + '" data-id="' + it.id + '">' +
           '<input type="checkbox" class="hcheck"' + (it.done ? ' checked' : '') + '>' +
           '<input type="text" class="htext" spellcheck="false" value="' + esc(it.text) + '" placeholder="new habit…">' +
-          '<button class="kind-btn" type="button" title="change type">' + it.kind + '</button>' +
+          '<button class="kind-dot" type="button" title="tap to change type: normal / must / reward" aria-label="change type"></button>' +
           '<button class="hdel" type="button" title="remove">✕</button>' +
           '</li>';
       }).join('');
+      var pct = items.length ? Math.round(done / items.length * 100) : 0;
       html += '<section class="habit-group" data-scope="' + sc + '">' +
         '<div class="habit-head"><h2>' + TITLES[sc] + '</h2>' +
-        '<span class="habit-meta">' + RESETS[sc] + ' · ' + done + '/' + items.length + '</span></div>' +
+        '<span class="habit-meta">' + done + ' / ' + items.length + '</span></div>' +
+        '<div class="habit-bar"><span style="width:' + pct + '%"></span></div>' +
         '<ul class="habit-list">' + lis + '</ul>' +
         '<button class="habit-add" type="button">+ add</button>' +
         '</section>';
