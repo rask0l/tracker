@@ -100,6 +100,32 @@ layout: default
   {% else %}
     <p class="today" style="font-size:1rem;color:var(--muted);">Nothing logged yet. Good. Add the first miss the moment a lab humbles you.</p>
   {% endif %}
+
+  <h2>exam prep</h2>
+  <p class="bar-label">The gates that actually decide pass or fail. The hacking rarely fails people here; the report and the clock do.</p>
+  {% assign gates_total = d.exam_prep | size %}
+  {% assign gates_done = d.exam_prep | where: "done", true | size %}
+  <div class="tracker-stat">
+    <strong>{{ gates_done }}/{{ gates_total }}</strong>
+    <span>gates cleared</span>
+  </div>
+  <ul class="roadmap">
+    {% for g in d.exam_prep %}
+      {% if g.done %}
+        <li class="done"><span class="mark">✓</span>{{ g.item }}</li>
+      {% else %}
+        <li><span class="mark">□</span>{{ g.item }}</li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+
+  <h2>methodology</h2>
+  <p class="bar-label">Your when-I-get-a-web-app flow. By day 23 you should be able to write this from memory, cold.</p>
+  <ol class="methodology">
+    {% for m in d.methodology %}
+      <li>{{ m }}</li>
+    {% endfor %}
+  </ol>
   </article>
 
   <figure class="flank flank-right">

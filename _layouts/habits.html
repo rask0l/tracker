@@ -54,13 +54,27 @@ layout: default
   if (!state || !state.sections) { state = seed(); save(); }
   state.period = state.period || {};
   state.sections = state.sections || {};
+  state.streak = state.streak || { current: 0, best: 0 };
   SCOPES.forEach(function (sc) { if (!state.sections[sc]) state.sections[sc] = []; });
+
+  // A day is a "win" when every daily must-do is done (falls back to all
+  // daily items if none are marked must). Streak grows one per winning day.
+  function dayWasWin() {
+    var daily = state.sections.daily || [];
+    var musts = daily.filter(function (x) { return x.kind === 'must'; });
+    var pool = musts.length ? musts : daily;
+    return pool.length > 0 && pool.every(function (x) { return x.done; });
+  }
 
   // period reset: clear checks when the day / week / month rolls over
   var changed = false;
   SCOPES.forEach(function (sc) {
     var p = periodOf(sc);
     if (state.period[sc] !== p) {
+      if (sc === 'daily' && state.period[sc]) {   // a previous day just ended — score it
+        state.streak.current = dayWasWin() ? state.streak.current + 1 : 0;
+        if (state.streak.current > state.streak.best) state.streak.best = state.streak.current;
+      }
       state.sections[sc].forEach(function (it) { it.done = false; });
       state.period[sc] = p;
       changed = true;
@@ -134,8 +148,13 @@ layout: default
       var sec = document.createElement('section');
       sec.className = 'habit-group';
       sec.dataset.scope = sc;
+      var streak = sc === 'daily'
+        ? '<span class="streak" title="days in a row with both must-dos done">🔥 ' + state.streak.current +
+          (state.streak.best ? ' · best ' + state.streak.best : '') + '</span>'
+        : '';
       sec.innerHTML =
-        '<div class="habit-head"><h2>' + TITLES[sc] + '</h2><span class="habit-meta"></span></div>' +
+        '<div class="habit-head"><h2>' + TITLES[sc] + '</h2>' +
+        '<span class="habit-side">' + streak + '<span class="habit-meta"></span></span></div>' +
         '<div class="habit-bar"><span></span></div>' +
         '<ul class="habit-list"></ul>' +
         '<button class="habit-add" type="button">+ add</button>';
