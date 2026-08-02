@@ -1,0 +1,152 @@
+---
+layout: default
+---
+
+<article class="tracker habits">
+  <h1>{{ site.data.habits.title | default: "Habits" }}</h1>
+  <p class="bar-label">
+    Tap a row to check it. Rename by typing. Tap the type pill to cycle
+    normal → <span class="k-must">must</span> → <span class="k-reward">reward</span>.
+    Everything saves in this browser. The daily list resets each day, weekly each
+    week, monthly each month (only the checks clear, your items stay).
+  </p>
+
+  <div id="habits"></div>
+</article>
+
+<script>
+(function () {
+  var KEY = 'habit-tracker-v1';
+  var SEED = {{ site.data.habits | jsonify }};
+  var SCOPES = ['daily', 'weekly', 'monthly'];
+  var KINDS = ['normal', 'must', 'reward'];
+  var TITLES = { daily: 'Daily Non-Negotiables', weekly: 'Weekly Achievement', monthly: 'Monthly Achievement' };
+  var RESETS = { daily: 'resets daily', weekly: 'resets weekly', monthly: 'resets monthly' };
+  var focusId = null;
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function today() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function ym() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1); }
+  function yw() {
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));       // nearest Thursday
+    var week1 = new Date(d.getFullYear(), 0, 4);
+    var wk = 1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+    return d.getFullYear() + '-W' + pad(wk);
+  }
+  function periodOf(sc) { return sc === 'daily' ? today() : sc === 'weekly' ? yw() : ym(); }
+
+  function uid() { return 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function nextKind(k) { var i = KINDS.indexOf(k); return KINDS[(i + 1) % KINDS.length]; }
+
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }
+  function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+
+  function seed() {
+    var s = { version: 1, period: {}, sections: {} };
+    SCOPES.forEach(function (sc) {
+      s.period[sc] = periodOf(sc);
+      s.sections[sc] = (SEED[sc] || []).map(function (it) {
+        return { id: uid(), text: it.text, kind: it.kind || 'normal', done: false };
+      });
+    });
+    return s;
+  }
+
+  var state = load();
+  if (!state || !state.sections) { state = seed(); save(); }
+  state.period = state.period || {};
+  state.sections = state.sections || {};
+  SCOPES.forEach(function (sc) { if (!state.sections[sc]) state.sections[sc] = []; });
+
+  // period reset: clear checks when the day / week / month rolls over
+  var changed = false;
+  SCOPES.forEach(function (sc) {
+    var p = periodOf(sc);
+    if (state.period[sc] !== p) {
+      state.sections[sc].forEach(function (it) { it.done = false; });
+      state.period[sc] = p;
+      changed = true;
+    }
+  });
+  if (changed) save();
+
+  var root = document.getElementById('habits');
+  function findItem(sc, id) {
+    var a = state.sections[sc];
+    for (var i = 0; i < a.length; i++) { if (a[i].id === id) return a[i]; }
+    return null;
+  }
+
+  function render() {
+    var html = '';
+    SCOPES.forEach(function (sc) {
+      var items = state.sections[sc];
+      var done = 0;
+      items.forEach(function (x) { if (x.done) done++; });
+      var lis = items.map(function (it) {
+        return '<li class="habit ' + it.kind + (it.done ? ' done' : '') + '" data-id="' + it.id + '">' +
+          '<input type="checkbox" class="hcheck"' + (it.done ? ' checked' : '') + '>' +
+          '<input type="text" class="htext" spellcheck="false" value="' + esc(it.text) + '" placeholder="new habit…">' +
+          '<button class="kind-btn" type="button" title="change type">' + it.kind + '</button>' +
+          '<button class="hdel" type="button" title="remove">✕</button>' +
+          '</li>';
+      }).join('');
+      html += '<section class="habit-group" data-scope="' + sc + '">' +
+        '<div class="habit-head"><h2>' + TITLES[sc] + '</h2>' +
+        '<span class="habit-meta">' + RESETS[sc] + ' · ' + done + '/' + items.length + '</span></div>' +
+        '<ul class="habit-list">' + lis + '</ul>' +
+        '<button class="habit-add" type="button">+ add</button>' +
+        '</section>';
+    });
+    root.innerHTML = html;
+    wire();
+    if (focusId) {
+      var inp = root.querySelector('li[data-id="' + focusId + '"] .htext');
+      if (inp) inp.focus();
+      focusId = null;
+    }
+  }
+
+  function wire() {
+    root.querySelectorAll('.habit-group').forEach(function (sec) {
+      var sc = sec.dataset.scope;
+      sec.querySelectorAll('li.habit').forEach(function (li) {
+        var id = li.dataset.id;
+        li.querySelector('.hcheck').addEventListener('change', function (e) {
+          var it = findItem(sc, id); if (!it) return;
+          it.done = e.target.checked; save(); render();
+        });
+        li.querySelector('.htext').addEventListener('change', function (e) {
+          var it = findItem(sc, id); if (!it) return;
+          it.text = e.target.value; save();
+        });
+        li.querySelector('.kind-btn').addEventListener('click', function () {
+          var it = findItem(sc, id); if (!it) return;
+          it.kind = nextKind(it.kind); save(); render();
+        });
+        li.querySelector('.hdel').addEventListener('click', function () {
+          var it = findItem(sc, id); if (!it) return;
+          if (!confirm('Remove "' + (it.text || 'this item') + '"?')) return;
+          state.sections[sc] = state.sections[sc].filter(function (x) { return x.id !== id; });
+          save(); render();
+        });
+      });
+      sec.querySelector('.habit-add').addEventListener('click', function () {
+        var it = { id: uid(), text: '', kind: 'normal', done: false };
+        state.sections[sc].push(it);
+        focusId = it.id;
+        save(); render();
+      });
+    });
+  }
+
+  render();
+})();
+</script>

@@ -885,7 +885,136 @@ svg.spark polyline {
 }
 
 /* ============================================================
-   HOME listing — turn the two links into cards
+   HABITS page — daily / weekly / monthly editable checklists
+   ============================================================ */
+
+.layout-habits .wrap { max-width: 780px; }
+
+.habits h1 { margin-bottom: 0.3rem; }
+
+.k-must { color: var(--accent); font-style: italic; }
+.k-reward { color: var(--good); font-style: italic; }
+
+.habit-group { margin: 0 0 2.6rem; }
+
+.habit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.4rem;
+  margin-bottom: 1rem;
+}
+.habit-head h2 {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  font-style: italic;
+  font-size: 1.3rem;
+}
+.habit-meta {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.habit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.habit {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+.habit .hcheck {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.habit .htext {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.98rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+}
+.habit .htext:focus { outline: none; background: var(--accent-bg); }
+
+.habit.must { border-left-color: var(--accent); }
+.habit.must .htext { color: var(--accent); }
+.habit.reward { border-left-color: var(--good); }
+.habit.reward .htext { color: var(--good); }
+.habit.reward .hcheck { accent-color: var(--good); }
+.habit.done .htext { text-decoration: line-through; color: var(--muted); }
+
+.kind-btn {
+  flex: none;
+  border: 1px solid var(--card-border);
+  background: var(--card-2);
+  color: var(--muted);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.6rem;
+  cursor: pointer;
+}
+.kind-btn:hover { border-color: var(--accent); color: var(--accent); }
+.habit.must .kind-btn { color: var(--accent); border-color: var(--accent); }
+.habit.reward .kind-btn { color: var(--good); border-color: var(--good); }
+
+.hdel {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.1rem 0.2rem;
+  opacity: 0.45;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.habit:hover .hdel { opacity: 1; }
+.hdel:hover { color: var(--accent); opacity: 1; }
+
+.habit-add {
+  margin-top: 0.7rem;
+  width: 100%;
+  border: 1px dashed var(--card-border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-style: italic;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.habit-add:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ============================================================
+   HOME listing — turn the links into cards
    ============================================================ */
 
 .post-list { gap: 1rem; }

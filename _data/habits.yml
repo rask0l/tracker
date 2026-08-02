@@ -1,0 +1,44 @@
+# =============================================================
+# Habit tracker  ->  /habits/
+# This file is only the FIRST-LOAD seed. Once you check, rename,
+# add, remove, or retype anything in the browser, that state lives
+# in localStorage (key `habit-tracker-v1`) and wins over this file.
+#
+# Each item has a `kind`:
+#   must   -> a non-negotiable (red).  Two per day is the idea.
+#   normal -> a regular habit / goal.
+#   reward -> the treat you earn (green).
+#
+# The three lists reset on their own clock: daily resets each day,
+# weekly each week (ISO week), monthly each new month. Resetting only
+# clears the checks; your item text and types stay.
+# =============================================================
+
+title: "Habits"
+
+daily:
+  - { kind: must,   text: "First 90: deep work before any game / feed" }
+  - { kind: must,   text: "Sleep 7–9 hrs — in bed before 1:00 AM" }
+  - { kind: normal, text: "Read 15–20 min in bed (the wind-down — book, not screen)" }
+  - { kind: normal, text: "Ship something public (blog, cheatsheet, commit — tiny counts)" }
+  - { kind: normal, text: "On time to work" }
+  - { kind: normal, text: "GYM (Tue / Wed / Fri / Sat)" }
+  - { kind: normal, text: "CWES session" }
+
+weekly:
+  - { kind: must,   text: "First 90 hit 5+ days of 7" }
+  - { kind: must,   text: "In bed before 1 AM — 5+ nights of 7" }
+  - { kind: normal, text: "5+ public ships (blog / cheatsheet / commits)" }
+  - { kind: normal, text: "On time to work every day" }
+  - { kind: normal, text: "All 4 gym sessions" }
+  - { kind: normal, text: "2 social reps (micro-interactions, anyone)" }
+  - { kind: normal, text: "1–2 CWES modules (maintenance pace)" }
+  - { kind: normal, text: "1 writeup or cheatsheet page on the blog" }
+  - { kind: reward, text: "Fried Chicken" }
+
+monthly:
+  - { kind: normal, text: "Late to work: zero in final week" }
+  - { kind: normal, text: "Have a real convo with someone new" }
+  - { kind: normal, text: "4+ blog posts published" }
+  - { kind: normal, text: "CWES: next skills assessment cleared" }
+  - { kind: reward, text: "Play a game guilt-free or go on a trip" }
