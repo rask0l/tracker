@@ -9,39 +9,45 @@
 # The page shows sessions logged, average sleep, and highlights
 # today's split day for you.
 #
-# Split is Upper A / Upper B. The two seeded workouts came from your
-# Notion tables that had real weights (Anterior -> A, Upper -> B).
-# Rename days or swap exercises freely; the page just renders this.
+# Split is Upper / Lower. Upper merges the old Anterior + Upper Notion
+# tables (kept their real weights). Lower is seeded empty — fill kg as
+# you go. Rename days or swap exercises freely; the page just renders this.
 # =============================================================
 
 title: "GYM — progress"
 
 split:
   - { day: "Monday",    dow: 1, focus: "Rest" }
-  - { day: "Tuesday",   dow: 2, focus: "Upper A" }
-  - { day: "Wednesday", dow: 3, focus: "Upper B" }
+  - { day: "Tuesday",   dow: 2, focus: "Upper" }
+  - { day: "Wednesday", dow: 3, focus: "Lower" }
   - { day: "Thursday",  dow: 4, focus: "Rest" }
-  - { day: "Friday",    dow: 5, focus: "Upper A" }
-  - { day: "Saturday",  dow: 6, focus: "Upper B" }
+  - { day: "Friday",    dow: 5, focus: "Upper" }
+  - { day: "Saturday",  dow: 6, focus: "Lower" }
   - { day: "Sunday",    dow: 0, focus: "Rest" }
 
 # Current working weights. Bump `kg` when you hit a new top set.
 workouts:
-  - name: "Upper A"
+  - name: "Upper"
     exercises:
-      - { name: "Upper Back Row",   sets: 2, reps: "", kg: "" }
-      - { name: "Chest Fly",        sets: 2, reps: "", kg: "" }
-      - { name: "Lat Pulldown",     sets: 2, reps: "", kg: "" }
-      - { name: "Upper Chest Press", sets: 2, reps: "", kg: "" }
-  - name: "Upper B"
-    exercises:
+      - { name: "Upper Back Row",       sets: 2, reps: "",    kg: "" }
+      - { name: "Chest Fly",            sets: 2, reps: "",    kg: "" }
+      - { name: "Lat Pulldown",         sets: 2, reps: "",    kg: "" }
+      - { name: "Upper Chest Press",    sets: 2, reps: "",    kg: "" }
       - { name: "Uni Tricep Extension", sets: 2, reps: "6-5", kg: "26.5" }
       - { name: "Lateral Raise",        sets: 2, reps: "7-6", kg: "32.5" }
       - { name: "Recline Curl",         sets: 2, reps: "6-5", kg: "17.5" }
       - { name: "Shoulder Press",       sets: 2, reps: "",    kg: "" }
       - { name: "Reverse Curl",         sets: 2, reps: "",    kg: "" }
+  - name: "Lower"
+    exercises:
+      - { name: "Leg Extension",        sets: 2, reps: "",    kg: "" }
+      - { name: "Squat",                sets: 2, reps: "",    kg: "" }
+      - { name: "Hamstring Curl",       sets: 2, reps: "",    kg: "" }
+      - { name: "Hamstring Extension",  sets: 2, reps: "",    kg: "" }
+      - { name: "Calf Raise",           sets: 2, reps: "",    kg: "" }
+      - { name: "Abs",                  sets: 2, reps: "",    kg: "" }
 
 # Session log. sleep = hours slept the night before, bw = bodyweight (kg).
 # Copy the last line each session.
 log:
-  - { date: 2026-07-30, day: "Upper A", sleep: , bw: , lifts: "" }
+  - { date: 2026-07-30, day: "Upper", sleep: , bw: , lifts: "" }
