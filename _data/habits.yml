@@ -24,10 +24,12 @@ daily:
   - { kind: normal, text: "On time to work" }
   - { kind: normal, text: "GYM (Tue / Wed / Fri / Sat)" }
   - { kind: normal, text: "CWES session" }
+  - { kind: normal, text: "No unnecessary spend today" }
 
 weekly:
   - { kind: must,   text: "First 90 hit 5+ days of 7" }
   - { kind: must,   text: "In bed before 1 AM — 5+ nights of 7" }
+  - { kind: must,   text: "Send 2 job applications" }
   - { kind: normal, text: "5+ public ships (blog / cheatsheet / commits)" }
   - { kind: normal, text: "On time to work every day" }
   - { kind: normal, text: "All 4 gym sessions" }
