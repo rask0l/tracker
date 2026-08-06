@@ -15,7 +15,7 @@ start: 2026-07-30        # day 1 of the sprint
 target_days: 30
 
 log:
-  - { day: 1, date: 2026-07-30, focus: "Cross-Site Scripting (XSS)", hours: , status: in progress }
+  - { day: 1, date: 2026-07-30, focus: "Cross-Site Scripting (XSS)", hours: , status: done }
 
 # The 20 modules of the HTB CWES path, in order.
 # The 6 pre-sprint modules have no `by`. The 14 remaining ones carry
@@ -28,7 +28,7 @@ roadmap:
   - { name: "Information Gathering - Web Edition", done: true }
   - { name: "Web Fuzzing", done: true }
   - { name: "JavaScript Deobfuscation", done: true }
-  - { name: "Cross-Site Scripting (XSS)", done: false, by: 2 }
+  - { name: "Cross-Site Scripting (XSS)", done: true, by: 2 }
   - { name: "SQL Injection Fundamentals", done: false, by: 4 }
   - { name: "SQLMap Essentials", done: false, by: 5 }
   - { name: "Command Injections", done: false, by: 6 }
