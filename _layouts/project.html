@@ -1,0 +1,50 @@
+---
+layout: default
+---
+
+{% assign p = site.data.project %}
+
+{% comment %} Live Phase 1 progress, pulled straight from the CWES data. {% endcomment %}
+{% assign cwes_total = site.data.cwes.roadmap | size %}
+{% assign cwes_done = site.data.cwes.roadmap | where: "done", true | size %}
+{% assign cwes_pct = 0 %}
+{% if cwes_total > 0 %}{% assign cwes_pct = cwes_done | times: 100 | divided_by: cwes_total %}{% endif %}
+
+{% assign phase_total = p.phases | size %}
+{% assign phase_done = p.phases | where: "status", "done" | size %}
+
+<img class="tracker-cover" src="{{ '/assets/img/DIFNM.png' | relative_url }}"
+     alt="Night drive, headlights on an empty road">
+
+<article class="tracker" style="max-width:720px;margin:0 auto;">
+  <h1>project-fuckable</h1>
+  <p class="meta" id="project-meta"
+     data-start="{{ p.start | date: '%Y-%m-%d' }}"
+     data-horizon="{{ p.horizon_days }}">
+    the run started {{ p.start | date: "%-d %b %Y" }} · target {{ p.goal }}
+  </p>
+
+  <p class="today" style="font-style:italic;">{{ p.north_star }}</p>
+
+  <div class="tracker-stat">
+    <strong id="run-day">day –/{{ p.horizon_days }}</strong>
+    <span id="run-left">· – days left</span>
+    <span>· phase {{ phase_done | plus: 1 }}/{{ phase_total }}</span>
+  </div>
+</article>
+
+<script>
+  (function () {
+    var meta = document.getElementById('project-meta');
+    if (!meta) return;
+    var start = new Date(meta.dataset.start + 'T00:00:00');
+    var horizon = parseInt(meta.dataset.horizon, 10);
+    var oneDay = 86400000;
+    var elapsed = Math.floor((Date.now() - start.getTime()) / oneDay) + 1;
+    if (elapsed < 1) elapsed = 1;
+    var day = Math.min(elapsed, horizon);
+    var left = Math.max(horizon - elapsed, 0);
+    document.getElementById('run-day').textContent = 'day ' + day + '/' + horizon;
+    document.getElementById('run-left').textContent = '· ' + left + ' days left';
+  })();
+</script>

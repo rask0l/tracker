@@ -478,6 +478,80 @@ body {
 
 .roadmap li.overdue .by { color: var(--accent); }
 
+/* ---- project-fuckable: the plan, one card per phase ---- */
+.phases {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.phase {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  padding: 0.85rem 1rem 0.95rem;
+}
+.phase-active { border-color: var(--accent); background: var(--accent-bg); }
+.phase-done { opacity: 0.7; }
+
+.phase-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.phase-mark {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--card-2);
+}
+.phase-done .phase-mark { color: #fff; background: var(--good); }
+.phase-active .phase-mark { color: #fff; background: var(--accent); }
+.phase-name { font-weight: 700; font-style: italic; font-size: 1.05rem; }
+.phase-head .by { margin-left: auto; }
+
+.phase-detail {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.phase-progress {
+  margin: 0.6rem 0 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.bar.phase-bar { margin-top: 0.3rem; height: 7px; }
+
+.phase-steps {
+  margin: 0.7rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 0.9rem;
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.phase-done .phase-steps { color: var(--muted); }
+
+.phase-link {
+  text-decoration: none;
+  border: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+.phase-link:hover { color: var(--accent-hover); }
+
 .checklist.fail li {
   display: flex;
   gap: 0.7rem;

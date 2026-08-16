@@ -5,54 +5,68 @@ Personal progress dashboard. It was split out of the writeup site
 personal. Everything here is for the owner only. The whole site is `noindex`
 and is not linked from the writeup site.
 
-Two pages, driven by two data files:
+Pages in the nav, plus one hidden page:
 
 | Page | URL | Data source | What it is |
 |------|-----|-------------|------------|
-| Study | `/study/` | `_data/cwes.yml` | HTB CWES exam prep, a 30 day sprint |
-| Gym | `/gym/` | `_data/gym.yml` | Lifting progress: split, working weights, sessions |
+| Study | `/study/` | `_data/cwes.yml` | HTB CWES roadmap, a module checklist |
+| Loop | `/loop/` | none (static layout) | the weekly study rhythm, a reference card |
+| Notes | `/notes/` | browser `localStorage` | the Playbook, a rich note editor |
+| Gym | `/gym/` | `_data/gym.yml` | lifting progress: split, weights, sessions |
+| project-fuckable | `/project-fuckable/` | `_data/project.yml` | the private north-star goal, unlinked and reachable only by URL |
 
 Built with plain Jekyll (no theme). Deploys as a GitHub Pages project site at
 `rask0l.github.io/tracker`, so `baseurl` is `/tracker`.
 
 ## Where the data actually lives (important)
 
-The two pages behave differently, so be careful about the source of truth:
+The pages behave differently, so be careful about the source of truth:
 
-- **Study (`/study/`) is fully YAML driven.** Everything the page shows
-  (roadmap, log, failure log, pace) comes from `_data/cwes.yml`. To change
-  study progress, edit that file. The only computed value is the day counter,
-  derived from `start:` versus today's date.
+- **Study (`/study/`) is YAML driven.** The page renders only the `roadmap`
+  from `_data/cwes.yml`, as a done/next/todo checklist. The file still holds
+  `log`, `failures`, `exam_prep`, and `methodology`, but the page no longer
+  shows them (the owner stripped it down to the roadmap). To move study
+  progress, flip a `roadmap` item's `done` in that file.
 - **Gym (`/gym/`) is YAML seed plus browser state.** `_data/gym.yml` only
   seeds the *initial* weights and split. Once the owner edits weights, logs a
   session, or reorders exercises in the browser, those changes save to
   `localStorage` (key `gym-tracker-v1`), which then wins over the YAML. So the
   repo is not the source of truth for live gym data; the owner's browser is.
   The export/import panel on the page is how that data gets backed up.
+- **Notes (`/notes/`) is browser only.** Nothing in the repo. Notes save to
+  `localStorage` (key `playbook-v1`) as records of `{id, type, title, html,
+  created, updated}`, where `html` is rich text from a `contenteditable`
+  editor and photos are embedded inline as downscaled JPEG data URLs. Export
+  and import (JSON) are the only backup. Clearing site data wipes it.
+- **Loop (`/loop/`) is static.** The weekly plan is content in
+  `_layouts/schedule.html`, not a data file. Edit the layout to change it.
+- **project-fuckable** renders `_data/project.yml` but only the header block;
+  the phases, math, and rules in the YAML are unrendered. It is hidden from
+  the nav on purpose.
 
-Do not assume the gym YAML reflects current weights. It is a starting point.
+Do not assume the gym YAML reflects current weights, or that the cwes.yml log
+reflects the page. Both are starting points or partial.
 
 ## Updating study progress (`_data/cwes.yml`)
 
-The rituals, in the owner's words:
+Only step 2 changes the page now (roadmap only). The rest still live in the
+file for the owner's own reference:
 
-1. Each study day, append an entry to `log` (copy the last line, fill in
-   `hours` when the day ends so the counter stays honest).
-2. When a module is finished, flip its `roadmap` item to `done: true`.
+1. Each study day, append an entry to `log` (copy the last line).
+2. When a module is finished, flip its `roadmap` item to `done: true`. This is
+   what the page shows.
 3. When an `exam_prep` gate is cleared, flip its `done: true`.
 4. When a lab or box wins, add one line to `failures` with the single thing
-   that was missed. Reviewed every Sunday.
+   that was missed.
 
-`by:` on a roadmap item is the planned finish day. If today is past that day
-and the item is not done, the page flags it red as behind schedule.
+The 20 items are the HTB CWES path in order. The owner is learning for
+**long-term mastery, not a deadline**: the 30-day sprint framing was dropped.
+Do not reintroduce deadline pressure. The `by:` planned-finish days and the
+red overdue flag were removed from the page.
 
-The 20 modules are the HTB CWES path in order. The first 6 were done before
-the sprint started (no `by`), the remaining 14 carry planned finish days.
-Days 24 to 30 are reserved for review, a practice report, and buffer.
-
-Key insight baked into the file: the hacking rarely fails people on this exam,
-the report and the clock do. That is why `exam_prep` centers on writing a full
-practice report and building the methodology checklist from memory.
+Key insight still baked into the file: the hacking rarely fails people on this
+exam, the report and the clock do. That is why `exam_prep` centers on writing a
+full practice report and building the methodology checklist from memory.
 
 ## Updating gym progress (`_data/gym.yml`)
 
@@ -69,12 +83,12 @@ just renders whatever the YAML holds.
 
 ## Current progress (snapshot, update as it moves)
 
-- **Study:** sprint started 2026-07-30. 6 of 20 modules done (the pre-sprint
-  set through JavaScript Deobfuscation). Currently on Cross-Site Scripting.
-  No exam-prep gates cleared yet, failure log empty.
+- **Study:** learning HTB CWES for the long term, no deadline. 7 of 20 modules
+  marked done in `cwes.yml` (through Cross-Site Scripting). The chosen weekly
+  rhythm is the "Loop": two bugs a week, learn Mon/Tue, write it up (Feynman)
+  Wed, repeat Thu to Sat, Sunday is catch-up and rest.
 - **Gym:** Upper A / Upper B split, two sessions a week seeded (Tue/Fri and
-  Wed/Sat). Real weights recorded so far are on Upper B (tricep extension,
-  lateral raise, recline curl); Upper A weights not filled in yet.
+  Wed/Sat). Real weights recorded so far are on Upper B; Upper A not filled in.
 
 ## Run locally
 
@@ -87,7 +101,14 @@ bundle exec jekyll serve
 
 - Prose here avoids dashes as sentence separators or spacers; only use a dash
   where grammar needs it.
-- Keep both pages `noindex`. This site is not meant to be discovered.
-- The page layouts (`_layouts/tracker.html`, `_layouts/gym.html`) hold the
-  render logic and the gym's localStorage JavaScript. Touch them only for
-  behavior changes, not for progress updates.
+- Keep every page `noindex`. This site is not meant to be discovered.
+- Layouts hold render logic and JavaScript; touch them for behavior, not for
+  progress updates. The heavy ones: `_layouts/gym.html` (gym localStorage),
+  `_layouts/notes.html` (the Playbook editor: rich text, inline photos,
+  drag/resize, export/import), `_layouts/schedule.html` (the Loop),
+  `_layouts/tracker.html` (study roadmap).
+- Visual language on the newer pages (`/loop/`, `/notes/`) is brutalist mono:
+  flat, hard 2px borders, no rounded corners, monospace, one red accent. The
+  notes document surface is a fixed dark editor.
+- `habits.yml` and `_layouts/habits.html` are orphaned (the habits page was
+  removed) but left in place so the data is not destroyed.

@@ -1,0 +1,503 @@
+---
+layout: default
+---
+
+<style>
+  /* ============================================================
+     THE PLAYBOOK — rich "document" note editor (Word-like).
+     contenteditable + a formatting toolbar, inline photos at the
+     caret. Saves HTML to localStorage (playbook-v1).
+     ============================================================ */
+  .layout-notes .wrap { max-width: 860px; }
+
+  .notes-app {
+    --acc: #d92b1f;
+    --line: var(--fg);
+    font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    color: var(--fg);
+    line-height: 1.5;
+  }
+  @media (prefers-color-scheme: dark) { .notes-app { --acc: #ff4a3d; } }
+  .notes-app [hidden] { display: none !important; }
+  .notes-app b { font-weight: 700; }
+
+  .notes-app .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); margin: 0 0 1.1rem; }
+  .notes-app h1 {
+    font-family: inherit; font-style: normal; font-weight: 800;
+    font-size: clamp(2.4rem, 9vw, 4.4rem); line-height: 0.9;
+    letter-spacing: -0.03em; text-transform: uppercase; margin: 0; border: 0;
+  }
+  .notes-app .sub { font-size: 0.98rem; max-width: 54ch; margin: 1.1rem 0 0; }
+
+  .notes-app .sect-h { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; margin: 2.4rem 0 0.9rem; }
+  .notes-app .sect-h .n { color: var(--acc); }
+
+  .notes-app button {
+    font-family: inherit; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    padding: 0.5rem 0.85rem; cursor: pointer; background: var(--fg); color: var(--bg); border: 2px solid var(--fg);
+  }
+  .notes-app button:hover { background: transparent; color: var(--fg); }
+  .notes-app button.ghost { background: transparent; color: var(--fg); }
+  .notes-app button.ghost:hover { background: var(--fg); color: var(--bg); }
+  .notes-app button.danger { background: transparent; color: var(--acc); border-color: var(--acc); }
+  .notes-app button.danger:hover { background: var(--acc); color: #fff; }
+  .notes-app button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+  .notes-app .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 1.6rem; }
+  .notes-app .count { margin-left: auto; font-size: 0.72rem; color: var(--muted); letter-spacing: 0.05em; }
+
+  .notes-app .tag { display: inline-block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.2rem 0.5rem; border: 2px solid var(--line); white-space: nowrap; }
+  .notes-app .tag--bug { background: var(--fg); color: var(--bg); }
+  .notes-app .tag--box { background: var(--acc); color: #fff; border-color: var(--acc); }
+
+  /* editor shell */
+  .notes-app .editor { border: 2px solid var(--line); margin-top: 1.15rem; }
+  .notes-app .editor__head { display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.85rem; border-bottom: 2px solid var(--line); }
+  .notes-app #ed-title { flex: 1; min-width: 0; font-family: inherit; font-size: 0.95rem; font-weight: 700; background: transparent; color: var(--fg); border: 0; padding: 0.2rem 0.1rem; }
+  .notes-app #ed-title::placeholder { color: var(--muted); font-weight: 400; }
+  .notes-app #ed-title:focus { outline: none; }
+
+  /* formatting toolbar */
+  .notes-app .doc-toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem;
+    padding: 0.4rem 0.5rem; border-bottom: 2px solid var(--line);
+    position: sticky; top: 0; background: var(--bg); z-index: 3;
+  }
+  .notes-app .doc-toolbar button {
+    min-width: 2rem; padding: 0.32rem 0.5rem; font-size: 0.72rem;
+    background: transparent; color: var(--fg); border: 2px solid transparent;
+  }
+  .notes-app .doc-toolbar button:hover { border-color: var(--line); background: transparent; color: var(--fg); }
+  .notes-app .doc-toolbar button i { font-style: italic; }
+  .notes-app .doc-toolbar button u { text-decoration: underline; }
+  .notes-app .doc-tsep { width: 2px; align-self: stretch; background: var(--line); margin: 0.15rem 0.35rem; }
+
+  /* the document "page" — dark editor surface */
+  .notes-app .doc-page {
+    background: #1a1917; color: #e6e2d8;
+    padding: clamp(1.4rem, 4vw, 2.8rem);
+    min-height: 440px;
+    font-family: "Segoe UI", -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    font-size: 1rem; line-height: 1.65;
+  }
+  .notes-app .doc-page:focus { outline: none; }
+  .notes-app .doc-page h1 { font-size: 1.7rem; font-weight: 700; margin: 0.3rem 0 0.6rem; color: #f4f1ea; border: 0; font-style: normal; }
+  .notes-app .doc-page h2 { font-size: 1.32rem; font-weight: 700; margin: 1.1rem 0 0.5rem; color: #f4f1ea; }
+  .notes-app .doc-page p { margin: 0.5rem 0; }
+  .notes-app .doc-page ul, .notes-app .doc-page ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+  .notes-app .doc-page a { color: #7cb0ff; }
+  .notes-app .doc-page img { max-width: 100%; height: auto; display: block; margin: 0.7rem 0; border: 1px solid #3a382f; border-radius: 2px; cursor: move; }
+  .notes-app .doc-page img.is-sel { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+  /* image resize handle (lives in the wrapper, not the editable area) */
+  .notes-app .doc-wrap { position: relative; }
+  .notes-app .img-handle {
+    position: absolute; width: 15px; height: 15px; box-sizing: border-box;
+    background: var(--acc); border: 2px solid #fff; border-radius: 2px;
+    cursor: nwse-resize; z-index: 5; display: none;
+  }
+  .notes-app .img-handle.on { display: block; }
+
+  .notes-app .editor__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; padding: 0.7rem 0.85rem; border-top: 2px solid var(--line); }
+  .notes-app .hint { font-size: 0.72rem; color: var(--muted); margin-left: auto; letter-spacing: 0.04em; }
+
+  /* saved list */
+  .notes-app .note-list { border: 2px solid var(--line); list-style: none; margin: 0; padding: 0; }
+  .notes-app .note-list:empty { display: none; }
+  .notes-app .note-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 0.8rem; align-items: center; padding: 0.7rem 0.9rem; cursor: pointer; }
+  .notes-app .note-list li + li { border-top: 2px solid var(--line); }
+  .notes-app .note-list li:hover { background: var(--accent-bg); }
+  .notes-app .nl-title { font-weight: 700; font-size: 0.92rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .notes-app .nl-meta { display: flex; align-items: center; gap: 0.6rem; white-space: nowrap; }
+  .notes-app .nl-evi { font-size: 0.62rem; color: var(--acc); letter-spacing: 0.05em; font-weight: 700; }
+  .notes-app .nl-date { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.03em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .notes-app .empty { color: var(--muted); font-size: 0.9rem; margin: 1rem 0 0; }
+
+  .notes-app .sub-note { font-size: 0.82rem; color: var(--muted); margin: 0 0 0.9rem; max-width: 60ch; }
+  .notes-app .backup { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+  .notes-app .rules { border: 2px solid var(--line); list-style: none; margin: 0; padding: 0; }
+  .notes-app .rules li { display: grid; grid-template-columns: 3rem 1fr; gap: 0.8rem; padding: 0.8rem 1rem; font-size: 0.86rem; align-items: baseline; }
+  .notes-app .rules li + li { border-top: 2px solid var(--line); }
+  .notes-app .rules .rn { font-weight: 800; color: var(--acc); font-size: 1.05rem; }
+  .notes-app .rules .note { color: var(--muted); }
+
+  @media (max-width: 620px) {
+    .notes-app .note-list li { grid-template-columns: auto 1fr; }
+    .notes-app .nl-meta { grid-column: 1 / -1; }
+    .notes-app .rules li { grid-template-columns: 2.4rem 1fr; }
+  }
+</style>
+
+<div class="notes-app">
+  <p class="eyebrow">Write it down // saves in this browser</p>
+  <h1>The Playbook</h1>
+  <p class="sub">A weapon you reuse, not a record you file. Write it like a doc — format the text, drop a screenshot wherever the cursor is.</p>
+
+  <div class="toolbar">
+    <button type="button" data-new="bug">+ Bug-class note</button>
+    <button type="button" data-new="box">+ Box note</button>
+    <span class="count" id="note-count"></span>
+  </div>
+
+  <div class="editor" id="editor" hidden>
+    <div class="editor__head">
+      <span class="tag" id="ed-type"></span>
+      <input id="ed-title" type="text" placeholder="title…" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="doc-toolbar" id="doc-toolbar">
+      <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+      <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+      <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+      <span class="doc-tsep"></span>
+      <button type="button" data-block="H1" title="Heading 1">H1</button>
+      <button type="button" data-block="H2" title="Heading 2">H2</button>
+      <button type="button" data-block="P" title="Normal text">¶</button>
+      <span class="doc-tsep"></span>
+      <button type="button" data-cmd="insertUnorderedList" title="Bullet list">• list</button>
+      <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. list</button>
+      <span class="doc-tsep"></span>
+      <button type="button" id="doc-photo" title="Insert photo at cursor">＋ Photo</button>
+      <button type="button" data-cmd="removeFormat" title="Clear formatting">clear</button>
+    </div>
+
+    <div class="doc-wrap" id="doc-wrap">
+      <div class="doc-page" id="doc-page" contenteditable="true" spellcheck="true"></div>
+      <div class="img-handle" id="img-handle" title="Drag to resize"></div>
+    </div>
+
+    <div class="editor__actions">
+      <button type="button" id="ed-save">Save</button>
+      <button type="button" id="ed-cancel" class="ghost">Close</button>
+      <button type="button" id="ed-delete" class="danger" hidden>Delete</button>
+      <input type="file" id="ed-photo" accept="image/*" multiple hidden>
+      <span class="hint" id="ed-hint"></span>
+    </div>
+  </div>
+
+  <p class="sect-h"><span class="n">//</span> Saved notes</p>
+  <ul class="note-list" id="note-list"></ul>
+  <p class="empty" id="empty" hidden>Nothing saved yet. Start a note above.</p>
+
+  <p class="sect-h"><span class="n">//</span> Backup</p>
+  <p class="sub-note">These notes (photos included) live in <b>this browser only</b>. Clearing site data wipes them. Export a copy to keep them safe or move them.</p>
+  <div class="backup">
+    <button type="button" id="btn-export" class="ghost">Export .json</button>
+    <button type="button" id="btn-import" class="ghost">Import .json</button>
+    <input type="file" id="file-import" accept="application/json,.json" hidden>
+  </div>
+
+  <p class="sect-h"><span class="n">//</span> How it works</p>
+  <ul class="rules">
+    <li><span class="rn">01</span><span><b>Don't transcribe.</b> <span class="note">Only capture what future-you won't remember.</span></span></li>
+    <li><span class="rn">02</span><span><b>Two kinds.</b> <span class="note">A permanent bug-class playbook + a disposable box log.</span></span></li>
+    <li><span class="rn">03</span><span><b>Screenshot the proof, in place.</b> <span class="note">Drop it right under the step it belongs to.</span></span></li>
+    <li><span class="rn">04</span><span><b>Always log the one thing you missed.</b> <span class="note">That line is where exam mistakes come from.</span></span></li>
+  </ul>
+</div>
+
+<script>
+(function () {
+  var KEY = 'playbook-v1';
+
+  var TPL = {
+    bug:
+'<h2>&lt;bug name&gt;</h2>' +
+'<p><b>What it is</b> &mdash; </p>' +
+'<p><b>How I spot it</b> &mdash; </p>' +
+'<p><b>How I exploit</b> &mdash; </p>' +
+'<p><b>Payloads</b> &mdash; </p>' +
+'<p><b>Bypasses / gotchas</b> &mdash; </p>' +
+'<p><b>Fix (for the report)</b> &mdash; </p>',
+    box:
+'<h2>&lt;box name&gt; &mdash; __DATE__</h2>' +
+'<p><b>Recon</b> &mdash; </p>' +
+'<p><b>Foothold</b> &mdash; </p>' +
+'<p><b>Payload</b> &mdash; </p>' +
+'<p><b>Priv-esc</b> &mdash; </p>' +
+'<p><span style="color:#d92b1f"><b>&gt;&gt; MISSED</b></span> &mdash; the one thing I overlooked</p>'
+  };
+
+  var els = {
+    editor: document.getElementById('editor'),
+    type: document.getElementById('ed-type'),
+    title: document.getElementById('ed-title'),
+    toolbar: document.getElementById('doc-toolbar'),
+    doc: document.getElementById('doc-page'),
+    docWrap: document.getElementById('doc-wrap'),
+    handle: document.getElementById('img-handle'),
+    photoBtn: document.getElementById('doc-photo'),
+    save: document.getElementById('ed-save'),
+    cancel: document.getElementById('ed-cancel'),
+    del: document.getElementById('ed-delete'),
+    hint: document.getElementById('ed-hint'),
+    photoInput: document.getElementById('ed-photo'),
+    list: document.getElementById('note-list'),
+    empty: document.getElementById('empty'),
+    count: document.getElementById('note-count'),
+    exportBtn: document.getElementById('btn-export'),
+    importBtn: document.getElementById('btn-import'),
+    fileInput: document.getElementById('file-import')
+  };
+
+  var notes = load();
+  var editingId = null;
+  var savedRange = null;
+  var selectedImg = null, resizing = false, startX = 0, startW = 0;
+
+  /* ---- sanitize (own data, but stay safe on import) ---- */
+  function sanitize(html) {
+    var doc = new DOMParser().parseFromString(html || '', 'text/html');
+    doc.querySelectorAll('script,style,link,meta,iframe,object,embed').forEach(function (e) { e.remove(); });
+    doc.querySelectorAll('*').forEach(function (e) {
+      Array.prototype.slice.call(e.attributes).forEach(function (a) {
+        var n = a.name.toLowerCase();
+        if (n.indexOf('on') === 0) e.removeAttribute(a.name);
+        if ((n === 'src' || n === 'href') && a.value.trim().toLowerCase().indexOf('javascript:') === 0) e.removeAttribute(a.name);
+      });
+    });
+    return doc.body.innerHTML;
+  }
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function textToHtml(t) { return '<p>' + esc(t || '').replace(/\n/g, '<br>') + '</p>'; }
+
+  function migrate(n) {
+    if (typeof n.html === 'string') {
+      return { id: n.id, type: n.type, title: n.title || '', html: sanitize(n.html), created: n.created || Date.now(), updated: n.updated || Date.now() };
+    }
+    var html = '';
+    if (n.blocks) {
+      n.blocks.forEach(function (b) { html += (b.t === 'img') ? '<p><img src="' + b.v + '" alt="evidence"></p>' : textToHtml(b.v); });
+    } else if (typeof n.body === 'string') {
+      html += textToHtml(n.body);
+      (n.images || []).forEach(function (s) { html += '<p><img src="' + s + '" alt="evidence"></p>'; });
+    }
+    return { id: n.id, type: n.type, title: n.title || '', html: sanitize(html), created: n.created || Date.now(), updated: n.updated || Date.now() };
+  }
+  function load() {
+    try { return (JSON.parse(localStorage.getItem(KEY)) || []).map(migrate); }
+    catch (e) { return []; }
+  }
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify(notes)); return true; }
+    catch (e) { alert('Storage is full — photos take the most room. Export a backup, then remove a few images.'); return false; }
+  }
+
+  function today() { var d = new Date(); function p(n) { return (n < 10 ? '0' : '') + n; } return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
+  function fmt(ts) { var d = new Date(ts); function p(n) { return (n < 10 ? '0' : '') + n; } return p(d.getDate()) + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+  function typeLabel(t) { return t === 'box' ? 'Box' : 'Bug'; }
+  function imgCount(n) { var d = document.createElement('div'); d.innerHTML = n.html || ''; return d.querySelectorAll('img').length; }
+
+  /* ---- list ---- */
+  function renderList() {
+    els.list.innerHTML = '';
+    notes.slice().sort(function (a, b) { return b.updated - a.updated; }).forEach(function (n) {
+      var li = document.createElement('li');
+      var tag = document.createElement('span'); tag.className = 'tag ' + (n.type === 'box' ? 'tag--box' : 'tag--bug'); tag.textContent = typeLabel(n.type);
+      var title = document.createElement('span'); title.className = 'nl-title'; title.textContent = n.title || '(untitled)';
+      var meta = document.createElement('span'); meta.className = 'nl-meta';
+      var ic = imgCount(n);
+      if (ic) { var evi = document.createElement('span'); evi.className = 'nl-evi'; evi.textContent = '▣ ' + ic; meta.appendChild(evi); }
+      var date = document.createElement('span'); date.className = 'nl-date'; date.textContent = fmt(n.updated); meta.appendChild(date);
+      li.appendChild(tag); li.appendChild(title); li.appendChild(meta);
+      li.addEventListener('click', function () { openNote(n.id); });
+      els.list.appendChild(li);
+    });
+    els.empty.hidden = notes.length !== 0;
+    els.count.textContent = notes.length ? notes.length + (notes.length === 1 ? ' note' : ' notes') : '';
+  }
+
+  /* ---- selection helpers ---- */
+  function saveSel() {
+    var s = window.getSelection();
+    if (s && s.rangeCount && els.doc.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange();
+  }
+  function restoreSel() {
+    els.doc.focus();
+    if (savedRange) { var s = window.getSelection(); s.removeAllRanges(); s.addRange(savedRange); }
+  }
+
+  /* ---- open / save / delete ---- */
+  function openEditor(type, note) {
+    els.editor.hidden = false;
+    els.type.className = 'tag ' + (type === 'box' ? 'tag--box' : 'tag--bug');
+    els.type.textContent = typeLabel(type);
+    els.editor.dataset.type = type;
+    savedRange = null;
+    deselect();
+    if (note) {
+      editingId = note.id;
+      els.title.value = note.title;
+      els.doc.innerHTML = sanitize(note.html);
+      els.del.hidden = false;
+      els.hint.textContent = 'saved ' + fmt(note.updated);
+    } else {
+      editingId = null;
+      els.title.value = '';
+      els.doc.innerHTML = sanitize((TPL[type] || '').replace('__DATE__', today()));
+      els.del.hidden = true;
+      els.hint.textContent = 'new — not saved yet';
+    }
+    els.editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    els.title.focus();
+  }
+  function openNote(id) { var n = notes.filter(function (x) { return x.id === id; })[0]; if (n) openEditor(n.type, n); }
+
+  function isEmpty() { return !els.title.value.trim() && !els.doc.textContent.trim() && !els.doc.querySelector('img'); }
+  function saveNote() {
+    var type = els.editor.dataset.type || 'bug';
+    var now = Date.now();
+    if (isEmpty()) { els.hint.textContent = 'nothing to save'; return; }
+    deselect();
+    var html = sanitize(els.doc.innerHTML);
+    if (editingId) {
+      notes.forEach(function (n) { if (n.id === editingId) { n.title = els.title.value.trim(); n.html = html; n.updated = now; } });
+    } else {
+      editingId = 'n' + now + Math.floor(Math.random() * 1000);
+      notes.push({ id: editingId, type: type, title: els.title.value.trim(), html: html, created: now, updated: now });
+      els.del.hidden = false;
+    }
+    if (persist()) { renderList(); els.hint.textContent = 'saved ' + fmt(now) + ' ✓'; }
+  }
+  function deleteNote() {
+    if (!editingId) return;
+    if (!confirm('Delete this note? This cannot be undone.')) return;
+    notes = notes.filter(function (n) { return n.id !== editingId; });
+    persist(); renderList(); closeEditor();
+  }
+  function closeEditor() { deselect(); els.editor.hidden = true; editingId = null; }
+
+  /* ---- photo insert at caret ---- */
+  function addPhotos(files) {
+    Array.prototype.forEach.call(files, function (file) {
+      if (!file.type || file.type.indexOf('image/') !== 0) return;
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function () {
+        var max = 1600, w = img.width, h = img.height;
+        if (w > max || h > max) { var s = Math.min(max / w, max / h); w = Math.round(w * s); h = Math.round(h * s); }
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        var data = null;
+        try { data = c.toDataURL('image/jpeg', 0.85); } catch (e) { data = null; }
+        URL.revokeObjectURL(url);
+        if (data) {
+          restoreSel();
+          document.execCommand('insertHTML', false, '<img src="' + data + '" alt="evidence"><p><br></p>');
+          saveSel();
+          els.hint.textContent = 'photo added — remember to Save';
+        }
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); };
+      img.src = url;
+    });
+  }
+
+  /* ---- image select / drag / resize ---- */
+  function docContentWidth() {
+    var cs = getComputedStyle(els.doc);
+    return els.doc.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  }
+  function positionHandle(img) {
+    var wr = els.docWrap.getBoundingClientRect();
+    var r = img.getBoundingClientRect();
+    els.handle.style.left = (r.right - wr.left - 7) + 'px';
+    els.handle.style.top = (r.bottom - wr.top - 7) + 'px';
+  }
+  function selectImg(img) {
+    deselect();
+    selectedImg = img;
+    img.classList.add('is-sel');
+    els.handle.classList.add('on');
+    positionHandle(img);
+  }
+  function deselect() {
+    if (selectedImg) { selectedImg.classList.remove('is-sel'); selectedImg = null; }
+    els.handle.classList.remove('on');
+  }
+  function onResize(e) {
+    if (!resizing || !selectedImg) return;
+    var w = Math.max(60, Math.min(docContentWidth(), startW + (e.clientX - startX)));
+    selectedImg.style.width = Math.round(w) + 'px';
+    selectedImg.style.height = 'auto';
+    positionHandle(selectedImg);
+  }
+  function endResize() {
+    resizing = false;
+    document.removeEventListener('mousemove', onResize);
+    document.removeEventListener('mouseup', endResize);
+    els.hint.textContent = 'image resized — remember to Save';
+  }
+  els.handle.addEventListener('mousedown', function (e) {
+    if (!selectedImg) return;
+    e.preventDefault(); e.stopPropagation();
+    resizing = true; startX = e.clientX; startW = selectedImg.getBoundingClientRect().width;
+    document.addEventListener('mousemove', onResize);
+    document.addEventListener('mouseup', endResize);
+  });
+  els.doc.addEventListener('click', function (e) {
+    if (e.target && e.target.tagName === 'IMG') selectImg(e.target);
+    else deselect();
+  });
+  els.doc.addEventListener('input', function () {
+    if (!selectedImg || resizing) return;
+    if (!els.doc.contains(selectedImg)) deselect(); else positionHandle(selectedImg);
+  });
+  window.addEventListener('scroll', function () { if (selectedImg) positionHandle(selectedImg); }, true);
+  window.addEventListener('resize', function () { if (selectedImg) positionHandle(selectedImg); });
+
+  /* ---- wire ---- */
+  document.querySelectorAll('[data-new]').forEach(function (b) { b.addEventListener('click', function () { openEditor(b.dataset.new, null); }); });
+  els.save.addEventListener('click', saveNote);
+  els.cancel.addEventListener('click', closeEditor);
+  els.del.addEventListener('click', deleteNote);
+
+  // track caret inside the document
+  els.doc.addEventListener('keyup', saveSel);
+  els.doc.addEventListener('mouseup', saveSel);
+
+  // formatting toolbar — mousedown keeps the doc selection
+  els.toolbar.addEventListener('mousedown', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    e.preventDefault();
+    if (b.id === 'doc-photo') { saveSel(); els.photoInput.click(); return; }
+    if (b.dataset.block) document.execCommand('formatBlock', false, b.dataset.block);
+    else if (b.dataset.cmd) document.execCommand(b.dataset.cmd, false, null);
+    els.doc.focus(); saveSel();
+  });
+
+  els.photoInput.addEventListener('change', function () { addPhotos(els.photoInput.files); els.photoInput.value = ''; });
+  document.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && !els.editor.hidden) { e.preventDefault(); saveNote(); }
+  });
+
+  els.exportBtn.addEventListener('click', function () {
+    var blob = new Blob([JSON.stringify(notes, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url; a.download = 'playbook-' + today() + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  });
+  els.importBtn.addEventListener('click', function () { els.fileInput.click(); });
+  els.fileInput.addEventListener('change', function () {
+    var file = els.fileInput.files[0]; if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var incoming = JSON.parse(reader.result);
+        if (!Array.isArray(incoming)) throw new Error('bad');
+        var byId = {}; notes.forEach(function (n) { byId[n.id] = n; });
+        var added = 0;
+        incoming.map(migrate).forEach(function (n) { if (n && n.id) { if (!byId[n.id]) added++; byId[n.id] = n; } });
+        notes = Object.keys(byId).map(function (k) { return byId[k]; });
+        persist(); renderList();
+        alert('Imported ' + incoming.length + ' note(s). ' + added + ' new, ' + (incoming.length - added) + ' updated.');
+      } catch (e) { alert('Could not read that file — is it a Playbook export?'); }
+      els.fileInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  renderList();
+})();
+</script>

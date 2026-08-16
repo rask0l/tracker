@@ -1,0 +1,96 @@
+# =============================================================
+# project-fuckable — the plan
+# One goal: $1,000,000 in 3 years. This file drives /project-fuckable/.
+# It is a PLAN, not a money tracker. Nothing here counts dollars.
+#
+# The only live number is Phase 1 (CWES) progress, pulled from
+# _data/cwes.yml, so finishing modules on the study page moves this
+# page on its own. The countdown (day X/1095) comes from `start`.
+#
+# The ritual: when a phase is cleared, flip its `status` to done and
+# set the next one to active. Refine the `steps` as reality teaches you.
+# =============================================================
+
+start: 2026-08-15         # day 1 of the 3-year run
+horizon_days: 1095        # 3 years
+goal: "$1,000,000 in 3 years"
+
+# The one line that decides everything. Read it before you open TikTok.
+north_star: "One million dollars in three years. Everything below is just the path there."
+
+# Why this, why now. Kept short on purpose.
+why: >
+  Twenty-two and broke is a starting line, not a sentence. The skill that pays
+  is security, and the door is a cert. Nothing on this page happens without
+  Phase 1. So the whole plan reduces, today, to one thing: finish CWES.
+
+# The ladder, in order. Phase 1 is the only one that matters right now;
+# the rest are the map, not a schedule set in stone.
+# status: done | active | todo
+# link:   optional internal page this phase maps to
+# window: rough timeframe, for shape not deadline
+# steps:  the concrete moves that clear the phase
+phases:
+  - name: "Get CWES certified"
+    window: "now → month 1"
+    detail: "The 30-day sprint. This is the whole plan until it's done."
+    status: active
+    link: /study/
+    from_cwes: true
+    steps:
+      - "Finish the 30-day study sprint, module by module"
+      - "Write one full practice report on a retired box"
+      - "Rebuild the methodology checklist from memory"
+      - "Sit the exam and pass"
+
+  - name: "Turn the skill into first income"
+    window: "months 1 → 6"
+    detail: "Proof the cert converts to money. Any real payout counts."
+    status: todo
+    steps:
+      - "Start bug bounty: pick 2-3 beginner-friendly programs and go deep, not wide"
+      - "Publish every win as a writeup on the public site — this is your resume"
+      - "Land the first paid bounty OR a junior pentest/security role"
+      - "Apply to security roles in parallel; the cert is the door-opener"
+
+  - name: "Replace the day job"
+    window: "months 6 → 18"
+    detail: "Security work out-earns the current wage, consistently. Then quit."
+    status: todo
+    steps:
+      - "Get bounty or salary income above the current job, month over month"
+      - "Pick a lane that pays (web, cloud, API) and get known for it"
+      - "Quit the low-paying job once income is stable"
+
+  - name: "Scale past a single salary"
+    window: "year 2 → 3"
+    detail: "Income stops being capped by one employer."
+    status: todo
+    steps:
+      - "Stack streams: bounties + contracting/retainers + reputation work"
+      - "Raise rates and move up to higher-value programs and clients"
+      - "Reinvest and save aggressively — the goal is net worth, not revenue"
+
+  - name: "Seven figures"
+    window: "by year 3"
+    detail: "Net worth hits $1M. The point of the whole thing."
+    status: todo
+    steps:
+      - "Bank and compound the income from the phases above"
+      - "Keep the burn low; a broke mindset built this, don't lose it"
+
+# The math, so the number stops being abstract. Not a tracker — just the
+# target, decomposed, so you know what "on pace" would even mean.
+math:
+  - { label: "per year",  value: "$333,333" }
+  - { label: "per month", value: "$27,778" }
+  - { label: "per week",  value: "$6,410" }
+  - { label: "per day",   value: "$913" }
+
+# The rules of the run. The methodology, in your own words.
+principles:
+  - "One phase at a time. Right now nothing exists but CWES."
+  - "Skill first, money follows. Nobody pays for potential."
+  - "Ship daily. A bad study day beats a perfect plan."
+  - "Everything public. Writeups compound into reputation, reputation into money."
+  - "The clock is the enemy on the exam and the ally in life. Use it."
