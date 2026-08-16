@@ -9,7 +9,7 @@ Pages in the nav, plus one hidden page:
 
 | Page | URL | Data source | What it is |
 |------|-----|-------------|------------|
-| Study | `/study/` | `_data/cwes.yml` | HTB CWES roadmap, a module checklist |
+| Study | `/study/` | `_data/cwes.yml` seed + browser | HTB CWES roadmap, a clickable module checklist |
 | Loop | `/loop/` | none (static layout) | the weekly study rhythm, a reference card |
 | Notes | `/notes/` | browser `localStorage` | the Playbook, a rich note editor |
 | Gym | `/gym/` | `_data/gym.yml` | lifting progress: split, weights, sessions |
@@ -22,11 +22,14 @@ Built with plain Jekyll (no theme). Deploys as a GitHub Pages project site at
 
 The pages behave differently, so be careful about the source of truth:
 
-- **Study (`/study/`) is YAML driven.** The page renders only the `roadmap`
-  from `_data/cwes.yml`, as a done/next/todo checklist. The file still holds
-  `log`, `failures`, `exam_prep`, and `methodology`, but the page no longer
-  shows them (the owner stripped it down to the roadmap). To move study
-  progress, flip a `roadmap` item's `done` in that file.
+- **Study (`/study/`) is YAML seed plus browser state.** The page renders the
+  `roadmap` from `_data/cwes.yml` as a done/next/todo checklist, but the
+  modules are now clickable: toggling one saves to `localStorage` (key
+  `study-v1`), which then wins over the YAML per module (same pattern as gym).
+  The `reset` link in the footer clears the browser state back to the file's
+  defaults. The file still holds `log`, `failures`, `exam_prep`, and
+  `methodology`, unrendered. Editing `cwes.yml` only changes the seed, so flip
+  a `roadmap` item's `done` there too if you want the repo to reflect reality.
 - **Gym (`/gym/`) is YAML seed plus browser state.** `_data/gym.yml` only
   seeds the *initial* weights and split. Once the owner edits weights, logs a
   session, or reorders exercises in the browser, those changes save to

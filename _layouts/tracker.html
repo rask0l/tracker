@@ -10,8 +10,9 @@ layout: default
 
 <style>
   /* ============================================================
-     THE ROADMAP — CWES module checklist. Brutalist mono,
-     matches /loop/ and /notes/.
+     THE ROADMAP — CWES module checklist. Brutalist mono.
+     Interactive: tap a module to toggle done (saved to localStorage,
+     key study-v1; YAML seeds, the browser wins per module).
      ============================================================ */
   .layout-tracker .wrap { max-width: 820px; }
 
@@ -37,7 +38,7 @@ layout: default
   .study-page .stat span { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
 
   .study-page .bar { height: 12px; border: 2px solid var(--line); margin-top: 0.6rem; background: transparent; }
-  .study-page .bar span { display: block; height: 100%; background: var(--acc); }
+  .study-page .bar span { display: block; height: 100%; background: var(--acc); transition: width 0.25s ease; }
 
   .study-page .up-next { display: flex; align-items: stretch; border: 2px solid var(--line); margin-top: 1.2rem; }
   .study-page .up-next .k {
@@ -53,9 +54,10 @@ layout: default
   .study-page .rmap { border: 2px solid var(--line); list-style: none; margin: 0; padding: 0; }
   .study-page .rmap li {
     display: grid; grid-template-columns: 2.6rem 1.5rem 1fr; gap: 0.7rem; align-items: center;
-    padding: 0.6rem 0.9rem; font-size: 0.92rem;
+    padding: 0.6rem 0.9rem; font-size: 0.92rem; cursor: pointer; user-select: none;
   }
   .study-page .rmap li + li { border-top: 2px solid var(--line); }
+  .study-page .rmap li:hover { background: var(--accent-bg); }
   .study-page .rm-i { color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
   .study-page .rm-mk { text-align: center; font-weight: 700; color: var(--muted); }
   .study-page .rmap li.done { color: var(--muted); }
@@ -66,8 +68,14 @@ layout: default
 
   .study-page .foot {
     margin-top: 1.6rem; padding-top: 1rem; border-top: 3px solid var(--line);
-    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted);
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center;
   }
+  .study-page .reset {
+    font-family: inherit; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--acc); background: transparent; border: 0; padding: 0; cursor: pointer;
+  }
+  .study-page .reset:hover { text-decoration: underline; }
 
   @media (max-width: 620px) {
     .study-page .rmap li { grid-template-columns: 2.2rem 1.3rem 1fr; gap: 0.55rem; }
@@ -80,32 +88,101 @@ layout: default
   <p class="sub">The 20 modules of the CWES path, in order. One at a time. That's the whole plan.</p>
 
   <div class="stat">
-    <strong>{% if done < 10 %}0{% endif %}{{ done }} / {{ total }}</strong>
-    <span>modules done · {{ pct }}%</span>
+    <strong id="st-count">{% if done < 10 %}0{% endif %}{{ done }} / {{ total }}</strong>
+    <span id="st-pct">modules done · {{ pct }}%</span>
   </div>
-  <div class="bar"><span style="width: {{ pct }}%"></span></div>
+  <div class="bar"><span id="st-bar" style="width: {{ pct }}%"></span></div>
 
-  {% if next_item %}
-    <div class="up-next"><span class="k">up next</span><span class="v">{{ next_item.name }}</span></div>
-  {% else %}
-    <div class="up-next"><span class="k">done</span><span class="v">Roadmap complete. Drill the weak spots.</span></div>
-  {% endif %}
+  <div class="up-next" id="up-next">
+    {% if next_item %}
+      <span class="k">up next</span><span class="v">{{ next_item.name }}</span>
+    {% else %}
+      <span class="k">done</span><span class="v">Roadmap complete. Drill the weak spots.</span>
+    {% endif %}
+  </div>
 
   <p class="sect-h"><span class="n">//</span> The 20 modules</p>
   {% assign seen_next = false %}
-  <ul class="rmap">
+  <ul class="rmap" id="rmap">
     {% for m in d.roadmap %}
       {% assign idx = forloop.index %}
+      {% capture num %}{% if idx < 10 %}0{% endif %}{{ idx }}{% endcapture %}
       {% if m.done %}
-        <li class="done"><span class="rm-i">{% if idx < 10 %}0{% endif %}{{ idx }}</span><span class="rm-mk">✓</span><span class="rm-name">{{ m.name }}</span></li>
+        <li class="done" data-name="{{ m.name | escape }}" data-seed="true"><span class="rm-i">{{ num }}</span><span class="rm-mk">✓</span><span class="rm-name">{{ m.name }}</span></li>
       {% elsif seen_next == false %}
         {% assign seen_next = true %}
-        <li class="next"><span class="rm-i">{% if idx < 10 %}0{% endif %}{{ idx }}</span><span class="rm-mk">▸</span><span class="rm-name">{{ m.name }}</span></li>
+        <li class="next" data-name="{{ m.name | escape }}" data-seed="false"><span class="rm-i">{{ num }}</span><span class="rm-mk">▸</span><span class="rm-name">{{ m.name }}</span></li>
       {% else %}
-        <li><span class="rm-i">{% if idx < 10 %}0{% endif %}{{ idx }}</span><span class="rm-mk">□</span><span class="rm-name">{{ m.name }}</span></li>
+        <li data-name="{{ m.name | escape }}" data-seed="false"><span class="rm-i">{{ num }}</span><span class="rm-mk">□</span><span class="rm-name">{{ m.name }}</span></li>
       {% endif %}
     {% endfor %}
   </ul>
 
-  <p class="foot">One module at a time. Depth over speed.</p>
+  <p class="foot">
+    <span>Tap a module to toggle it · saved in this browser</span>
+    <button type="button" class="reset" id="study-reset">reset</button>
+  </p>
 </div>
+
+<script>
+(function () {
+  var KEY = 'study-v1';
+  var rmap = document.getElementById('rmap');
+  if (!rmap) return;
+  var lis = Array.prototype.slice.call(rmap.querySelectorAll('li'));
+  var total = lis.length;
+
+  var state;
+  try { state = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { state = {}; }
+  state.done = state.done || {};
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function isDone(li) {
+    var n = li.dataset.name;
+    return (n in state.done) ? state.done[n] : (li.dataset.seed === 'true');
+  }
+
+  function render() {
+    var done = 0, nextSet = false, firstNext = null;
+    lis.forEach(function (li) {
+      var d = isDone(li);
+      var mk = li.querySelector('.rm-mk');
+      li.classList.remove('done', 'next');
+      if (d) { li.classList.add('done'); mk.textContent = '✓'; done++; }
+      else if (!nextSet) { nextSet = true; firstNext = li; li.classList.add('next'); mk.textContent = '▸'; }
+      else { mk.textContent = '□'; }
+    });
+    var pct = total ? Math.round(done * 100 / total) : 0;
+    document.getElementById('st-count').textContent = pad(done) + ' / ' + total;
+    document.getElementById('st-pct').textContent = 'modules done · ' + pct + '%';
+    document.getElementById('st-bar').style.width = pct + '%';
+    var un = document.getElementById('up-next');
+    if (firstNext) {
+      un.querySelector('.k').textContent = 'up next';
+      un.querySelector('.v').textContent = firstNext.dataset.name;
+    } else {
+      un.querySelector('.k').textContent = 'done';
+      un.querySelector('.v').textContent = 'Roadmap complete. Drill the weak spots.';
+    }
+  }
+
+  lis.forEach(function (li) {
+    li.addEventListener('click', function () {
+      state.done[li.dataset.name] = !isDone(li);
+      localStorage.setItem(KEY, JSON.stringify(state));
+      render();
+    });
+  });
+
+  var reset = document.getElementById('study-reset');
+  if (reset) reset.addEventListener('click', function () {
+    if (confirm('Reset module progress to the defaults from the file?')) {
+      localStorage.removeItem(KEY);
+      state = { done: {} };
+      render();
+    }
+  });
+
+  render();
+})();
+</script>
