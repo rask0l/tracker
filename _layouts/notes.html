@@ -49,6 +49,7 @@ layout: default
   .notes-app .tag { display: inline-block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.2rem 0.5rem; border: 2px solid var(--line); white-space: nowrap; }
   .notes-app .tag--bug { background: var(--fg); color: var(--bg); }
   .notes-app .tag--box { background: var(--acc); color: #fff; border-color: var(--acc); }
+  .notes-app .tag--fey { background: transparent; color: var(--fg); border-color: var(--fg); }
 
   /* editor shell */
   .notes-app .editor { border: 2px solid var(--line); margin-top: 1.15rem; }
@@ -137,6 +138,7 @@ layout: default
   <div class="toolbar">
     <button type="button" data-new="bug">+ Bug-class note</button>
     <button type="button" data-new="box">+ Box note</button>
+    <button type="button" data-new="feynman">+ Feynman writeup</button>
     <span class="count" id="note-count"></span>
   </div>
 
@@ -216,7 +218,22 @@ layout: default
 '<p><b>Foothold</b> &mdash; </p>' +
 '<p><b>Payload</b> &mdash; </p>' +
 '<p><b>Priv-esc</b> &mdash; </p>' +
-'<p><span style="color:#d92b1f"><b>&gt;&gt; MISSED</b></span> &mdash; the one thing I overlooked</p>'
+'<p><span style="color:#d92b1f"><b>&gt;&gt; MISSED</b></span> &mdash; the one thing I overlooked</p>',
+    feynman:
+'<h2>&lt;topic: the bug or concept&gt;</h2>' +
+'<p><span style="color:#8f887c">Write it from memory first. Where you stall or hand-wave, that is the gap. Then open the module and fill it.</span></p>' +
+'<p><b>1. What is it?</b>&nbsp; <span style="color:#8f887c">one plain sentence, no jargon</span></p>' +
+'<p><br></p>' +
+'<p><b>2. Why does it happen?</b>&nbsp; <span style="color:#8f887c">the root cause, the developer mistake, the key line</span></p>' +
+'<p><br></p>' +
+'<p><b>3. How do I spot it?</b>&nbsp; <span style="color:#8f887c">the signal that makes you suspect it</span></p>' +
+'<p><br></p>' +
+'<p><b>4. How do I exploit it?</b>&nbsp; <span style="color:#8f887c">the steps, simply; screenshot the moment it pops</span></p>' +
+'<p><br></p>' +
+'<p><b>5. Why does the fix work?</b>&nbsp; <span style="color:#8f887c">tie it back to line 2</span></p>' +
+'<p><br></p>' +
+'<p><b>6. The one thing I missed.</b>&nbsp; <span style="color:#8f887c">your failure-log line</span></p>' +
+'<p><br></p>'
   };
 
   var els = {
@@ -286,7 +303,8 @@ layout: default
 
   function today() { var d = new Date(); function p(n) { return (n < 10 ? '0' : '') + n; } return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
   function fmt(ts) { var d = new Date(ts); function p(n) { return (n < 10 ? '0' : '') + n; } return p(d.getDate()) + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
-  function typeLabel(t) { return t === 'box' ? 'Box' : 'Bug'; }
+  function typeLabel(t) { return t === 'box' ? 'Box' : t === 'feynman' ? 'Feynman' : 'Bug'; }
+  function tagClass(t) { return 'tag ' + (t === 'box' ? 'tag--box' : t === 'feynman' ? 'tag--fey' : 'tag--bug'); }
   function imgCount(n) { var d = document.createElement('div'); d.innerHTML = n.html || ''; return d.querySelectorAll('img').length; }
 
   /* ---- list ---- */
@@ -294,7 +312,7 @@ layout: default
     els.list.innerHTML = '';
     notes.slice().sort(function (a, b) { return b.updated - a.updated; }).forEach(function (n) {
       var li = document.createElement('li');
-      var tag = document.createElement('span'); tag.className = 'tag ' + (n.type === 'box' ? 'tag--box' : 'tag--bug'); tag.textContent = typeLabel(n.type);
+      var tag = document.createElement('span'); tag.className = tagClass(n.type); tag.textContent = typeLabel(n.type);
       var title = document.createElement('span'); title.className = 'nl-title'; title.textContent = n.title || '(untitled)';
       var meta = document.createElement('span'); meta.className = 'nl-meta';
       var ic = imgCount(n);
@@ -321,7 +339,7 @@ layout: default
   /* ---- open / save / delete ---- */
   function openEditor(type, note) {
     els.editor.hidden = false;
-    els.type.className = 'tag ' + (type === 'box' ? 'tag--box' : 'tag--bug');
+    els.type.className = tagClass(type);
     els.type.textContent = typeLabel(type);
     els.editor.dataset.type = type;
     savedRange = null;

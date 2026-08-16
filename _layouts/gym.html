@@ -4,7 +4,107 @@ layout: default
 
 {% assign g = site.data.gym %}
 
-<article class="tracker gym">
+<style>
+  /* ============================================================
+     THE GYM — brutalist mono skin over the existing markup.
+     Structure + JS classes unchanged; this only restyles.
+     ============================================================ */
+  .layout-gym .wrap { max-width: 900px; }
+
+  .gym-page {
+    --acc: #d92b1f; --line: var(--fg);
+    font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    color: var(--fg); line-height: 1.5;
+  }
+  @media (prefers-color-scheme: dark) { .gym-page { --acc: #ff4a3d; } }
+
+  .gym-page h1 {
+    font-family: inherit; font-style: normal; font-weight: 800; text-transform: uppercase;
+    font-size: clamp(2.4rem, 9vw, 4.4rem); line-height: 0.9; letter-spacing: -0.03em; margin: 0; border: 0;
+  }
+  .content .gym-page h2 {
+    font-family: inherit; font-style: normal; font-weight: 700; text-transform: uppercase;
+    font-size: 0.8rem; letter-spacing: 0.14em; border: 0; padding: 0; margin: 2.5rem 0 0.9rem; color: var(--fg);
+  }
+  .content .gym-page h2::before { content: "// "; color: var(--acc); }
+
+  /* stat tiles */
+  .gym-page .stat { background: transparent; border: 2px solid var(--line); border-radius: 0; box-shadow: none; padding: 0.85rem 1rem; }
+  .gym-page .stat strong { font-family: inherit; font-style: normal; font-weight: 800; font-size: 1.6rem; }
+  .gym-page .stat span { font-family: inherit; }
+
+  /* split */
+  .gym-page .split { border: 2px solid var(--line); gap: 0; margin-top: 1rem; }
+  .gym-page .split li { border: 0; border-radius: 0; background: transparent; padding: 0.55rem 0.85rem; }
+  .gym-page .split li + li { border-top: 2px solid var(--line); }
+  .gym-page .split li.next { background: var(--accent-bg); }
+  .gym-page .split .tick { accent-color: var(--acc); }
+  .gym-page .split .day { font-style: normal; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+  .gym-page .split .focus { font-family: inherit; }
+  .gym-page .split .focus:focus { background: var(--accent-bg); }
+  .gym-page .split-photo img { border: 2px solid var(--line); border-radius: 0; box-shadow: none; }
+
+  /* lift blocks — stack full-width so exercise names have room */
+  .gym-page .lifts-grid { grid-template-columns: 1fr; }
+  .gym-page .lift-block { background: transparent; border: 2px solid var(--line); border-radius: 0; box-shadow: none; }
+  .gym-page input.ex-name { min-width: 12rem; width: 100%; }
+  .gym-page .lift-block h3 { font-family: inherit; font-style: normal; text-transform: uppercase; letter-spacing: 0.04em; color: var(--acc); font-size: 0.95rem; }
+  .gym-page .log { font-family: inherit; }
+  .gym-page .log th { font-family: inherit; text-transform: uppercase; }
+  .gym-page .log th, .gym-page .log td { border-bottom: 1px solid var(--line); }
+  .gym-page input.ex-name, .gym-page input.ex-sets, .gym-page input.ex-reps, .gym-page input.wt { font-family: inherit; border-radius: 0; color: var(--fg); }
+  .gym-page input.ex-name:focus, .gym-page input.ex-sets:focus, .gym-page input.ex-reps:focus, .gym-page input.wt:focus { background: var(--accent-bg); }
+  .gym-page .spark polyline { fill: none; stroke: var(--acc); stroke-width: 1.5; }
+  .gym-page .delta { font-family: inherit; font-size: 0.7rem; }
+  .gym-page .delta.up { color: var(--good); }
+  .gym-page .delta.down { color: var(--acc); }
+  .gym-page .delta.flat { color: var(--muted); }
+
+  /* small icon buttons */
+  .gym-page .mv, .gym-page .del-ex, .gym-page .del {
+    font-family: inherit; background: transparent; color: var(--muted); border: 0; border-radius: 0; cursor: pointer;
+  }
+  .gym-page .mv:hover, .gym-page .del-ex:hover, .gym-page .del:hover { color: var(--acc); }
+  .gym-page .step {
+    font-family: inherit; border: 2px solid var(--line); background: transparent; color: var(--fg);
+    border-radius: 0; cursor: pointer; padding: 0 0.4rem;
+  }
+  .gym-page .step:hover { background: var(--fg); color: var(--bg); }
+
+  /* chunky action buttons */
+  .gym-page .add-ex, .gym-page .add, .gym-page #gym-export, .gym-page #gym-import, .gym-page #gym-reset {
+    font-family: inherit; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem;
+    border: 2px solid var(--fg); background: transparent; color: var(--fg); border-radius: 0; padding: 0.5rem 0.85rem; cursor: pointer;
+  }
+  .gym-page .add-ex:hover, .gym-page .add:hover, .gym-page #gym-export:hover, .gym-page #gym-import:hover { background: var(--fg); color: var(--bg); }
+  .gym-page .add { background: var(--fg); color: var(--bg); }
+  .gym-page .add:hover { background: transparent; color: var(--fg); }
+  .gym-page #gym-reset, .gym-page .danger { color: var(--acc); border-color: var(--acc); }
+  .gym-page #gym-reset:hover, .gym-page .danger:hover { background: var(--acc); color: #fff; }
+
+  /* session form */
+  .gym-page .gym-form { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: flex-end; margin-bottom: 1rem; }
+  .gym-page .gym-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .gym-page .gym-form label.grow { flex: 1; min-width: 8rem; }
+  .gym-page .gym-form input, .gym-page .gym-form select {
+    font-family: inherit; border: 2px solid var(--line); background: transparent; color: var(--fg); border-radius: 0; padding: 0.4rem 0.5rem;
+  }
+  .gym-page .gym-form input:focus, .gym-page .gym-form select:focus { outline: none; background: var(--accent-bg); }
+  .gym-page .log .empty { color: var(--muted); text-align: center; }
+  .gym-page .log .note { color: var(--muted); }
+
+  /* backup */
+  .gym-page .gym-data { border: 2px solid var(--line); margin-top: 2rem; padding: 0.3rem 0.9rem 0.9rem; }
+  .gym-page .gym-data summary { font-family: inherit; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; cursor: pointer; padding: 0.55rem 0; }
+  .gym-page .gym-data .bar-label { font-family: inherit; }
+  .gym-page #gym-dump { font-family: inherit; border: 2px solid var(--line); border-radius: 0; background: transparent; color: var(--fg); width: 100%; min-height: 120px; padding: 0.6rem; }
+  .gym-page .gym-data-btns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+
+  /* gif */
+  .gym-page .gym-gif img { border: 2px solid var(--line); border-radius: 0; }
+</style>
+
+<article class="tracker gym gym-page">
   <h1>{{ g.title }}</h1>
 
   <div class="gym-stats" id="gym-stats"></div>
