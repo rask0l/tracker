@@ -67,35 +67,45 @@ body {
 /* ---- header + nav ---- */
 
 .site-head {
-  text-align: center;
-  margin-bottom: 3.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 3rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--fg);
 }
 
 .brand {
-  display: inline-block;
-  font-style: italic;
-  font-weight: 700;
-  font-size: 2rem;
-  letter-spacing: 0.02em;
+  font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--fg);
   text-decoration: none;
 }
 
 .nav {
-  margin-top: 1rem;
-  color: var(--muted);
-  font-style: italic;
-  font-size: 0.95rem;
+  margin-top: 0;
+  font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  font-style: normal;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
 }
 
 .nav a {
-  color: var(--accent);
+  color: var(--fg);
   text-decoration: none;
 }
 
 .nav a:hover {
-  color: var(--accent-hover);
-  text-decoration: underline;
+  color: var(--accent);
+  text-decoration: none;
 }
 
 /* ---- home listing ---- */
@@ -264,12 +274,15 @@ body {
 /* ---- footer ---- */
 
 .site-foot {
-  margin-top: 4.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
-  text-align: center;
+  margin-top: 4rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--fg);
+  text-align: left;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .site-foot a { color: var(--muted); }
