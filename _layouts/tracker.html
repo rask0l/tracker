@@ -25,13 +25,11 @@ layout: default
   }
   @media (prefers-color-scheme: dark) { .study-page { --acc: #ff4a3d; } }
 
-  .study-page .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); margin: 0 0 1.1rem; }
   .study-page h1 {
     font-family: inherit; font-style: normal; font-weight: 800;
     font-size: clamp(2.4rem, 9vw, 4.4rem); line-height: 0.9;
     letter-spacing: -0.03em; text-transform: uppercase; margin: 0; border: 0;
   }
-  .study-page .sub { font-size: 0.98rem; max-width: 54ch; margin: 1.1rem 0 0; }
 
   .study-page .stat { display: flex; align-items: baseline; gap: 0.6rem; margin-top: 1.6rem; }
   .study-page .stat strong { font-size: 1.85rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
@@ -83,9 +81,7 @@ layout: default
 </style>
 
 <div class="study-page">
-  <p class="eyebrow">HTB CWES // long game, no deadline</p>
   <h1>The Roadmap</h1>
-  <p class="sub">The 20 modules of the CWES path, in order. One at a time. That's the whole plan.</p>
 
   <div class="stat">
     <strong id="st-count">{% if done < 10 %}0{% endif %}{{ done }} / {{ total }}</strong>
@@ -119,7 +115,6 @@ layout: default
   </ul>
 
   <p class="foot">
-    <span>Tap a module to toggle it · saved in this browser</span>
     <button type="button" class="reset" id="study-reset">reset</button>
   </p>
 </div>

@@ -12,12 +12,10 @@ permalink: /
   }
   @media (prefers-color-scheme: dark) { .home-page { --acc: #ff4a3d; } }
 
-  .home-page .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); margin: 0 0 1.1rem; }
   .home-page h1 {
     font-family: inherit; font-style: normal; font-weight: 800; text-transform: uppercase;
     font-size: clamp(2.6rem, 10vw, 4.6rem); line-height: 0.9; letter-spacing: -0.03em; margin: 0; border: 0;
   }
-  .home-page .sub { font-size: 0.98rem; max-width: 52ch; margin: 1.1rem 0 0; }
 
   .home-page .nav-list { border: 2px solid var(--line); list-style: none; margin: 1.7rem 0 0; padding: 0; }
   .home-page .nav-list li + li { border-top: 2px solid var(--line); }
@@ -30,11 +28,6 @@ permalink: /
   .home-page .nav-list .d { color: var(--muted); font-size: 0.85rem; min-width: 0; }
   .home-page .nav-list .go { color: var(--acc); font-weight: 700; }
 
-  .home-page .foot {
-    margin-top: 1.6rem; padding-top: 1rem; border-top: 3px solid var(--line);
-    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted);
-  }
-
   @media (max-width: 560px) {
     .home-page .nav-list a { grid-template-columns: 1fr auto; }
     .home-page .nav-list .d { grid-column: 1 / -1; }
@@ -42,9 +35,7 @@ permalink: /
 </style>
 
 <div class="home-page">
-  <p class="eyebrow">personal // private // noindex</p>
   <h1>Tracker</h1>
-  <p class="sub">Everything here points at one thing: get good, get out. Pick a board.</p>
 
   <ul class="nav-list">
     <li><a href="{{ '/study/' | relative_url }}"><span class="k">Study</span><span class="d">the CWES roadmap, 20 modules</span><span class="go">&rarr;</span></a></li>
@@ -52,6 +43,4 @@ permalink: /
     <li><a href="{{ '/notes/' | relative_url }}"><span class="k">Notes</span><span class="d">the playbook, writeups + evidence</span><span class="go">&rarr;</span></a></li>
     <li><a href="{{ '/gym/' | relative_url }}"><span class="k">Gym</span><span class="d">split, working weights, sessions</span><span class="go">&rarr;</span></a></li>
   </ul>
-
-  <p class="foot">Get good. Get out.</p>
 </div>
