@@ -1,0 +1,507 @@
+---
+layout: default
+---
+
+{% assign d = site.data.cwes %}
+{% assign total = d.roadmap | size %}
+{% assign done = d.roadmap | where: "done", true | size %}
+{% assign pct = 0 %}{% if total > 0 %}{% assign pct = done | times: 100 | divided_by: total %}{% endif %}
+{% assign next_item = d.roadmap | where: "done", false | first %}
+
+<style>
+  /* ============================================================
+     THE STUDY LOOP — roadmap, the daily/weekly/monthly study plan,
+     and the rules that keep it alive. Brutalist mono.
+     The interactive day/week/month calendar lives at /sched/.
+     ============================================================ */
+  .layout-loop .wrap { max-width: 880px; }
+
+  .study-loop {
+    --acc: #d92b1f;
+    --line: var(--fg);
+    font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    color: var(--fg);
+    line-height: 1.5;
+  }
+  @media (prefers-color-scheme: dark) { .study-loop { --acc: #ff4a3d; } }
+
+  .study-loop b { font-weight: 700; }
+  .study-loop i { font-style: normal; text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ---- header ---- */
+  .study-loop h1 {
+    font-family: inherit;
+    font-style: normal;
+    font-weight: 800;
+    font-size: clamp(2.6rem, 10vw, 5rem);
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+    margin: 0;
+    border: 0;
+  }
+  .study-loop .sub {
+    font-size: 0.98rem;
+    max-width: 54ch;
+    margin: 1.1rem 0 0;
+    color: var(--fg);
+  }
+
+  .study-loop .legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 1.1rem;
+    margin: 1.3rem 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+  }
+  .study-loop .legend li { display: flex; align-items: center; gap: 0.5rem; }
+
+  .study-loop .lbl {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    padding: 0.22rem 0.5rem;
+    border: 2px solid var(--line);
+    white-space: nowrap;
+  }
+  .study-loop .lbl--learn { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .study-loop .lbl--cons  { background: var(--acc); color: #fff; border-color: var(--acc); }
+  .study-loop .lbl--rest  { background: transparent; color: var(--fg); border-color: var(--fg); }
+
+  /* ---- section heading ---- */
+  .study-loop .sect-h {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin: 2.6rem 0 0.9rem;
+  }
+  .study-loop .sect-h .n { color: var(--acc); }
+
+  /* ---- roadmap ---- */
+  .study-loop .stat { display: flex; align-items: baseline; gap: 0.6rem; margin-top: 1.6rem; }
+  .study-loop .stat strong { font-size: 1.85rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .study-loop .stat span { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+
+  .study-loop .rm-bar { height: 12px; border: 2px solid var(--line); margin-top: 0.6rem; background: transparent; }
+  .study-loop .rm-bar span { display: block; height: 100%; background: var(--acc); transition: width 0.25s ease; }
+
+  .study-loop .up-next { display: flex; align-items: stretch; border: 2px solid var(--line); margin-top: 1.2rem; }
+  .study-loop .up-next .k {
+    background: var(--acc); color: #fff; padding: 0.5rem 0.85rem;
+    font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.13em;
+    display: flex; align-items: center; white-space: nowrap;
+  }
+  .study-loop .up-next .v { padding: 0.5rem 0.9rem; font-weight: 700; display: flex; align-items: center; min-width: 0; }
+
+  .study-loop .rmap { border: 2px solid var(--line); list-style: none; margin: 1.2rem 0 0; padding: 0; }
+  .study-loop .rmap li {
+    display: grid; grid-template-columns: 2.6rem 1.5rem 1fr; gap: 0.7rem; align-items: center;
+    padding: 0.6rem 0.9rem; font-size: 0.92rem; cursor: pointer; user-select: none;
+  }
+  .study-loop .rmap li + li { border-top: 2px solid var(--line); }
+  .study-loop .rmap li:hover { background: var(--accent-bg); }
+  .study-loop .rm-i { color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+  .study-loop .rm-mk { text-align: center; font-weight: 700; color: var(--muted); }
+  .study-loop .rmap li.done { color: var(--muted); }
+  .study-loop .rmap li.done .rm-mk { color: var(--good); }
+  .study-loop .rmap li.next { background: var(--accent-bg); }
+  .study-loop .rmap li.next .rm-mk { color: var(--acc); }
+  .study-loop .rmap li.next .rm-name { font-weight: 700; }
+
+  .study-loop .rm-foot {
+    margin-top: 0.9rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
+  }
+  .study-loop .reset {
+    font-family: inherit; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--acc); background: transparent; border: 0; padding: 0; cursor: pointer;
+  }
+  .study-loop .reset:hover { text-decoration: underline; }
+
+  /* ---- anchor grid (Day + Month tiles) ---- */
+  .study-loop .anchor {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border: 2px solid var(--line);
+  }
+  .study-loop .anchor > div {
+    padding: 1rem 1.1rem;
+    border-right: 2px solid var(--line);
+  }
+  .study-loop .anchor > div:last-child { border-right: 0; }
+  .study-loop .anchor .k {
+    display: block;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.45rem;
+  }
+  .study-loop .anchor .k .t { color: var(--acc); }
+  .study-loop .anchor .d { font-size: 0.83rem; color: var(--muted); }
+
+  /* ---- week ledger ---- */
+  .study-loop .wk { border: 2px solid var(--line); }
+  .study-loop .wk > * + * { border-top: 2px solid var(--line); }
+
+  .study-loop .wk-band {
+    background: var(--fg);
+    color: var(--bg);
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+  }
+  .study-loop .wk-band .n { color: var(--acc); }
+
+  .study-loop .wk-row { display: grid; grid-template-columns: 168px 1fr; }
+  .study-loop .wk-day { border-right: 2px solid var(--line); padding: 0.95rem 1rem; }
+  .study-loop .wk-dow {
+    font-size: 1.55rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .study-loop .wk-day .lbl { margin-top: 0.6rem; }
+  .study-loop .wk-time {
+    margin-top: 0.6rem;
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+  }
+  .study-loop .wk-body { padding: 0.95rem 1.1rem; min-width: 0; }
+  .study-loop .wk-goal { font-size: 0.9rem; font-weight: 700; margin: 0 0 0.7rem; }
+
+  .study-loop .wk-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+  .study-loop .wk-steps li { display: grid; grid-template-columns: 4.4rem 1fr; gap: 0.7rem; font-size: 0.85rem; align-items: baseline; }
+  .study-loop .wk-steps .t {
+    color: var(--acc);
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .study-loop .wk-steps .note { color: var(--muted); }
+  .study-loop .wk-steps .tag { color: var(--muted); white-space: nowrap; }
+
+  /* ---- rules ---- */
+  .study-loop .rules { border: 2px solid var(--line); list-style: none; margin: 0; padding: 0; }
+  .study-loop .rules li {
+    display: grid;
+    grid-template-columns: 3rem 1fr;
+    gap: 0.8rem;
+    padding: 0.85rem 1rem;
+    font-size: 0.88rem;
+    align-items: baseline;
+  }
+  .study-loop .rules li + li { border-top: 2px solid var(--line); }
+  .study-loop .rules .rn { font-weight: 800; color: var(--acc); font-size: 1.05rem; }
+  .study-loop .rules .note { color: var(--muted); }
+
+  .study-loop .loop-foot {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 3px solid var(--line);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+  }
+
+  @media (max-width: 620px) {
+    .study-loop .anchor { grid-template-columns: 1fr; }
+    .study-loop .anchor > div { border-right: 0; border-bottom: 2px solid var(--line); }
+    .study-loop .anchor > div:last-child { border-bottom: 0; }
+    .study-loop .wk-row { grid-template-columns: 1fr; }
+    .study-loop .wk-day { border-right: 0; border-bottom: 2px solid var(--line); display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+    .study-loop .wk-day .lbl, .study-loop .wk-time { margin-top: 0; }
+    .study-loop .wk-steps li { grid-template-columns: 3.6rem 1fr; }
+  }
+</style>
+
+<div class="study-loop">
+  <h1>The Study Loop</h1>
+  <p class="sub">Two bugs a week. Learned deep, then written down from memory. It repeats for as long as it takes. Depth is the point, not speed.</p>
+  <ul class="legend">
+    <li><span class="lbl lbl--learn">Learn</span> take it in</li>
+    <li><span class="lbl lbl--cons">Consolidate</span> prove it out</li>
+    <li><span class="lbl lbl--rest">Catch-up</span> flex day</li>
+  </ul>
+
+  <p class="sect-h"><span class="n">01</span> — The roadmap</p>
+  <div class="stat">
+    <strong id="rm-count">{% if done < 10 %}0{% endif %}{{ done }} / {{ total }}</strong>
+    <span id="rm-pct">modules done · {{ pct }}%</span>
+  </div>
+  <div class="rm-bar"><span id="rm-bar" style="width: {{ pct }}%"></span></div>
+
+  <div class="up-next" id="rm-up-next">
+    {% if next_item %}
+      <span class="k">up next</span><span class="v">{{ next_item.name }}</span>
+    {% else %}
+      <span class="k">done</span><span class="v">Roadmap complete. Drill the weak spots.</span>
+    {% endif %}
+  </div>
+
+  {% assign seen_next = false %}
+  <ul class="rmap" id="rmap">
+    {% for m in d.roadmap %}
+      {% assign idx = forloop.index %}
+      {% capture num %}{% if idx < 10 %}0{% endif %}{{ idx }}{% endcapture %}
+      {% if m.done %}
+        <li class="done" data-name="{{ m.name | escape }}" data-seed="true"><span class="rm-i">{{ num }}</span><span class="rm-mk">✓</span><span class="rm-name">{{ m.name }}</span></li>
+      {% elsif seen_next == false %}
+        {% assign seen_next = true %}
+        <li class="next" data-name="{{ m.name | escape }}" data-seed="false"><span class="rm-i">{{ num }}</span><span class="rm-mk">▸</span><span class="rm-name">{{ m.name }}</span></li>
+      {% else %}
+        <li data-name="{{ m.name | escape }}" data-seed="false"><span class="rm-i">{{ num }}</span><span class="rm-mk">□</span><span class="rm-name">{{ m.name }}</span></li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+  <p class="rm-foot">
+    <button type="button" class="reset" id="rm-reset">reset roadmap</button>
+  </p>
+
+  <p class="sect-h"><span class="n">02</span> — Day: same three moves, every study day</p>
+  <div class="anchor">
+    <div>
+      <span class="k">01 Warm-up <span class="t">· 10 min</span></span>
+      <span class="d">Anki — yesterday's payloads + syntax. The low-effort on-ramp. Starting is the only hard part.</span>
+    </div>
+    <div>
+      <span class="k">02 Deep work <span class="t">· 25/5</span></span>
+      <span class="d">Do-first: open the lab, attack, get stuck, then read to unblock. Ride hyperfocus when it shows.</span>
+    </div>
+    <div>
+      <span class="k">03 Wind-down <span class="t">· 2 min</span></span>
+      <span class="d">Write tomorrow's exact first action. Leave Kali and Burp open for the morning.</span>
+    </div>
+  </div>
+
+  <p class="sect-h"><span class="n">03</span> — Week: this week's loop</p>
+  <div class="wk">
+    <div class="wk-band"><span class="n">01</span> SQL Injection Fundamentals</div>
+
+    <div class="wk-row">
+      <div class="wk-day">
+        <div class="wk-dow">Mon</div>
+        <span class="lbl lbl--learn">Learn · pt 1</span>
+        <div class="wk-time">8/24 · ~1–1.5h</div>
+      </div>
+      <div class="wk-body">
+        <p class="wk-goal">Meet SQL injection by breaking something — not by reading about it.</p>
+        <ul class="wk-steps">
+          <li><span class="t">10m</span><span><b>Anki warm-up.</b> <span class="note">Get in the chair.</span></span></li>
+          <li><span class="t">2×25m</span><span><b>Attack the first labs</b> of SQL Injection Fundamentals. Break it first, understand it second. <span class="tag">[do-first]</span></span></li>
+          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Note where you stopped + the next section.</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="wk-row">
+      <div class="wk-day">
+        <div class="wk-dow">Tue</div>
+        <span class="lbl lbl--learn">Learn · pt 2</span>
+        <div class="wk-time">8/25 · ~1–1.5h</div>
+      </div>
+      <div class="wk-body">
+        <p class="wk-goal">Finish SQLi. Push the labs where it actually gets hard — blind and time-based.</p>
+        <ul class="wk-steps">
+          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
+          <li><span class="t">2–3×25m</span><span><b>Finish the module's labs.</b> The hard sections are where the learning is — don't skip them. <span class="tag">[do-first]</span></span></li>
+          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Jot the 4–5 points you'd need to teach SQLi tomorrow.</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="wk-row">
+      <div class="wk-day">
+        <div class="wk-dow">Wed</div>
+        <span class="lbl lbl--cons">Consolidate</span>
+        <div class="wk-time">8/26 · ~1.5–2h</div>
+      </div>
+      <div class="wk-body">
+        <p class="wk-goal">Turn SQLi into something you own — write it, then prove it.</p>
+        <ul class="wk-steps">
+          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
+          <li><span class="t">30–40m</span><span><b>Feynman writeup — closed book first.</b> Explain SQL injection like teaching a beginner: what it is, how to find it, how to exploit, how to fix. <b>Then</b> open the module to patch the gaps — every gap becomes a new Anki card. Keep it ugly and short, and publish it. <span class="tag">[teach-it]</span></span></li>
+          <li><span class="t">45–60m</span><span><b>The box.</b> Root a machine where <i>SQLi</i> is the way in. Screenshot every step in report language. <span class="tag">[apply]</span></span></li>
+          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Note what tripped you on the box. In the roadmap above, flip SQL Injection Fundamentals to done.</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="wk-band"><span class="n">02</span> SQLMap Essentials</div>
+
+    <div class="wk-row">
+      <div class="wk-day">
+        <div class="wk-dow">Thu</div>
+        <span class="lbl lbl--learn">Learn · pt 1</span>
+        <div class="wk-time">8/27 · ~1–1.5h</div>
+      </div>
+      <div class="wk-body">
+        <p class="wk-goal">New bug, same move — attack first, read to unblock. This one automates what you just learned by hand.</p>
+        <ul class="wk-steps">
+          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
+          <li><span class="t">2×25m</span><span><b>Attack the first labs</b> of SQLMap Essentials. <span class="tag">[do-first]</span></span></li>
+          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Mark the stopping point.</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="wk-row">
+      <div class="wk-day">
+        <div class="wk-dow">Fri</div>
+        <span class="lbl lbl--learn">Learn · pt 2</span>
+        <div class="wk-time">8/28 · ~1–1.5h</div>
+      </div>
+      <div class="wk-body">
+        <p class="wk-goal">Finish SQLMap's labs.</p>
+        <ul class="wk-steps">
+          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
+          <li><span class="t">2–3×25m</span><span><b>Finish the module.</b> Push the harder labs. <span class="tag">[do-first]</span></span></li>
+          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Jot the teaching points for tomorrow.</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="wk-row">
+      <div class="wk-day">
+        <div class="wk-dow">Sat</div>
+        <span class="lbl lbl--cons">Consolidate</span>
+        <div class="wk-time">8/29 · ~1.5–2h</div>
+      </div>
+      <div class="wk-body">
+        <p class="wk-goal">Write SQLMap up, then break a box with it.</p>
+        <ul class="wk-steps">
+          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
+          <li><span class="t">30–40m</span><span><b>Feynman writeup — closed book first,</b> then patch gaps from the module. Ugly, short, published. <span class="tag">[teach-it]</span></span></li>
+          <li><span class="t">45–60m</span><span><b>The box.</b> A machine where SQLMap gets you in. Screenshot in report language. <span class="tag">[apply]</span></span></li>
+          <li><span class="t">—</span><span><span class="note">In the roadmap above, flip SQLMap Essentials to done. Body-double the boring parts; solo when you hit flow.</span></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="wk-band"><span class="n">↺</span> Close the loop</div>
+
+    <div class="wk-row">
+      <div class="wk-day">
+        <div class="wk-dow">Sun</div>
+        <span class="lbl lbl--rest">Catch-up</span>
+        <div class="wk-time">8/30 · ~1–3h · flexes</div>
+      </div>
+      <div class="wk-body">
+        <p class="wk-goal">The flex day. Repay the week's debt, bury what's shaky, reread your own words.</p>
+        <ul class="wk-steps">
+          <li><span class="t">debt</span><span><b>Repay debt.</b> Short of your target hours this week? Make it up now — <b>capped at ~2h, and it resets tonight.</b> Debt never rolls into next week. <span class="tag">[cap it]</span></span></li>
+          <li><span class="t">heavy</span><span><b>Heavy Anki.</b> A longer session than usual to bury anything shaky from SQLi or SQLMap.</span></li>
+          <li><span class="t">review</span><span><b>Reread this week's writeups.</b> Your own words back is the fastest, highest-retention review there is. <span class="tag">[retrieval]</span></span></li>
+          <li><span class="t">off</span><span><b>Caught up, no debt?</b> <span class="note">Light Anki, pick the next two bugs, then the day is yours. Next loop opens Monday 8/31.</span></span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <p class="sect-h"><span class="n">04</span> — Month: the rollup</p>
+  <div class="anchor">
+    <div>
+      <span class="k">Pace <span class="t">· no quota</span></span>
+      <span class="d">~4 loops a month if the rhythm holds, roughly 8 bug classes. A slow month just runs into the next one — no makeup, no debt across months.</span>
+    </div>
+    <div>
+      <span class="k">Review <span class="t">· last Sunday</span></span>
+      <span class="d">Reread every writeup from the month. Redo the 2 hardest labs with no walkthrough. That's the real test of what stuck.</span>
+    </div>
+    <div>
+      <span class="k">Track <span class="t">· one number</span></span>
+      <span class="d">Progress lives on the roadmap bar above, not a calendar grid. Did it move this month? That's the only question that matters.</span>
+    </div>
+  </div>
+
+  <p class="sect-h"><span class="n">05</span> — Rules that keep it alive</p>
+  <ul class="rules">
+    <li><span class="rn">01</span><span><b>Miss a day? Resume — don't double up.</b> <span class="note">The streak breaking isn't the run breaking.</span></span></li>
+    <li><span class="rn">02</span><span><b>Protect the warm-up above all.</b> <span class="note">Anki + one sprint still counts as a day.</span></span></li>
+    <li><span class="rn">03</span><span><b>Ride hyperfocus.</b> <span class="note">The timer is for starting, not for interrupting flow.</span></span></li>
+    <li><span class="rn">04</span><span><b>Ugly and short wins.</b> <span class="note">A rough writeup published beats a perfect one you never start.</span></span></li>
+  </ul>
+
+  <p class="loop-foot">Two bugs in. One loop closed. Run it again.</p>
+</div>
+
+<script>
+(function () {
+  var KEY = 'study-v1';
+  var rmap = document.getElementById('rmap');
+  if (!rmap) return;
+  var lis = Array.prototype.slice.call(rmap.querySelectorAll('li'));
+  var total = lis.length;
+
+  var state;
+  try { state = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { state = {}; }
+  state.done = state.done || {};
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function isDone(li) {
+    var n = li.dataset.name;
+    return (n in state.done) ? state.done[n] : (li.dataset.seed === 'true');
+  }
+
+  function render() {
+    var done = 0, nextSet = false, firstNext = null;
+    lis.forEach(function (li) {
+      var d = isDone(li);
+      var mk = li.querySelector('.rm-mk');
+      li.classList.remove('done', 'next');
+      if (d) { li.classList.add('done'); mk.textContent = '✓'; done++; }
+      else if (!nextSet) { nextSet = true; firstNext = li; li.classList.add('next'); mk.textContent = '▸'; }
+      else { mk.textContent = '□'; }
+    });
+    var pct = total ? Math.round(done * 100 / total) : 0;
+    document.getElementById('rm-count').textContent = pad(done) + ' / ' + total;
+    document.getElementById('rm-pct').textContent = 'modules done · ' + pct + '%';
+    document.getElementById('rm-bar').style.width = pct + '%';
+    var un = document.getElementById('rm-up-next');
+    if (firstNext) {
+      un.querySelector('.k').textContent = 'up next';
+      un.querySelector('.v').textContent = firstNext.dataset.name;
+    } else {
+      un.querySelector('.k').textContent = 'done';
+      un.querySelector('.v').textContent = 'Roadmap complete. Drill the weak spots.';
+    }
+  }
+
+  lis.forEach(function (li) {
+    li.addEventListener('click', function () {
+      state.done[li.dataset.name] = !isDone(li);
+      localStorage.setItem(KEY, JSON.stringify(state));
+      render();
+    });
+  });
+
+  var reset = document.getElementById('rm-reset');
+  if (reset) reset.addEventListener('click', function () {
+    if (confirm('Reset module progress to the defaults from the file?')) {
+      localStorage.removeItem(KEY);
+      state = { done: {} };
+      render();
+    }
+  });
+
+  render();
+})();
+</script>

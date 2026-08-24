@@ -3,7 +3,8 @@
 Personal gym + CWES study tracker. Split out from the writeup site so the
 public security work stays clean and this stays personal.
 
-- **study** (`/study/`) — CWES 30 day sprint: roadmap, hours, failure log
+- **loop** (`/loop/`) — the CWES roadmap, the study plan, and the rules
+- **sched** (`/sched/`) — a day / week / month calendar for freeform notes
 - **gym** (`/gym/`) — split, working weights with sparklines, session log
 
 All progress data lives in the browser (localStorage), not in the repo.

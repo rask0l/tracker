@@ -9,11 +9,22 @@ Pages in the nav, plus one hidden page:
 
 | Page | URL | Data source | What it is |
 |------|-----|-------------|------------|
-| Study | `/study/` | `_data/cwes.yml` seed + browser | HTB CWES roadmap, a clickable module checklist |
-| Loop | `/loop/` | none (static layout) | the weekly study rhythm, a reference card |
+| Loop | `/loop/` | `_data/cwes.yml` seed + browser | the CWES roadmap (clickable checklist), the static study plan (daily ritual, this week's dated plan, monthly rollup), and the rules |
+| Sched | `/sched/` | browser `localStorage` | a real day / week / month calendar planner: navigate months, click into a day, write a freeform note per day |
 | Notes | `/notes/` | browser `localStorage` | the Playbook, a rich note editor |
 | Gym | `/gym/` | `_data/gym.yml` | lifting progress: split, weights, sessions |
 | project-fuckable | `/project-fuckable/` | `_data/project.yml` | the private north-star goal, unlinked and reachable only by URL |
+
+Loop and Sched are unrelated on purpose, despite the similar names: Loop is
+the static "what and why" (roadmap + the fixed study-plan reference card +
+rules). Sched is a separate, genuinely interactive calendar tool for jotting
+freeform day-by-day notes — it doesn't read the roadmap or the study plan at
+all. Each page has a small link pointing at the other, but nothing is shared
+between them. `_layouts/loop.html` holds the roadmap markup + toggle script +
+the static Day/Week/Month reference card + rules. `_layouts/schedule.html`
+holds the calendar app (month grid, week list, day panel), all client-side
+JS. `_layouts/tracker.html` no longer exists — its content now lives in
+`_layouts/loop.html`.
 
 Built with plain Jekyll (no theme). Deploys as a GitHub Pages project site at
 `rask0l.github.io/tracker`, so `baseurl` is `/tracker`.
@@ -22,14 +33,21 @@ Built with plain Jekyll (no theme). Deploys as a GitHub Pages project site at
 
 The pages behave differently, so be careful about the source of truth:
 
-- **Study (`/study/`) is YAML seed plus browser state.** The page renders the
+- **Loop's roadmap section is YAML seed plus browser state.** It renders the
   `roadmap` from `_data/cwes.yml` as a done/next/todo checklist, but the
-  modules are now clickable: toggling one saves to `localStorage` (key
+  modules are clickable: toggling one saves to `localStorage` (key
   `study-v1`), which then wins over the YAML per module (same pattern as gym).
-  The `reset` link in the footer clears the browser state back to the file's
-  defaults. The file still holds `log`, `failures`, `exam_prep`, and
-  `methodology`, unrendered. Editing `cwes.yml` only changes the seed, so flip
-  a `roadmap` item's `done` there too if you want the repo to reflect reality.
+  The `reset roadmap` button reverts the browser state to the file's defaults.
+  The file still holds `log`, `failures`, `exam_prep`, and `methodology`,
+  unrendered. Editing `cwes.yml` only changes the seed, so flip a `roadmap`
+  item's `done` there too if you want the repo to reflect reality.
+- **Loop's Day/Week/Month reference card is entirely static.** It's content
+  in `_layouts/loop.html`, not a data file. Edit the layout to change it —
+  including the current dated week (right now: SQL Injection Fundamentals
+  then SQLMap Essentials, Mon 8/24 through Sun 8/30).
+- **Sched is browser only.** Nothing in the repo. Every day's note saves to
+  `localStorage` (key `sched-v1`) as `entries: { 'YYYY-MM-DD': { text, done
+  } }`. No export/import panel exists yet, so clearing site data wipes it.
 - **Gym (`/gym/`) is YAML seed plus browser state.** `_data/gym.yml` only
   seeds the *initial* weights and split. Once the owner edits weights, logs a
   session, or reorders exercises in the browser, those changes save to
@@ -41,8 +59,6 @@ The pages behave differently, so be careful about the source of truth:
   created, updated}`, where `html` is rich text from a `contenteditable`
   editor and photos are embedded inline as downscaled JPEG data URLs. Export
   and import (JSON) are the only backup. Clearing site data wipes it.
-- **Loop (`/loop/`) is static.** The weekly plan is content in
-  `_layouts/schedule.html`, not a data file. Edit the layout to change it.
 - **project-fuckable** renders `_data/project.yml` but only the header block;
   the phases, math, and rules in the YAML are unrendered. It is hidden from
   the nav on purpose.
@@ -52,7 +68,7 @@ reflects the page. Both are starting points or partial.
 
 ## Updating study progress (`_data/cwes.yml`)
 
-Only step 2 changes the page now (roadmap only). The rest still live in the
+Only step 2 changes the Loop page (roadmap only). The rest still live in the
 file for the owner's own reference:
 
 1. Each study day, append an entry to `log` (copy the last line).
@@ -108,10 +124,12 @@ bundle exec jekyll serve
 - Layouts hold render logic and JavaScript; touch them for behavior, not for
   progress updates. The heavy ones: `_layouts/gym.html` (gym localStorage),
   `_layouts/notes.html` (the Playbook editor: rich text, inline photos,
-  drag/resize, export/import), `_layouts/schedule.html` (the Loop),
-  `_layouts/tracker.html` (study roadmap).
-- Visual language on the newer pages (`/loop/`, `/notes/`) is brutalist mono:
-  flat, hard 2px borders, no rounded corners, monospace, one red accent. The
-  notes document surface is a fixed dark editor.
+  drag/resize, export/import), `_layouts/loop.html` (roadmap checklist +
+  toggle script, plus the static study-plan card + rules),
+  `_layouts/schedule.html` (the Sched calendar app: month/week/day views,
+  navigation, per-day notes, all in localStorage).
+- Visual language on the newer pages (`/loop/`, `/sched/`, `/notes/`) is
+  brutalist mono: flat, hard 2px borders, no rounded corners, monospace, one
+  red accent. The notes document surface is a fixed dark editor.
 - `habits.yml` and `_layouts/habits.html` are orphaned (the habits page was
   removed) but left in place so the data is not destroyed.

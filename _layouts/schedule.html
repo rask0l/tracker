@@ -4,344 +4,466 @@ layout: default
 
 <style>
   /* ============================================================
-     THE STUDY LOOP — brutalist mono. Flat, hard-edged, one accent.
-     Built on the site's --fg / --bg tokens so it flips light/dark.
+     THE SCHEDULE — a real day/week/month planner. Brutalist mono.
+     Saves to localStorage (key: sched-v1). The static roadmap +
+     study plan + rules live at /loop/.
      ============================================================ */
   .layout-schedule .wrap { max-width: 880px; }
 
-  .study-loop {
+  .sched-app {
     --acc: #d92b1f;
     --line: var(--fg);
     font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
     color: var(--fg);
     line-height: 1.5;
   }
-  @media (prefers-color-scheme: dark) { .study-loop { --acc: #ff4a3d; } }
+  @media (prefers-color-scheme: dark) { .sched-app { --acc: #ff4a3d; } }
 
-  .study-loop b { font-weight: 700; }
-  .study-loop i { font-style: normal; text-decoration: underline; text-underline-offset: 2px; }
+  .sched-app [hidden] { display: none !important; }
+  .sched-app b { font-weight: 700; }
 
   /* ---- header ---- */
-  .study-loop h1 {
-    font-family: inherit;
-    font-style: normal;
-    font-weight: 800;
-    font-size: clamp(2.6rem, 10vw, 5rem);
-    line-height: 0.9;
-    letter-spacing: -0.03em;
-    text-transform: uppercase;
-    margin: 0;
-    border: 0;
+  .sched-app h1 {
+    font-family: inherit; font-style: normal; font-weight: 800;
+    font-size: clamp(2.6rem, 10vw, 5rem); line-height: 0.9;
+    letter-spacing: -0.03em; text-transform: uppercase; margin: 0; border: 0;
   }
-  .study-loop .sub {
-    font-size: 0.98rem;
-    max-width: 54ch;
-    margin: 1.1rem 0 0;
-    color: var(--fg);
+  .sched-app .sub { font-size: 0.98rem; max-width: 54ch; margin: 1.1rem 0 0; }
+  .sched-app .xlink {
+    display: inline-block; margin-top: 0.9rem; font-size: 0.78rem;
+    color: var(--acc); text-decoration: none; border: 0;
+  }
+  .sched-app .xlink:hover { text-decoration: underline; }
+
+  /* ---- toolbar ---- */
+  .sched-app .toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem;
+    margin-top: 1.8rem; padding-bottom: 1rem; border-bottom: 2px solid var(--line);
+  }
+  .sched-app .nav-grp { display: flex; align-items: center; gap: 0.5rem; }
+  .sched-app button {
+    font-family: inherit; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 0.4rem 0.65rem; cursor: pointer; background: transparent; color: var(--fg); border: 2px solid var(--line);
+  }
+  .sched-app button:hover { background: var(--fg); color: var(--bg); }
+  .sched-app button.active { background: var(--acc); color: #fff; border-color: var(--acc); }
+  .sched-app .nav-arrow { padding: 0.4rem 0.6rem; }
+  .sched-app .label {
+    min-width: 11rem; text-align: center; font-weight: 800; font-size: 1rem;
+    text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .sched-app .views { display: flex; gap: 0.4rem; margin-left: auto; }
+  .sched-app .today-btn { color: var(--acc); border-color: var(--acc); }
+  .sched-app .today-btn:hover { background: var(--acc); color: #fff; }
+
+  /* ---- month grid ---- */
+  .sched-app .month-head {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    border: 2px solid var(--line); border-bottom: 0;
+  }
+  .sched-app .month-head span {
+    padding: 0.5rem 0; text-align: center; font-size: 0.66rem; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); border-right: 2px solid var(--line);
+  }
+  .sched-app .month-head span:last-child { border-right: 0; }
+  .sched-app .grid { display: grid; grid-template-columns: repeat(7, 1fr); border: 2px solid var(--line); }
+  .sched-app .cell {
+    position: relative; min-height: 4.2rem; padding: 0.4rem 0.5rem;
+    border-right: 2px solid var(--line); border-top: 2px solid var(--line);
+    cursor: pointer; font-size: 0.85rem;
+  }
+  .sched-app .cell:nth-child(7n) { border-right: 0; }
+  .sched-app .cell:nth-child(-n+7) { border-top: 0; }
+  .sched-app .cell:hover { background: var(--accent-bg); }
+  .sched-app .cell.other { color: var(--muted); }
+  .sched-app .cell.today .num { color: var(--acc); font-weight: 800; }
+  .sched-app .cell .num { font-variant-numeric: tabular-nums; }
+  .sched-app .cell .mark {
+    position: absolute; top: 0.4rem; right: 0.5rem; font-size: 0.7rem; color: var(--acc); font-weight: 700;
+  }
+  .sched-app .cell .snip {
+    margin-top: 0.3rem; font-size: 0.68rem; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
-  .study-loop .legend {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.55rem 1.1rem;
-    margin: 1.3rem 0 0;
-    padding: 0;
-    list-style: none;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--muted);
+  /* ---- week list ---- */
+  .sched-app .week { border: 2px solid var(--line); }
+  .sched-app .week > * + * { border-top: 2px solid var(--line); }
+  .sched-app .wrow { display: grid; grid-template-columns: 8.5rem 1fr auto; align-items: center; }
+  .sched-app .wrow.today { background: var(--accent-bg); }
+  .sched-app .wday { padding: 0.9rem 1rem; cursor: pointer; }
+  .sched-app .wday .dow { font-size: 1.1rem; font-weight: 800; text-transform: uppercase; }
+  .sched-app .wday .dnum { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+  .sched-app .wtext {
+    font-family: inherit; font-size: 0.88rem; padding: 0.9rem 0.5rem; border: 0; background: transparent; color: var(--fg);
   }
-  .study-loop .legend li { display: flex; align-items: center; gap: 0.5rem; }
+  .sched-app .wtext:focus { outline: none; background: var(--accent-bg); }
+  .sched-app .wdone { margin-right: 1rem; accent-color: var(--acc); width: 1.1rem; height: 1.1rem; cursor: pointer; }
 
-  .study-loop .lbl {
-    display: inline-block;
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-    padding: 0.22rem 0.5rem;
-    border: 2px solid var(--line);
-    white-space: nowrap;
+  /* ---- day panel ---- */
+  .sched-app .day { border: 2px solid var(--line); padding: 1.2rem 1.3rem; }
+  .sched-app .day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .sched-app .day-title { font-size: 1.3rem; font-weight: 800; text-transform: uppercase; }
+  .sched-app .day-chk { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .sched-app .day-chk input { accent-color: var(--acc); width: 1.1rem; height: 1.1rem; cursor: pointer; }
+  .sched-app .day textarea {
+    display: block; width: 100%; min-height: 180px; margin-top: 1rem; resize: vertical;
+    font-family: inherit; font-size: 0.9rem; line-height: 1.7; padding: 0.8rem;
+    border: 2px solid var(--line); background: transparent; color: var(--fg);
   }
-  .study-loop .lbl--learn { background: var(--fg); color: var(--bg); border-color: var(--fg); }
-  .study-loop .lbl--cons  { background: var(--acc); color: #fff; border-color: var(--acc); }
-  .study-loop .lbl--rest  { background: transparent; color: var(--fg); border-color: var(--fg); }
+  .sched-app .day textarea:focus { outline: none; background: var(--accent-bg); }
+  .sched-app .day-foot { margin-top: 0.8rem; display: flex; justify-content: flex-end; }
+  .sched-app .day-clear { color: var(--acc); border-color: var(--acc); }
+  .sched-app .day-clear:hover { background: var(--acc); color: #fff; }
 
-  /* ---- section heading ---- */
-  .study-loop .sect-h {
-    font-size: 0.8rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    margin: 2.6rem 0 0.9rem;
+  /* ---- day checklist ---- */
+  .sched-app .day-tasks { margin-top: 1.4rem; }
+  .sched-app .tasks-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0 0 0.6rem; }
+  .sched-app .task-add { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; }
+  .sched-app .task-add input {
+    flex: 1; font-family: inherit; font-size: 0.85rem; padding: 0.5rem 0.6rem;
+    border: 2px solid var(--line); background: transparent; color: var(--fg);
   }
-  .study-loop .sect-h .n { color: var(--acc); }
+  .sched-app .task-add input:focus { outline: none; background: var(--accent-bg); }
+  .sched-app .task-list { list-style: none; margin: 0; padding: 0; border: 2px solid var(--line); }
+  .sched-app .task-list:empty { display: none; }
+  .sched-app .task-list li { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.7rem; }
+  .sched-app .task-list li + li { border-top: 2px solid var(--line); }
+  .sched-app .task-list input[type="checkbox"] { accent-color: var(--acc); width: 1.1rem; height: 1.1rem; cursor: pointer; flex: none; }
+  .sched-app .task-list .tt { flex: 1; font-size: 0.88rem; cursor: pointer; }
+  .sched-app .task-list li.done .tt { color: var(--muted); text-decoration: line-through; }
+  .sched-app .task-list .tdel {
+    flex: none; border: 0; background: transparent; color: var(--muted);
+    font-size: 0.9rem; padding: 0.1rem 0.4rem; cursor: pointer;
+  }
+  .sched-app .task-list .tdel:hover { color: var(--acc); background: transparent; }
 
-  /* ---- every-day anchor ---- */
-  .study-loop .anchor {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    border: 2px solid var(--line);
-  }
-  .study-loop .anchor > div {
-    padding: 1rem 1.1rem;
-    border-right: 2px solid var(--line);
-  }
-  .study-loop .anchor > div:last-child { border-right: 0; }
-  .study-loop .anchor .k {
-    display: block;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    margin-bottom: 0.45rem;
-  }
-  .study-loop .anchor .k .t { color: var(--acc); }
-  .study-loop .anchor .d { font-size: 0.83rem; color: var(--muted); }
-
-  /* ---- week ledger ---- */
-  .study-loop .wk { border: 2px solid var(--line); }
-  .study-loop .wk > * + * { border-top: 2px solid var(--line); }
-
-  .study-loop .wk-band {
-    background: var(--fg);
-    color: var(--bg);
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.74rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-  }
-  .study-loop .wk-band .n { color: var(--acc); }
-
-  .study-loop .wk-row { display: grid; grid-template-columns: 168px 1fr; }
-  .study-loop .wk-day { border-right: 2px solid var(--line); padding: 0.95rem 1rem; }
-  .study-loop .wk-dow {
-    font-size: 1.55rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: -0.02em;
-    line-height: 1;
-  }
-  .study-loop .wk-day .lbl { margin-top: 0.6rem; }
-  .study-loop .wk-time {
-    margin-top: 0.6rem;
-    font-size: 0.72rem;
-    color: var(--muted);
-    letter-spacing: 0.03em;
-  }
-  .study-loop .wk-body { padding: 0.95rem 1.1rem; min-width: 0; }
-  .study-loop .wk-goal { font-size: 0.9rem; font-weight: 700; margin: 0 0 0.7rem; }
-
-  .study-loop .wk-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
-  .study-loop .wk-steps li { display: grid; grid-template-columns: 4.4rem 1fr; gap: 0.7rem; font-size: 0.85rem; align-items: baseline; }
-  .study-loop .wk-steps .t {
-    color: var(--acc);
-    font-weight: 700;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    font-variant-numeric: tabular-nums;
-  }
-  .study-loop .wk-steps .note { color: var(--muted); }
-  .study-loop .wk-steps .tag { color: var(--muted); white-space: nowrap; }
-
-  /* ---- rules ---- */
-  .study-loop .rules { border: 2px solid var(--line); list-style: none; margin: 0; padding: 0; }
-  .study-loop .rules li {
-    display: grid;
-    grid-template-columns: 3rem 1fr;
-    gap: 0.8rem;
-    padding: 0.85rem 1rem;
-    font-size: 0.88rem;
-    align-items: baseline;
-  }
-  .study-loop .rules li + li { border-top: 2px solid var(--line); }
-  .study-loop .rules .rn { font-weight: 800; color: var(--acc); font-size: 1.05rem; }
-  .study-loop .rules .note { color: var(--muted); }
-
-  .study-loop .loop-foot {
-    margin-top: 1.5rem;
-    padding-top: 1rem;
-    border-top: 3px solid var(--line);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: var(--muted);
+  /* ---- task-count badge (month cells + week rows) ---- */
+  .sched-app .badge {
+    font-size: 0.65rem; font-weight: 700; color: var(--acc); font-variant-numeric: tabular-nums;
   }
 
   @media (max-width: 620px) {
-    .study-loop .anchor { grid-template-columns: 1fr; }
-    .study-loop .anchor > div { border-right: 0; border-bottom: 2px solid var(--line); }
-    .study-loop .anchor > div:last-child { border-bottom: 0; }
-    .study-loop .wk-row { grid-template-columns: 1fr; }
-    .study-loop .wk-day { border-right: 0; border-bottom: 2px solid var(--line); display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
-    .study-loop .wk-day .lbl, .study-loop .wk-time { margin-top: 0; }
-    .study-loop .wk-steps li { grid-template-columns: 3.6rem 1fr; }
+    .sched-app .cell { min-height: 3rem; font-size: 0.72rem; padding: 0.3rem; }
+    .sched-app .cell .snip { display: none; }
+    .sched-app .wrow { grid-template-columns: 1fr; }
+    .sched-app .wdone { margin: 0 1rem 0.9rem; justify-self: start; }
   }
 </style>
 
-<div class="study-loop">
-  <h1>The Study Loop</h1>
-  <p class="sub">Two bugs a week. Learned deep, then written down from memory. It repeats for as long as it takes. Depth is the point, not speed.</p>
-  <ul class="legend">
-    <li><span class="lbl lbl--learn">Learn</span> take it in</li>
-    <li><span class="lbl lbl--cons">Consolidate</span> prove it out</li>
-    <li><span class="lbl lbl--rest">Catch-up</span> flex day</li>
-  </ul>
+<div class="sched-app">
+  <h1>The Schedule</h1>
+  <p class="sub">A real day / week / month planner. Click a day, write what it's for.</p>
+  <a class="xlink" href="{{ '/loop/' | relative_url }}">&rarr; the roadmap, the study plan, the rules</a>
 
-  <p class="sect-h"><span class="n">//</span> Every study day — same three moves</p>
-  <div class="anchor">
-    <div>
-      <span class="k">01 Warm-up <span class="t">· 10 min</span></span>
-      <span class="d">Anki — yesterday's payloads + syntax. The low-effort on-ramp. Starting is the only hard part.</span>
+  <div class="toolbar">
+    <div class="nav-grp">
+      <button type="button" class="nav-arrow" id="sc-prev">&lsaquo;</button>
+      <span class="label" id="sc-label">—</span>
+      <button type="button" class="nav-arrow" id="sc-next">&rsaquo;</button>
     </div>
-    <div>
-      <span class="k">02 Deep work <span class="t">· 25/5</span></span>
-      <span class="d">Do-first: open the lab, attack, get stuck, then read to unblock. Ride hyperfocus when it shows.</span>
-    </div>
-    <div>
-      <span class="k">03 Wind-down <span class="t">· 2 min</span></span>
-      <span class="d">Write tomorrow's exact first action. Leave Kali and Burp open for the morning.</span>
+    <button type="button" class="today-btn" id="sc-today">Today</button>
+    <div class="views">
+      <button type="button" data-view="day">Day</button>
+      <button type="button" data-view="week">Week</button>
+      <button type="button" data-view="month">Month</button>
     </div>
   </div>
 
-  <p class="sect-h"><span class="n">01</span> — The week</p>
-  <div class="wk">
-    <div class="wk-band"><span class="n">01</span> First bug of the week</div>
-
-    <div class="wk-row">
-      <div class="wk-day">
-        <div class="wk-dow">Mon</div>
-        <span class="lbl lbl--learn">Learn · pt 1</span>
-        <div class="wk-time">~1–1.5h</div>
-      </div>
-      <div class="wk-body">
-        <p class="wk-goal">Meet the new bug by breaking something — not by reading about it.</p>
-        <ul class="wk-steps">
-          <li><span class="t">10m</span><span><b>Anki warm-up.</b> <span class="note">Get in the chair.</span></span></li>
-          <li><span class="t">2×25m</span><span><b>Attack the first labs</b> of the module. Break it first, understand it second. <span class="tag">[do-first]</span></span></li>
-          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Note where you stopped + the next section. Gym: Upper A if it's a lift day.</span></span></li>
-        </ul>
-      </div>
+  <div id="sc-month">
+    <div class="month-head">
+      <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
     </div>
-
-    <div class="wk-row">
-      <div class="wk-day">
-        <div class="wk-dow">Tue</div>
-        <span class="lbl lbl--learn">Learn · pt 2</span>
-        <div class="wk-time">~1–1.5h</div>
-      </div>
-      <div class="wk-body">
-        <p class="wk-goal">Finish the bug. Push the labs where it actually gets hard.</p>
-        <ul class="wk-steps">
-          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
-          <li><span class="t">2–3×25m</span><span><b>Finish the module's labs.</b> The hard sections are where the learning is — don't skip them. <span class="tag">[do-first]</span></span></li>
-          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Jot the 4–5 points you'd need to teach this bug tomorrow.</span></span></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="wk-row">
-      <div class="wk-day">
-        <div class="wk-dow">Wed</div>
-        <span class="lbl lbl--cons">Consolidate</span>
-        <div class="wk-time">~1.5–2h</div>
-      </div>
-      <div class="wk-body">
-        <p class="wk-goal">Turn what you saw into something you own — write it, then prove it.</p>
-        <ul class="wk-steps">
-          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
-          <li><span class="t">30–40m</span><span><b>Feynman writeup — closed book first.</b> Explain the bug like teaching a beginner: what it is, how to find it, how to exploit, how to fix. <b>Then</b> open the module to patch the gaps — every gap becomes a new Anki card. Keep it ugly and short, and publish it. <span class="tag">[teach-it]</span></span></li>
-          <li><span class="t">45–60m</span><span><b>The box.</b> Root a machine where <i>this bug</i> is the way in. Screenshot every step in report language. <span class="tag">[apply]</span></span></li>
-          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Note what tripped you on the box. Gym rest or light.</span></span></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="wk-band"><span class="n">02</span> Second bug of the week</div>
-
-    <div class="wk-row">
-      <div class="wk-day">
-        <div class="wk-dow">Thu</div>
-        <span class="lbl lbl--learn">Learn · pt 1</span>
-        <div class="wk-time">~1–1.5h</div>
-      </div>
-      <div class="wk-body">
-        <p class="wk-goal">New bug, same move — attack first, read to unblock.</p>
-        <ul class="wk-steps">
-          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
-          <li><span class="t">2×25m</span><span><b>Attack the first labs</b> of the second module. <span class="tag">[do-first]</span></span></li>
-          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Mark the stopping point. Gym: Upper B if it's a lift day.</span></span></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="wk-row">
-      <div class="wk-day">
-        <div class="wk-dow">Fri</div>
-        <span class="lbl lbl--learn">Learn · pt 2</span>
-        <div class="wk-time">~1–1.5h</div>
-      </div>
-      <div class="wk-body">
-        <p class="wk-goal">Finish the second bug's labs.</p>
-        <ul class="wk-steps">
-          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
-          <li><span class="t">2–3×25m</span><span><b>Finish the module.</b> Push the harder labs. <span class="tag">[do-first]</span></span></li>
-          <li><span class="t">2m</span><span><b>Wind-down.</b> <span class="note">Jot the teaching points for tomorrow.</span></span></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="wk-row">
-      <div class="wk-day">
-        <div class="wk-dow">Sat</div>
-        <span class="lbl lbl--cons">Consolidate</span>
-        <div class="wk-time">~1.5–2h</div>
-      </div>
-      <div class="wk-body">
-        <p class="wk-goal">Your biggest free block — write it up, then break a box with it.</p>
-        <ul class="wk-steps">
-          <li><span class="t">10m</span><span><b>Anki warm-up.</b></span></li>
-          <li><span class="t">30–40m</span><span><b>Feynman writeup — closed book first,</b> then patch gaps from the module. Ugly, short, published. <span class="tag">[teach-it]</span></span></li>
-          <li><span class="t">45–60m</span><span><b>The box.</b> A machine where the second bug is the path in. Screenshot in report language. <span class="tag">[apply]</span></span></li>
-          <li><span class="t">—</span><span><span class="note">Body-double on a Discord call for the boring parts; go solo when you hit flow.</span></span></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="wk-band"><span class="n">↺</span> Close the loop</div>
-
-    <div class="wk-row">
-      <div class="wk-day">
-        <div class="wk-dow">Sun</div>
-        <span class="lbl lbl--rest">Catch-up</span>
-        <div class="wk-time">~1–3h · flexes</div>
-      </div>
-      <div class="wk-body">
-        <p class="wk-goal">The flex day. Repay the week's debt, bury what's shaky, reread your own words.</p>
-        <ul class="wk-steps">
-          <li><span class="t">debt</span><span><b>Repay debt.</b> Short of your target hours on a weekday? Make them up now — <b>capped at ~2h, and it resets tonight.</b> Debt never rolls into next week. <span class="tag">[cap it]</span></span></li>
-          <li><span class="t">heavy</span><span><b>Heavy Anki.</b> A longer session than usual to bury anything that felt shaky this week.</span></li>
-          <li><span class="t">review</span><span><b>Reread your week's writeups.</b> Your own words back is the fastest, highest-retention review there is. <span class="tag">[retrieval]</span></span></li>
-          <li><span class="t">off</span><span><b>Caught up, no debt?</b> <span class="note">Light Anki, line up next week's two bugs, then the day is yours. Recovery is part of the plan, not a failure of it.</span></span></li>
-        </ul>
-      </div>
-    </div>
+    <div class="grid" id="sc-grid"></div>
   </div>
 
-  <p class="sect-h"><span class="n">02</span> — Rules that keep it alive</p>
-  <ul class="rules">
-    <li><span class="rn">01</span><span><b>Miss a day? Resume — don't double up.</b> <span class="note">The streak breaking isn't the run breaking.</span></span></li>
-    <li><span class="rn">02</span><span><b>Protect the warm-up above all.</b> <span class="note">Anki + one sprint still counts as a day.</span></span></li>
-    <li><span class="rn">03</span><span><b>Ride hyperfocus.</b> <span class="note">The timer is for starting, not for interrupting flow.</span></span></li>
-    <li><span class="rn">04</span><span><b>Ugly and short wins.</b> <span class="note">A rough writeup published beats a perfect one you never start.</span></span></li>
-  </ul>
+  <div id="sc-week" class="week" hidden></div>
 
-  <p class="loop-foot">Two bugs in. One loop closed. Run it again.</p>
+  <div id="sc-day" class="day" hidden>
+    <div class="day-head">
+      <span class="day-title" id="sc-day-title">—</span>
+      <label class="day-chk"><input type="checkbox" id="sc-day-done"> done</label>
+    </div>
+    <textarea id="sc-day-text" placeholder="what's this day for…" spellcheck="false"></textarea>
+
+    <div class="day-tasks">
+      <p class="tasks-h">checklist</p>
+      <div class="task-add">
+        <input type="text" id="sc-task-input" placeholder="add a task…" spellcheck="false">
+        <button type="button" id="sc-task-add">+ add</button>
+      </div>
+      <ul class="task-list" id="sc-task-list"></ul>
+    </div>
+
+    <div class="day-foot">
+      <button type="button" class="day-clear" id="sc-day-clear">clear day</button>
+    </div>
+  </div>
 </div>
+
+<script>
+(function () {
+  var KEY = 'sched-v1';
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var DOWFULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var MONFULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  var els = {
+    prev: document.getElementById('sc-prev'),
+    next: document.getElementById('sc-next'),
+    today: document.getElementById('sc-today'),
+    label: document.getElementById('sc-label'),
+    month: document.getElementById('sc-month'),
+    grid: document.getElementById('sc-grid'),
+    week: document.getElementById('sc-week'),
+    day: document.getElementById('sc-day'),
+    dayTitle: document.getElementById('sc-day-title'),
+    dayDone: document.getElementById('sc-day-done'),
+    dayText: document.getElementById('sc-day-text'),
+    dayClear: document.getElementById('sc-day-clear'),
+    taskInput: document.getElementById('sc-task-input'),
+    taskAdd: document.getElementById('sc-task-add'),
+    taskList: document.getElementById('sc-task-list'),
+    viewBtns: Array.prototype.slice.call(document.querySelectorAll('[data-view]'))
+  };
+
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || { entries: {} }; } catch (e) { return { entries: {} }; } }
+  function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+
+  var state = load();
+  state.entries = state.entries || {};
+
+  var view = 'month';
+  var cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function addMonths(d, n) { var x = new Date(d); x.setMonth(x.getMonth() + n); return x; }
+  function startOfWeek(d) { return addDays(d, -d.getDay()); }
+  function today() { var t = new Date(); t.setHours(0, 0, 0, 0); return t; }
+  function isSame(a, b) { return iso(a) === iso(b); }
+
+  function getEntry(d) {
+    return state.entries[iso(d)] || { text: '', done: false, tasks: [] };
+  }
+  function setEntry(d, patch) {
+    var k = iso(d);
+    var cur = state.entries[k] || { text: '', done: false, tasks: [] };
+    var next = {
+      text: patch.text !== undefined ? patch.text : cur.text,
+      done: patch.done !== undefined ? patch.done : cur.done,
+      tasks: patch.tasks !== undefined ? patch.tasks : (cur.tasks || [])
+    };
+    var hasContent = next.text.trim() || next.done || next.tasks.length;
+    if (!hasContent) { delete state.entries[k]; } else { state.entries[k] = next; }
+    save();
+  }
+  function taskBadge(e) {
+    if (e.done) return '✓';
+    if (e.tasks && e.tasks.length) {
+      var c = e.tasks.filter(function (t) { return t.done; }).length;
+      return c + '/' + e.tasks.length;
+    }
+    if (e.text) return '•';
+    return '';
+  }
+
+  function setView(v) {
+    view = v;
+    els.viewBtns.forEach(function (b) { b.classList.toggle('active', b.dataset.view === v); });
+    els.month.hidden = v !== 'month';
+    els.week.hidden = v !== 'week';
+    els.day.hidden = v !== 'day';
+    render();
+  }
+
+  function navigate(delta) {
+    if (view === 'month') cursor = addMonths(cursor, delta);
+    else if (view === 'week') cursor = addDays(cursor, 7 * delta);
+    else cursor = addDays(cursor, delta);
+    render();
+  }
+
+  function goToDay(d) {
+    cursor = new Date(d);
+    setView('day');
+  }
+
+  function renderLabel() {
+    if (view === 'month') {
+      els.label.textContent = MONFULL[cursor.getMonth()] + ' ' + cursor.getFullYear();
+    } else if (view === 'week') {
+      var s = startOfWeek(cursor), e = addDays(s, 6);
+      els.label.textContent = MON[s.getMonth()] + ' ' + s.getDate() + ' – ' + MON[e.getMonth()] + ' ' + e.getDate() + ', ' + e.getFullYear();
+    } else {
+      els.label.textContent = DOWFULL[cursor.getDay()] + ', ' + cursor.getDate() + ' ' + MON[cursor.getMonth()] + ' ' + cursor.getFullYear();
+    }
+  }
+
+  function renderMonth() {
+    var first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    var start = startOfWeek(first);
+    var t = today();
+    els.grid.innerHTML = '';
+    for (var i = 0; i < 42; i++) {
+      var d = addDays(start, i);
+      var cell = document.createElement('div');
+      cell.className = 'cell';
+      if (d.getMonth() !== cursor.getMonth()) cell.classList.add('other');
+      if (isSame(d, t)) cell.classList.add('today');
+      var num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = d.getDate();
+      cell.appendChild(num);
+      var e = getEntry(d);
+      var badge = taskBadge(e);
+      if (badge) { var mk = document.createElement('span'); mk.className = 'mark'; mk.textContent = badge; cell.appendChild(mk); }
+      if (e.text) {
+        var snip = document.createElement('div');
+        snip.className = 'snip';
+        snip.textContent = e.text.split('\n')[0];
+        cell.appendChild(snip);
+      }
+      (function (date) { cell.addEventListener('click', function () { goToDay(date); }); })(d);
+      els.grid.appendChild(cell);
+    }
+    // only render 6 rows if the 6th row has any current-month days, else trim to 5 rows for compactness
+    var sixthRowStart = addDays(start, 35);
+    if (sixthRowStart.getMonth() !== cursor.getMonth()) {
+      for (var r = 0; r < 7; r++) { if (els.grid.lastChild) els.grid.removeChild(els.grid.lastChild); }
+    }
+  }
+
+  function renderWeek() {
+    var s = startOfWeek(cursor);
+    var t = today();
+    els.week.innerHTML = '';
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(s, i);
+      var e = getEntry(d);
+      var row = document.createElement('div');
+      row.className = 'wrow' + (isSame(d, t) ? ' today' : '');
+
+      var taskFrac = '';
+      if (e.tasks && e.tasks.length) {
+        var doneCount = e.tasks.filter(function (t) { return t.done; }).length;
+        taskFrac = ' <span class="badge">' + doneCount + '/' + e.tasks.length + '</span>';
+      }
+      var dayCol = document.createElement('div');
+      dayCol.className = 'wday';
+      dayCol.innerHTML = '<div class="dow">' + DOW[d.getDay()] + '</div><div class="dnum">' + MON[d.getMonth()] + ' ' + d.getDate() + taskFrac + '</div>';
+      dayCol.addEventListener('click', (function (date) { return function () { goToDay(date); }; })(d));
+
+      var input = document.createElement('input');
+      input.className = 'wtext';
+      input.type = 'text';
+      input.spellcheck = false;
+      input.placeholder = 'what’s this day for…';
+      input.value = e.text;
+      input.addEventListener('change', (function (date, inp) { return function () { setEntry(date, { text: inp.value }); }; })(d, input));
+
+      var chk = document.createElement('input');
+      chk.className = 'wdone';
+      chk.type = 'checkbox';
+      chk.checked = e.done;
+      chk.title = 'done';
+      chk.addEventListener('change', (function (date, box) { return function () { setEntry(date, { done: box.checked }); }; })(d, chk));
+
+      row.appendChild(dayCol);
+      row.appendChild(input);
+      row.appendChild(chk);
+      els.week.appendChild(row);
+    }
+  }
+
+  function renderDay() {
+    var e = getEntry(cursor);
+    els.dayTitle.textContent = DOWFULL[cursor.getDay()] + ', ' + cursor.getDate() + ' ' + MON[cursor.getMonth()];
+    els.dayDone.checked = e.done;
+    els.dayText.value = e.text;
+    renderTasks(e.tasks || []);
+  }
+
+  function renderTasks(tasks) {
+    els.taskList.innerHTML = '';
+    tasks.forEach(function (task) {
+      var li = document.createElement('li');
+      if (task.done) li.classList.add('done');
+
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = task.done;
+      chk.addEventListener('change', function () { toggleTask(task.id, chk.checked); });
+
+      var label = document.createElement('span');
+      label.className = 'tt';
+      label.textContent = task.text;
+      label.addEventListener('click', function () { toggleTask(task.id, !task.done); });
+
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'tdel';
+      del.textContent = '✕';
+      del.title = 'remove task';
+      del.addEventListener('click', function () { deleteTask(task.id); });
+
+      li.appendChild(chk);
+      li.appendChild(label);
+      li.appendChild(del);
+      els.taskList.appendChild(li);
+    });
+  }
+
+  function currentTasks() { return (getEntry(cursor).tasks || []).slice(); }
+
+  function addTask() {
+    var text = els.taskInput.value.trim();
+    if (!text) return;
+    var tasks = currentTasks();
+    tasks.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 6), text: text, done: false });
+    setEntry(cursor, { tasks: tasks });
+    els.taskInput.value = '';
+    renderTasks(tasks);
+  }
+  function toggleTask(id, done) {
+    var tasks = currentTasks();
+    tasks.forEach(function (t) { if (t.id === id) t.done = done; });
+    setEntry(cursor, { tasks: tasks });
+    renderTasks(tasks);
+  }
+  function deleteTask(id) {
+    var tasks = currentTasks().filter(function (t) { return t.id !== id; });
+    setEntry(cursor, { tasks: tasks });
+    renderTasks(tasks);
+  }
+
+  els.taskAdd.addEventListener('click', addTask);
+  els.taskInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addTask(); } });
+
+  els.dayText.addEventListener('change', function () { setEntry(cursor, { text: els.dayText.value }); });
+  els.dayDone.addEventListener('change', function () { setEntry(cursor, { done: els.dayDone.checked }); });
+  els.dayClear.addEventListener('click', function () {
+    if (!confirm('Clear this day’s entry?')) return;
+    delete state.entries[iso(cursor)];
+    save();
+    renderDay();
+  });
+
+  function render() {
+    renderLabel();
+    if (view === 'month') renderMonth();
+    else if (view === 'week') renderWeek();
+    else renderDay();
+  }
+
+  els.prev.addEventListener('click', function () { navigate(-1); });
+  els.next.addEventListener('click', function () { navigate(1); });
+  els.today.addEventListener('click', function () { cursor = today(); render(); });
+  els.viewBtns.forEach(function (b) { b.addEventListener('click', function () { setView(b.dataset.view); }); });
+
+  setView('month');
+})();
+</script>

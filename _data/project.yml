@@ -35,7 +35,7 @@ phases:
     window: "now → month 1"
     detail: "The 30-day sprint. This is the whole plan until it's done."
     status: active
-    link: /study/
+    link: /loop/
     from_cwes: true
     steps:
       - "Finish the 30-day study sprint, module by module"
