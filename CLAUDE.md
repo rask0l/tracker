@@ -44,7 +44,7 @@ The pages behave differently, so be careful about the source of truth:
 - **Loop's Day/Week/Month reference card is entirely static.** It's content
   in `_layouts/loop.html`, not a data file. Edit the layout to change it —
   including the current dated week (right now: SQL Injection Fundamentals
-  then SQLMap Essentials, Wed 8/26 through Tue 9/1).
+  then SQLMap Essentials, Thu 9/3 through Wed 9/9).
 - **Sched is browser only.** Nothing in the repo. Every day's note saves to
   `localStorage` (key `sched-v1`) as `entries: { 'YYYY-MM-DD': { text, done
   } }`. No export/import panel exists yet, so clearing site data wipes it.
