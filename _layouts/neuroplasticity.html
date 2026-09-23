@@ -1,0 +1,149 @@
+---
+layout: default
+---
+
+<style>
+  /* ============================================================
+     NEUROPLASTICITY — a single static article. Brutalist mono,
+     matching /loop/. Content lives here, not in a data file,
+     same pattern as the Loop reference card.
+     ============================================================ */
+  .layout-neuroplasticity .wrap { max-width: 880px; }
+
+  .np-article {
+    --acc: #d92b1f;
+    --line: var(--fg);
+    font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    color: var(--fg);
+    line-height: 1.6;
+  }
+  @media (prefers-color-scheme: dark) { .np-article { --acc: #ff4a3d; } }
+
+  .np-article b { font-weight: 700; }
+
+  .np-article h1 {
+    font-family: inherit;
+    font-style: normal;
+    font-weight: 800;
+    font-size: clamp(2.4rem, 9vw, 4.4rem);
+    line-height: 0.92;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+    margin: 0;
+    border: 0;
+  }
+
+  .np-article .meta {
+    margin: 1rem 0 0;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--muted);
+  }
+
+  .np-article .dek {
+    font-size: 1.02rem;
+    max-width: 62ch;
+    margin: 1.2rem 0 0;
+  }
+
+  .np-article .sect-h {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin: 2.6rem 0 0.9rem;
+  }
+  .np-article .sect-h .n { color: var(--acc); }
+
+  .np-article p.body {
+    max-width: 68ch;
+    margin: 0 0 1rem;
+    font-size: 0.95rem;
+  }
+  .np-article p.body:last-child { margin-bottom: 0; }
+
+  .np-article .callout {
+    border-left: 4px solid var(--acc);
+    padding: 0.9rem 1.1rem;
+    margin: 1.4rem 0;
+    max-width: 68ch;
+    font-size: 0.93rem;
+    background: var(--accent-bg);
+  }
+  .np-article .callout b { color: var(--acc); }
+
+  .np-article .protocol { border: 2px solid var(--line); list-style: none; margin: 0; padding: 0; }
+  .np-article .protocol li {
+    display: grid;
+    grid-template-columns: 3rem 1fr;
+    gap: 0.8rem;
+    padding: 0.85rem 1rem;
+    font-size: 0.9rem;
+    align-items: baseline;
+  }
+  .np-article .protocol li + li { border-top: 2px solid var(--line); }
+  .np-article .protocol .rn { font-weight: 800; color: var(--acc); font-size: 1.05rem; }
+  .np-article .protocol .note { color: var(--muted); }
+
+  .np-article .sources {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.78rem;
+  }
+  .np-article .sources li { margin: 0 0 0.5rem; }
+  .np-article .sources a { color: var(--muted); }
+
+  .np-article .np-foot {
+    margin-top: 2.4rem;
+    padding-top: 1rem;
+    border-top: 3px solid var(--line);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+  }
+</style>
+
+<div class="np-article">
+  <h1>Neuroplasticity</h1>
+  <p class="meta">Notes to self · why the Loop is built the way it is</p>
+  <p class="dek">The brain only rewires around what actually gets used, repeatedly. That single fact is the reason every rule on the Loop page looks the way it does. This is the reasoning written out.</p>
+
+  <p class="sect-h"><span class="n">01</span> — The mechanism</p>
+  <p class="body">Skill acquisition happens in two stages. First, fast <b>functional reorganization</b>: existing circuits get recruited and strengthened within days. Second, and only if the skill keeps getting practiced, slower <b>structural change</b>: more myelin, denser gray matter, physically different wiring. The first stage is cheap and reversible. The second is what actually sticks, and it only shows up under repetition.</p>
+  <p class="body">Underneath both, the same handful of mechanisms keep showing up across skill-learning research: long-term potentiation strengthening the synapses actually in use, dopaminergic signaling in the corticostriatal loop, BDNF-driven growth, cerebellar correction of errors. None of it is exotic. It's all downstream of one thing: <b>use</b>.</p>
+
+  <p class="sect-h"><span class="n">02</span> — No permanent reserve</p>
+  <p class="body">The finding that mattered most when I looked into this: the cognitive benefit of learning tracks <b>ongoing engagement</b>, not a one-time structural deposit. There's no evidence you "bank" a skill permanently just because you once got good at it.</p>
+  <div class="callout">A module marked done in the roadmap is not a module that's finished. It's a module that will decay on a normal forgetting curve unless it gets touched again. "Done" means learned to standard once, not learned forever.</div>
+
+  <p class="sect-h"><span class="n">03</span> — The ADHD wiring</p>
+  <p class="body">ADHD brains show <b>dopamine-driven plasticity</b>: they rewire readily around high-interest, high-reward activity, and rewire poorly around sustained, low-reward effort. This isn't a discipline problem, it's a difference in which activities actually trigger the plasticity machinery in the first place. Fighting it head-on (forcing the boring part first, on willpower alone) is working against the wiring instead of with it.</p>
+  <p class="body">The fix isn't motivation, it's sequencing: put the high-interest task first (attacking a lab, hyperfocus-friendly), and let the low-reward task (the writeup, the report language) ride the leftover engagement right after, while the circuit is still warm. That's why Learn comes before Consolidate in the Loop, not the other way around.</p>
+
+  <p class="sect-h"><span class="n">04</span> — What actually moves the needle</p>
+  <ul class="protocol">
+    <li><span class="rn">01</span><span><b>Repetition frequency over session length.</b> <span class="note">Use-dependent plasticity responds to how often a circuit fires, not how long one session runs. Short and daily beats long and rare — the actual reason for "two bugs a week," not a cram.</span></span></li>
+    <li><span class="rn">02</span><span><b>Retrieval over rereading.</b> <span class="note">Reconstructing what you learned from memory drives more structural change per minute than passively reviewing it. Closed-book first, then patch gaps — never the reverse.</span></span></li>
+    <li><span class="rn">03</span><span><b>Exercise widens the window.</b> <span class="note">Training spikes BDNF for roughly two hours afterward, meaning the brain is measurably more plastic in that window. A study block that lands inside it is worth more than the same block hours away from it.</span></span></li>
+    <li><span class="rn">04</span><span><b>Sleep is the consolidation step, not the recovery step.</b> <span class="note">Structural change (myelination, synaptic pruning) largely happens during sleep after practice, not during it. Cutting sleep to fit in more study cuts the step that locks the gain in.</span></span></li>
+    <li><span class="rn">05</span><span><b>Age isn't the constraint here.</b> <span class="note">General skill-learning plasticity doesn't meaningfully decline until well into the 30s–40s, and even then gradually. At 22, the only real variable is consistency, not a closing window.</span></span></li>
+  </ul>
+
+  <p class="sect-h"><span class="n">05</span> — Where this shows up on the Loop</p>
+  <p class="body">Rules 05 and 06 on the <a href="{{ '/loop/' | relative_url }}">Loop</a> page came directly out of this: train before you study to land inside the BDNF window, and cycle old "done" modules back into warm-up so plasticity that isn't reused doesn't quietly reverse. The rest of the Loop's shape (Learn before Consolidate, closed-book writeups, short daily sessions over cramming) was arrived at independently but turns out to match the mechanism almost exactly.</p>
+
+  <p class="sect-h"><span class="n">06</span> — Sources</p>
+  <ul class="sources">
+    <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC13484637/">Neuroplasticity in adult second language learning: a systematic scoping review — PMC</a></li>
+    <li><a href="https://doi.org/10.3390/brainsci16070694">Biochemical Pathways of Neuroplasticity in Sport Skill Acquisition</a></li>
+    <li><a href="https://www.apa.org/monitor/2026/04-05/learning-protects-aging-brain">How learning protects the aging brain — APA Monitor</a></li>
+    <li><a href="https://neurosity.co/guides/neuroplasticity-adhd-brain-rewiring">Neuroplasticity in ADHD: How the ADHD Brain Rewires</a></li>
+    <li><a href="https://www.psychologytoday.com/us/blog/mythbusting-adhd/202405/learn-to-rewire-your-adhd-brain-to-improve-cognitive-skills">Learn to Rewire Your ADHD Brain — Psychology Today</a></li>
+    <li><a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8334010/">A Review of Working Memory Training in ADHD Management</a></li>
+  </ul>
+
+  <p class="np-foot">Written once, worth rereading whenever the Loop feels arbitrary.</p>
+</div>

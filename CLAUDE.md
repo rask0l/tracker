@@ -13,6 +13,7 @@ Pages in the nav, plus one hidden page:
 | Sched | `/sched/` | browser `localStorage` | a real day / week / month calendar planner: navigate months, click into a day, write a freeform note per day |
 | Notes | `/notes/` | browser `localStorage` | the Playbook, a rich note editor |
 | Gym | `/gym/` | `_data/gym.yml` | lifting progress: split, weights, sessions |
+| Blog | `/neuroplasticity/` | static, in `_layouts/neuroplasticity.html` | single article on neuroplasticity research and why the Loop's rules are shaped the way they are |
 | project-fuckable | `/project-fuckable/` | `_data/project.yml` | the private north-star goal, unlinked and reachable only by URL |
 
 Loop and Sched are unrelated on purpose, despite the similar names: Loop is
@@ -45,9 +46,17 @@ The pages behave differently, so be careful about the source of truth:
   in `_layouts/loop.html`, not a data file. Edit the layout to change it —
   including the current dated week (right now: SQL Injection Fundamentals
   then SQLMap Essentials, Thu 9/3 through Wed 9/9).
-- **Sched is browser only.** Nothing in the repo. Every day's note saves to
-  `localStorage` (key `sched-v1`) as `entries: { 'YYYY-MM-DD': { text, done
-  } }`. No export/import panel exists yet, so clearing site data wipes it.
+- **Sched is browser only.** Nothing in the repo. Every day saves to
+  `localStorage` (key `sched-v1`) as `entries: { 'YYYY-MM-DD': { text, done,
+  tasks } }`, where each task is `{ id, text, done, time }`. `time` is an
+  optional `"HH:MM"` string: timed tasks sort chronologically and lead,
+  untimed ones keep insertion order and sit below. Tasks predating the time
+  field have no `time` key and read as untimed. No export/import panel exists
+  yet, so clearing site data wipes it.
+  The one static thing on the page is the dated plan card at the bottom of
+  `_layouts/schedule.html`, whose button seeds its rows into that day's
+  checklist. Its target date lives in `data-date` on `.plan`, so it needs
+  editing by hand when the plan moves on.
 - **Gym (`/gym/`) is YAML seed plus browser state.** `_data/gym.yml` only
   seeds the *initial* weights and split. Once the owner edits weights, logs a
   session, or reorders exercises in the browser, those changes save to

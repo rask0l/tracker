@@ -21,6 +21,7 @@ layout: default
 
   .sched-app [hidden] { display: none !important; }
   .sched-app b { font-weight: 700; }
+  .sched-app i { font-style: normal; text-decoration: underline; text-underline-offset: 2px; }
 
   /* ---- header ---- */
   .sched-app h1 {
@@ -58,7 +59,7 @@ layout: default
 
   /* ---- month grid ---- */
   .sched-app .month-head {
-    display: grid; grid-template-columns: repeat(7, 1fr);
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
     border: 2px solid var(--line); border-bottom: 0;
   }
   .sched-app .month-head span {
@@ -66,9 +67,11 @@ layout: default
     letter-spacing: 0.08em; color: var(--muted); border-right: 2px solid var(--line);
   }
   .sched-app .month-head span:last-child { border-right: 0; }
-  .sched-app .grid { display: grid; grid-template-columns: repeat(7, 1fr); border: 2px solid var(--line); }
+  /* minmax(0,…) + min-width:0 so a long note ellipsises instead of
+     stretching its column and blowing out the whole grid. */
+  .sched-app .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 2px solid var(--line); }
   .sched-app .cell {
-    position: relative; min-height: 4.2rem; padding: 0.4rem 0.5rem;
+    position: relative; min-width: 0; min-height: 4.2rem; padding: 0.4rem 0.5rem;
     border-right: 2px solid var(--line); border-top: 2px solid var(--line);
     cursor: pointer; font-size: 0.85rem;
   }
@@ -89,7 +92,7 @@ layout: default
   /* ---- week list ---- */
   .sched-app .week { border: 2px solid var(--line); }
   .sched-app .week > * + * { border-top: 2px solid var(--line); }
-  .sched-app .wrow { display: grid; grid-template-columns: 8.5rem 1fr auto; align-items: center; }
+  .sched-app .wrow { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) auto; align-items: center; }
   .sched-app .wrow.today { background: var(--accent-bg); }
   .sched-app .wday { padding: 0.9rem 1rem; cursor: pointer; }
   .sched-app .wday .dow { font-size: 1.1rem; font-weight: 800; text-transform: uppercase; }
@@ -119,10 +122,21 @@ layout: default
   /* ---- day checklist ---- */
   .sched-app .day-tasks { margin-top: 1.4rem; }
   .sched-app .tasks-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0 0 0.6rem; }
-  .sched-app .task-add { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; }
+  .sched-app .task-add { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; }
   .sched-app .task-add input {
-    flex: 1; font-family: inherit; font-size: 0.85rem; padding: 0.5rem 0.6rem;
+    flex: 1; min-width: 8rem; font-family: inherit; font-size: 0.85rem; padding: 0.5rem 0.6rem;
     border: 2px solid var(--line); background: transparent; color: var(--fg);
+  }
+  .sched-app .task-add input[type="time"] { flex: none; min-width: 0; width: 7.4rem; }
+  .sched-app input[type="time"]::-webkit-calendar-picker-indicator {
+    cursor: pointer; opacity: 0.85;
+  }
+  .sched-app input[type="time"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+  /* The native clock glyph is near-black, invisible on the dark canvas. */
+  @media (prefers-color-scheme: dark) {
+    .sched-app input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(1) brightness(2);
+    }
   }
   .sched-app .task-add input:focus { outline: none; background: var(--accent-bg); }
   .sched-app .task-list { list-style: none; margin: 0; padding: 0; border: 2px solid var(--line); }
@@ -130,24 +144,82 @@ layout: default
   .sched-app .task-list li { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.7rem; }
   .sched-app .task-list li + li { border-top: 2px solid var(--line); }
   .sched-app .task-list input[type="checkbox"] { accent-color: var(--acc); width: 1.1rem; height: 1.1rem; cursor: pointer; flex: none; }
+  .sched-app .task-list .ttime {
+    flex: none; min-width: 3.4rem; font-size: 0.72rem; font-weight: 700;
+    color: var(--acc); font-variant-numeric: tabular-nums;
+  }
+  .sched-app .task-list li.done .ttime { color: var(--muted); }
   .sched-app .task-list .tt { flex: 1; font-size: 0.88rem; cursor: pointer; }
   .sched-app .task-list li.done .tt { color: var(--muted); text-decoration: line-through; }
-  .sched-app .task-list .tdel {
+  .sched-app .task-list .tdel,
+  .sched-app .task-list .tedit {
     flex: none; border: 0; background: transparent; color: var(--muted);
     font-size: 0.9rem; padding: 0.1rem 0.4rem; cursor: pointer;
   }
-  .sched-app .task-list .tdel:hover { color: var(--acc); background: transparent; }
+  .sched-app .task-list .tdel:hover,
+  .sched-app .task-list .tedit:hover { color: var(--acc); background: transparent; }
+
+  /* ---- inline row editing ---- */
+  .sched-app .task-list li.editing { background: var(--accent-bg); gap: 0.5rem; }
+  .sched-app .task-list .etime,
+  .sched-app .task-list .etext {
+    font-family: inherit; font-size: 0.85rem; padding: 0.35rem 0.45rem;
+    border: 2px solid var(--acc); background: var(--bg); color: var(--fg);
+  }
+  .sched-app .task-list .etime { flex: none; width: 7.2rem; }
+  .sched-app .task-list .etext { flex: 1; min-width: 4rem; }
+  .sched-app .task-list .etime:focus, .sched-app .task-list .etext:focus { outline: none; }
 
   /* ---- task-count badge (month cells + week rows) ---- */
   .sched-app .badge {
     font-size: 0.65rem; font-weight: 700; color: var(--acc); font-variant-numeric: tabular-nums;
   }
 
+  /* ---- static plan card, pinned under the calendar ---- */
+  .sched-app .plan { margin-top: 3rem; padding-top: 1.6rem; border-top: 3px solid var(--line); }
+  .sched-app .plan-h {
+    font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.14em; margin: 0 0 0.4rem;
+  }
+  .sched-app .plan-h .n { color: var(--acc); }
+  .sched-app .plan-sub { font-size: 0.85rem; color: var(--muted); margin: 0 0 1.1rem; max-width: 62ch; }
+  .sched-app .plan-load { margin: 0 0 1.2rem; }
+  .sched-app .plan-load button { color: var(--acc); border-color: var(--acc); }
+  .sched-app .plan-load button:hover { background: var(--acc); color: #fff; }
+
+  .sched-app .plan-rows { border: 2px solid var(--line); list-style: none; margin: 0; padding: 0; }
+  .sched-app .plan-rows li {
+    display: grid; grid-template-columns: 4.4rem minmax(0, 1fr) 5.2rem; gap: 0.8rem;
+    padding: 0.6rem 0.9rem; font-size: 0.87rem; align-items: baseline;
+  }
+  .sched-app .plan-rows li + li { border-top: 2px solid var(--line); }
+  .sched-app .plan-rows .pt {
+    color: var(--acc); font-weight: 700; font-size: 0.75rem; font-variant-numeric: tabular-nums;
+  }
+  .sched-app .plan-rows .mode {
+    font-size: 0.58rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); text-align: right; white-space: nowrap;
+  }
+  .sched-app .plan-rows li.hot { background: var(--accent-bg); }
+  .sched-app .plan-rows li.hot .mode { color: var(--acc); }
+
+  .sched-app .plan-notes { list-style: none; margin: 1.3rem 0 0; padding: 0; }
+  .sched-app .plan-notes li {
+    font-size: 0.83rem; max-width: 66ch; margin: 0 0 0.8rem;
+    padding-left: 0.9rem; border-left: 3px solid var(--acc);
+  }
+  .sched-app .plan-win {
+    margin-top: 1.3rem; border: 2px solid var(--acc); padding: 0.75rem 0.9rem; font-size: 0.86rem;
+  }
+  .sched-app .plan-win b { color: var(--acc); }
+
   @media (max-width: 620px) {
     .sched-app .cell { min-height: 3rem; font-size: 0.72rem; padding: 0.3rem; }
     .sched-app .cell .snip { display: none; }
     .sched-app .wrow { grid-template-columns: 1fr; }
     .sched-app .wdone { margin: 0 1rem 0.9rem; justify-self: start; }
+    .sched-app .plan-rows li { grid-template-columns: 3.9rem 1fr; }
+    .sched-app .plan-rows .mode { grid-column: 2; text-align: left; }
   }
 </style>
 
@@ -190,6 +262,7 @@ layout: default
       <p class="tasks-h">checklist</p>
       <div class="task-add">
         <input type="text" id="sc-task-input" placeholder="add a task…" spellcheck="false">
+        <input type="time" id="sc-task-time" title="optional time">
         <button type="button" id="sc-task-add">+ add</button>
       </div>
       <ul class="task-list" id="sc-task-list"></ul>
@@ -198,6 +271,36 @@ layout: default
     <div class="day-foot">
       <button type="button" class="day-clear" id="sc-day-clear">clear day</button>
     </div>
+  </div>
+
+  <div class="plan" data-date="2026-09-24" data-note="Day off. 4h study + gym.">
+    <p class="plan-h"><span class="n">&darr;</span> Thu 9/24 &middot; day off &middot; 4h study + gym</p>
+    <p class="plan-sub">First study day back. Six sprints before the gym, three after. The day is already a win by 15:15, everything past that is upside.</p>
+    <p class="plan-load">
+      <button type="button" id="sc-plan-seed">&rarr; load into Thu 9/24 as a checklist</button>
+    </p>
+
+    <ul class="plan-rows">
+      <li><span class="pt">11:00</span><span>Slow start. Coffee, food, no doom scroll.</span><span class="mode"></span></li>
+      <li><span class="pt">11:15</span><span><b>Anki, 15 min.</b> Cap the deck at 20 cards <i>before</i> you open it.</span><span class="mode">warm-up</span></li>
+      <li class="hot"><span class="pt">11:30</span><span><b>Sprint 1 + 2 + 3</b> (25/5). Open the SQLi labs, attack first, read only to unblock.</span><span class="mode">new</span></li>
+      <li><span class="pt">13:00</span><span><b>Real lunch</b>, 45 min. Eat properly, you're lifting at 4.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">13:45</span><span><b>Sprint 4 + 5 + 6.</b> Keep attacking.</span><span class="mode">new</span></li>
+      <li><span class="pt">15:15</span><span><b>Stop.</b> Snack, gear up, head out.</span><span class="mode"></span></li>
+      <li><span class="pt">16:00</span><span><b>Gym</b>, 2h.</span><span class="mode">gym</span></li>
+      <li><span class="pt">18:00</span><span>Food, shower, decompress. Screens off if you can.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">19:00</span><span><b>Sprint 7 + 8 + 9.</b> Closed-book writeup first, then patch the gaps and turn each one into an Anki card.</span><span class="mode">consolidate</span></li>
+      <li><span class="pt">20:30</span><span><b>Wind-down</b>, 5 min. Tomorrow's first action, then log the day in <code>cwes.yml</code>.</span><span class="mode"></span></li>
+      <li><span class="pt">20:35</span><span><b>Done.</b> No study guilt after this.</span><span class="mode"></span></li>
+    </ul>
+
+    <ul class="plan-notes">
+      <li><b>Floor and ceiling.</b> Six sprints is already a strong day. If you're empty after the gym, the 19:00 block is the part to cut, not the gym and not lunch.</li>
+      <li><b>The Anki trap.</b> Eight weeks of backlog will show you a number in the hundreds, and that number alone can end the day before it starts. Set the limit to 20 first, do 15 minutes, close it. You are not clearing that backlog tomorrow.</li>
+      <li><b>Why it splits this way.</b> New material goes on a fresh brain in the morning. After two hours of lifting you won't have the focus for new exploitation, but you will have enough for retrieval, and that lands inside the post-training window from rule 05.</li>
+    </ul>
+
+    <p class="plan-win"><b>Win condition:</b> one working SQL injection you found with your own hands. Everything else is volume.</p>
   </div>
 </div>
 
@@ -223,6 +326,7 @@ layout: default
     dayText: document.getElementById('sc-day-text'),
     dayClear: document.getElementById('sc-day-clear'),
     taskInput: document.getElementById('sc-task-input'),
+    taskTime: document.getElementById('sc-task-time'),
     taskAdd: document.getElementById('sc-task-add'),
     taskList: document.getElementById('sc-task-list'),
     viewBtns: Array.prototype.slice.call(document.querySelectorAll('[data-view]'))
@@ -379,29 +483,69 @@ layout: default
     }
   }
 
+  var editingId = null;
+
   function renderDay() {
     var e = getEntry(cursor);
     els.dayTitle.textContent = DOWFULL[cursor.getDay()] + ', ' + cursor.getDate() + ' ' + MON[cursor.getMonth()];
     els.dayDone.checked = e.done;
     els.dayText.value = e.text;
+    editingId = null;
     renderTasks(e.tasks || []);
+  }
+
+  // Timed tasks sort chronologically and lead; untimed keep insertion order.
+  function sortTasks(tasks) {
+    return tasks.slice().sort(function (a, b) {
+      var at = a.time || '', bt = b.time || '';
+      if (at && bt) return at < bt ? -1 : (at > bt ? 1 : 0);
+      if (at) return -1;
+      if (bt) return 1;
+      return 0;
+    });
   }
 
   function renderTasks(tasks) {
     els.taskList.innerHTML = '';
-    tasks.forEach(function (task) {
+    var ordered = sortTasks(tasks);
+    var anyTime = ordered.some(function (t) { return !!t.time; });
+
+    ordered.forEach(function (task) {
       var li = document.createElement('li');
       if (task.done) li.classList.add('done');
+
+      if (editingId === task.id) {
+        li.classList.add('editing');
+        els.taskList.appendChild(buildEditRow(li, task));
+        return;
+      }
 
       var chk = document.createElement('input');
       chk.type = 'checkbox';
       chk.checked = task.done;
       chk.addEventListener('change', function () { toggleTask(task.id, chk.checked); });
 
+      var time = null;
+      if (anyTime) {
+        time = document.createElement('span');
+        time.className = 'ttime';
+        time.textContent = task.time || '';
+      }
+
       var label = document.createElement('span');
       label.className = 'tt';
       label.textContent = task.text;
       label.addEventListener('click', function () { toggleTask(task.id, !task.done); });
+
+      var edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'tedit';
+      edit.textContent = '✎';
+      edit.title = 'edit task';
+      edit.addEventListener('click', function () {
+        editingId = task.id;
+        renderTasks(currentTasks());
+      });
 
       var del = document.createElement('button');
       del.type = 'button';
@@ -411,10 +555,62 @@ layout: default
       del.addEventListener('click', function () { deleteTask(task.id); });
 
       li.appendChild(chk);
+      if (time) li.appendChild(time);
       li.appendChild(label);
+      li.appendChild(edit);
       li.appendChild(del);
       els.taskList.appendChild(li);
     });
+  }
+
+  // Enter or focus leaving the row commits, Escape reverts, empty text reverts.
+  function buildEditRow(li, task) {
+    var et = document.createElement('input');
+    et.type = 'time';
+    et.className = 'etime';
+    et.value = task.time || '';
+
+    var ex = document.createElement('input');
+    ex.type = 'text';
+    ex.className = 'etext';
+    ex.value = task.text;
+    ex.spellcheck = false;
+
+    var settled = false;
+    function cancel() {
+      if (settled) return;
+      settled = true;
+      editingId = null;
+      renderTasks(currentTasks());
+    }
+    function commit() {
+      if (settled) return;
+      var text = ex.value.trim();
+      if (!text) return cancel();
+      settled = true;
+      editingId = null;
+      updateTask(task.id, { text: text, time: et.value || '' });
+    }
+    function onKey(e) {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    }
+    // Tabbing between the two inputs must not count as leaving the row.
+    function onBlur() {
+      setTimeout(function () {
+        if (!settled && !li.contains(document.activeElement)) commit();
+      }, 0);
+    }
+
+    [et, ex].forEach(function (input) {
+      input.addEventListener('keydown', onKey);
+      input.addEventListener('blur', onBlur);
+    });
+
+    li.appendChild(et);
+    li.appendChild(ex);
+    setTimeout(function () { ex.focus(); ex.select(); }, 0);
+    return li;
   }
 
   function currentTasks() { return (getEntry(cursor).tasks || []).slice(); }
@@ -423,14 +619,30 @@ layout: default
     var text = els.taskInput.value.trim();
     if (!text) return;
     var tasks = currentTasks();
-    tasks.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 6), text: text, done: false });
+    tasks.push({
+      id: 't' + Date.now() + Math.random().toString(36).slice(2, 6),
+      text: text,
+      done: false,
+      time: els.taskTime.value || ''
+    });
     setEntry(cursor, { tasks: tasks });
     els.taskInput.value = '';
+    els.taskTime.value = '';
     renderTasks(tasks);
   }
   function toggleTask(id, done) {
     var tasks = currentTasks();
     tasks.forEach(function (t) { if (t.id === id) t.done = done; });
+    setEntry(cursor, { tasks: tasks });
+    renderTasks(tasks);
+  }
+  function updateTask(id, patch) {
+    var tasks = currentTasks();
+    tasks.forEach(function (t) {
+      if (t.id !== id) return;
+      if (patch.text !== undefined) t.text = patch.text;
+      if (patch.time !== undefined) t.time = patch.time;
+    });
     setEntry(cursor, { tasks: tasks });
     renderTasks(tasks);
   }
@@ -442,6 +654,7 @@ layout: default
 
   els.taskAdd.addEventListener('click', addTask);
   els.taskInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addTask(); } });
+  els.taskTime.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addTask(); } });
 
   els.dayText.addEventListener('change', function () { setEntry(cursor, { text: els.dayText.value }); });
   els.dayDone.addEventListener('change', function () { setEntry(cursor, { done: els.dayDone.checked }); });
@@ -457,6 +670,41 @@ layout: default
     if (view === 'month') renderMonth();
     else if (view === 'week') renderWeek();
     else renderDay();
+  }
+
+  // Push the static plan card's rows into that day's checklist as timed tasks.
+  var planEl = document.querySelector('.plan');
+  var planSeed = document.getElementById('sc-plan-seed');
+  if (planEl && planSeed) {
+    planSeed.addEventListener('click', function () {
+      var p = (planEl.dataset.date || '').split('-');
+      if (p.length !== 3) return;
+      var target = new Date(+p[0], +p[1] - 1, +p[2]);
+      target.setHours(0, 0, 0, 0);
+
+      var cur = getEntry(target);
+      if (((cur.tasks && cur.tasks.length) || cur.text.trim()) &&
+          !confirm('Thu 9/24 already has something on it. Replace it with this plan?')) return;
+
+      var stamp = Date.now().toString(36);
+      var tasks = [];
+      Array.prototype.forEach.call(planEl.querySelectorAll('.plan-rows li'), function (li, i) {
+        var body = li.children[1];
+        if (!body) return;
+        tasks.push({
+          id: 'p' + i + stamp,
+          text: body.textContent.replace(/\s+/g, ' ').trim(),
+          done: false,
+          time: (li.children[0].textContent || '').trim()
+        });
+      });
+      if (!tasks.length) return;
+
+      setEntry(target, { text: planEl.dataset.note || '', tasks: tasks, done: false });
+      cursor = target;
+      setView('day');
+      els.day.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   els.prev.addEventListener('click', function () { navigate(-1); });
