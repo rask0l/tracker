@@ -1,0 +1,75 @@
+---
+layout: default
+permalink: /blog/
+title: Blog
+---
+
+<style>
+  /* ============================================================
+     BLOG INDEX — auto-lists every page with `layout: article`,
+     newest first by the `order` field. Add a piece by dropping in
+     a new page; this file does not need touching.
+     ============================================================ */
+  .layout-default .wrap { max-width: 880px; }
+
+  .blog-index {
+    --acc: #d92b1f;
+    --line: var(--fg);
+    font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    color: var(--fg);
+    line-height: 1.5;
+  }
+  @media (prefers-color-scheme: dark) { .blog-index { --acc: #ff4a3d; } }
+
+  .blog-index h1 {
+    font-family: inherit; font-style: normal; font-weight: 800;
+    font-size: clamp(2.6rem, 10vw, 5rem); line-height: 0.9;
+    letter-spacing: -0.03em; text-transform: uppercase; margin: 0; border: 0;
+  }
+  .blog-index .sub { font-size: 0.98rem; max-width: 56ch; margin: 1.1rem 0 0; }
+
+  .blog-index .list { border: 2px solid var(--line); list-style: none; margin: 1.9rem 0 0; padding: 0; }
+  .blog-index .list li + li { border-top: 2px solid var(--line); }
+  .blog-index .list a {
+    display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto; gap: 1rem;
+    align-items: baseline; padding: 1rem 1.1rem;
+    text-decoration: none; color: var(--fg); border: 0;
+  }
+  .blog-index .list a:hover { background: var(--accent-bg); }
+  .blog-index .list .i { color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+  .blog-index .list .k { display: block; font-weight: 800; text-transform: uppercase; font-size: 1.05rem; }
+  .blog-index .list .d { display: block; color: var(--muted); font-size: 0.83rem; margin-top: 0.35rem; }
+  .blog-index .list .go { color: var(--acc); font-weight: 700; }
+  .blog-index .list .body { min-width: 0; }
+
+  .blog-index .empty { color: var(--muted); font-size: 0.85rem; padding: 1rem 1.1rem; }
+
+  @media (max-width: 560px) {
+    .blog-index .list a { grid-template-columns: 2.2rem minmax(0, 1fr); }
+    .blog-index .list .go { display: none; }
+  }
+</style>
+
+{% assign posts = site.pages | where: "layout", "article" | sort: "order" | reverse %}
+
+<div class="blog-index">
+  <h1>Blog</h1>
+  <p class="sub">Notes to self on why the Loop and the gym log are shaped the way they are. Written from sources, not vibes, so they're worth rereading when the routine starts feeling arbitrary.</p>
+
+  <ul class="list">
+    {% for p in posts %}
+      <li>
+        <a href="{{ p.url | relative_url }}">
+          <span class="i">{% if p.order < 10 %}0{% endif %}{{ p.order }}</span>
+          <span class="body">
+            <span class="k">{{ p.title }}</span>
+            <span class="d">{{ p.blurb | default: p.dek }}</span>
+          </span>
+          <span class="go">&rarr;</span>
+        </a>
+      </li>
+    {% else %}
+      <li><p class="empty">Nothing written yet.</p></li>
+    {% endfor %}
+  </ul>
+</div>

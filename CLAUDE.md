@@ -13,7 +13,7 @@ Pages in the nav, plus one hidden page:
 | Sched | `/sched/` | browser `localStorage` | a real day / week / month calendar planner: navigate months, click into a day, write a freeform note per day |
 | Notes | `/notes/` | browser `localStorage` | the Playbook, a rich note editor |
 | Gym | `/gym/` | `_data/gym.yml` | lifting progress: split, weights, sessions |
-| Blog | `/neuroplasticity/` | static, in `_layouts/neuroplasticity.html` | single article on neuroplasticity research and why the Loop's rules are shaped the way they are |
+| Blog | `/blog/` | static, one page per article | index of the write-ups on why the Loop and the gym log are shaped the way they are. Currently `/neuroplasticity/`, `/sleep/` and `/consistency/` |
 | project-fuckable | `/project-fuckable/` | `_data/project.yml` | the private north-star goal, unlinked and reachable only by URL |
 
 Loop and Sched are unrelated on purpose, despite the similar names: Loop is
@@ -68,6 +68,13 @@ The pages behave differently, so be careful about the source of truth:
   created, updated}`, where `html` is rich text from a `contenteditable`
   editor and photos are embedded inline as downscaled JPEG data URLs. Export
   and import (JSON) are the only backup. Clearing site data wipes it.
+- **Blog is fully static.** `blog.html` is the index and auto-lists every page
+  whose front matter says `layout: article`, sorted by `order` descending, so
+  adding a piece means adding one file and nothing else. Each article is a
+  root-level `.html` page (not `.md`, since the bodies are hand-written HTML)
+  supplying `title`, `meta`, `dek`, `blurb`, `order` and `foot` in front
+  matter, with the sections in the body. `_layouts/article.html` holds the
+  shared shell and all the styling, so no article carries its own CSS.
 - **project-fuckable** renders `_data/project.yml` but only the header block;
   the phases, math, and rules in the YAML are unrendered. It is hidden from
   the nav on purpose.
