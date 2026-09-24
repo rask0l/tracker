@@ -121,7 +121,12 @@ layout: default
 
   /* ---- day checklist ---- */
   .sched-app .day-tasks { margin-top: 1.4rem; }
-  .sched-app .tasks-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0 0 0.6rem; }
+  .sched-app .tasks-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; margin: 0 0 0.6rem;
+  }
+  .sched-app .tasks-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0; }
+  .sched-app .tasks-head button { font-size: 0.62rem; padding: 0.3rem 0.5rem; }
   .sched-app .task-add { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; }
   .sched-app .task-add input {
     flex: 1; min-width: 8rem; font-family: inherit; font-size: 0.85rem; padding: 0.5rem 0.6rem;
@@ -158,6 +163,17 @@ layout: default
   }
   .sched-app .task-list .tdel:hover,
   .sched-app .task-list .tedit:hover { color: var(--acc); background: transparent; }
+
+  /* ---- drag to reorder ---- */
+  .sched-app .task-list .tdrag {
+    flex: none; cursor: grab; color: var(--muted); font-size: 0.85rem;
+    padding: 0.1rem 0.25rem; line-height: 1; user-select: none;
+  }
+  .sched-app .task-list .tdrag:hover { color: var(--acc); }
+  .sched-app .task-list .tdrag:active { cursor: grabbing; }
+  .sched-app .task-list li.dragging { opacity: 0.4; }
+  .sched-app .task-list li.drop-above { box-shadow: inset 0 3px 0 0 var(--acc); }
+  .sched-app .task-list li.drop-below { box-shadow: inset 0 -3px 0 0 var(--acc); }
 
   /* ---- inline row editing ---- */
   .sched-app .task-list li.editing { background: var(--accent-bg); gap: 0.5rem; }
@@ -259,7 +275,10 @@ layout: default
     <textarea id="sc-day-text" placeholder="what's this day for…" spellcheck="false"></textarea>
 
     <div class="day-tasks">
-      <p class="tasks-h">checklist</p>
+      <div class="tasks-head">
+        <p class="tasks-h">checklist</p>
+        <button type="button" id="sc-task-sort" title="reorder chronologically">&#8645; sort by time</button>
+      </div>
       <div class="task-add">
         <input type="text" id="sc-task-input" placeholder="add a task…" spellcheck="false">
         <input type="time" id="sc-task-time" title="optional time">
@@ -273,31 +292,29 @@ layout: default
     </div>
   </div>
 
-  <div class="plan" data-date="2026-09-24" data-note="Day off. 4h study + gym.">
-    <p class="plan-h"><span class="n">&darr;</span> Thu 9/24 &middot; day off &middot; 4h study + gym</p>
-    <p class="plan-sub">First study day back. Six sprints before the gym, three after. The day is already a win by 15:15, everything past that is upside.</p>
+  <div class="plan" data-date="2026-09-25" data-note="After work. ~2h20m study, no gym.">
+    <p class="plan-h"><span class="n">&darr;</span> Fri 9/25 &middot; work day &middot; split: ~50m on the clock, ~2h at home</p>
+    <p class="plan-sub">Two halves. Work hours take the no-traffic work (Anki, reading, writeups) on sanctioned training time. The labs wait until you're home and off the office network. Work-hours times are approximate, shift them to your real lunch and gaps.</p>
     <p class="plan-load">
-      <button type="button" id="sc-plan-seed">&rarr; load into Thu 9/24 as a checklist</button>
+      <button type="button" id="sc-plan-seed">&rarr; load into Fri 9/25 as a checklist</button>
     </p>
 
     <ul class="plan-rows">
-      <li><span class="pt">11:00</span><span>Slow start. Coffee, food, no doom scroll.</span><span class="mode"></span></li>
-      <li><span class="pt">11:15</span><span><b>Anki, 15 min.</b> Cap the deck at 20 cards <i>before</i> you open it.</span><span class="mode">warm-up</span></li>
-      <li class="hot"><span class="pt">11:30</span><span><b>Sprint 1 + 2 + 3</b> (25/5). Open the SQLi labs, attack first, read only to unblock.</span><span class="mode">new</span></li>
-      <li><span class="pt">13:00</span><span><b>Real lunch</b>, 45 min. Eat properly, you're lifting at 4.</span><span class="mode"></span></li>
-      <li class="hot"><span class="pt">13:45</span><span><b>Sprint 4 + 5 + 6.</b> Keep attacking.</span><span class="mode">new</span></li>
-      <li><span class="pt">15:15</span><span><b>Stop.</b> Snack, gear up, head out.</span><span class="mode"></span></li>
-      <li><span class="pt">16:00</span><span><b>Gym</b>, 2h.</span><span class="mode">gym</span></li>
-      <li><span class="pt">18:00</span><span>Food, shower, decompress. Screens off if you can.</span><span class="mode"></span></li>
-      <li class="hot"><span class="pt">19:00</span><span><b>Sprint 7 + 8 + 9.</b> Closed-book writeup first, then patch the gaps and turn each one into an Anki card.</span><span class="mode">consolidate</span></li>
-      <li><span class="pt">20:30</span><span><b>Wind-down</b>, 5 min. Tomorrow's first action, then log the day in <code>cwes.yml</code>.</span><span class="mode"></span></li>
-      <li><span class="pt">20:35</span><span><b>Done.</b> No study guilt after this.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">12:30</span><span><b>Lunch: Anki, 15 min.</b> Cap the deck at 20 cards <i>before</i> you open it. No VPN, no lab, just cards.</span><span class="mode">on clock</span></li>
+      <li class="hot"><span class="pt">15:00</span><span><b>First gap: read the HTB report template end to end.</b> Pure reading, nothing to connect to. Clears an <code>exam_prep</code> gate that's been sitting undone.</span><span class="mode">on clock</span></li>
+      <li><span class="pt">18:30</span><span>Home. Eat, shower, decompress. <i>Don't</i> open the laptop yet.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">19:30</span><span><b>Sprint 1 + 2</b> (25/5). VPN up, open the SQLi labs, attack first, read only to unblock.</span><span class="mode">labs</span></li>
+      <li><span class="pt">20:30</span><span><b>Break</b>, 10 min. Stand up, off screens.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">20:40</span><span><b>Sprint 3 + 4.</b> Keep attacking. This is the target for the night.</span><span class="mode">labs</span></li>
+      <li><span class="pt">21:40</span><span><b>Wind-down</b>, 5 min. Note where you stopped, then log the day in <code>cwes.yml</code>. Leave the writeup for tomorrow on purpose.</span><span class="mode"></span></li>
+      <li><span class="pt">21:45</span><span><b>Done.</b> Screens down. No study guilt after this.</span><span class="mode"></span></li>
     </ul>
 
     <ul class="plan-notes">
-      <li><b>Floor and ceiling.</b> Six sprints is already a strong day. If you're empty after the gym, the 19:00 block is the part to cut, not the gym and not lunch.</li>
-      <li><b>The Anki trap.</b> Eight weeks of backlog will show you a number in the hundreds, and that number alone can end the day before it starts. Set the limit to 20 first, do 15 minutes, close it. You are not clearing that backlog tomorrow.</li>
-      <li><b>Why it splits this way.</b> New material goes on a fresh brain in the morning. After two hours of lifting you won't have the focus for new exploitation, but you will have enough for retrieval, and that lands inside the post-training window from rule 05.</li>
+      <li><b>The loop this sets up.</b> Evening does the labs, the next work day does the retrieval on that lab work: closed-book writeup, then gaps into Anki cards. That keeps do-first intact (you still attack before you read), moves the low-dopamine writing onto sanctioned work time instead of making it compete with your evening, and puts encoding and retrieval in <i>separate sessions</i>, which is the spacing effect doing the work for free.</li>
+      <li><b>Keep the labs off the office network.</b> Training being approved isn't the same as approval to run offensive tooling over work WiFi. A dropped or split-tunnelled HTB VPN can put scan traffic on the corporate LAN, which is a bad look for a pentester even when it's an accident. Worth asking whoever signed off on the training whether lab traffic is in scope, since sanctioned time probably means they'll just say yes or point you at a guest network.</li>
+      <li><b>Floor and ceiling.</b> Two evening sprints is a real day and it counts. Four is the target. Stopping at two is not a failed evening, and treating it as one is exactly the move that turned a single missed day into eight weeks last time.</li>
+      <li><b>Protect the sleep.</b> A short night costs an ADHD brain disproportionately more than it costs everyone else. If it's 22:00 and you're deciding whether to push on, the answer is no.</li>
     </ul>
 
     <p class="plan-win"><b>Win condition:</b> one working SQL injection you found with your own hands. Everything else is volume.</p>
@@ -328,6 +345,7 @@ layout: default
     taskInput: document.getElementById('sc-task-input'),
     taskTime: document.getElementById('sc-task-time'),
     taskAdd: document.getElementById('sc-task-add'),
+    taskSort: document.getElementById('sc-task-sort'),
     taskList: document.getElementById('sc-task-list'),
     viewBtns: Array.prototype.slice.call(document.querySelectorAll('[data-view]'))
   };
@@ -494,7 +512,8 @@ layout: default
     renderTasks(e.tasks || []);
   }
 
-  // Timed tasks sort chronologically and lead; untimed keep insertion order.
+  // Stored array order IS the display order, so rows stay where you drag them.
+  // This only runs when the "sort by time" button is pressed.
   function sortTasks(tasks) {
     return tasks.slice().sort(function (a, b) {
       var at = a.time || '', bt = b.time || '';
@@ -507,10 +526,10 @@ layout: default
 
   function renderTasks(tasks) {
     els.taskList.innerHTML = '';
-    var ordered = sortTasks(tasks);
+    var ordered = tasks;
     var anyTime = ordered.some(function (t) { return !!t.time; });
 
-    ordered.forEach(function (task) {
+    ordered.forEach(function (task, index) {
       var li = document.createElement('li');
       if (task.done) li.classList.add('done');
 
@@ -519,6 +538,16 @@ layout: default
         els.taskList.appendChild(buildEditRow(li, task));
         return;
       }
+
+      wireDrag(li, index);
+
+      var grip = document.createElement('span');
+      grip.className = 'tdrag';
+      grip.textContent = '⠿';
+      grip.title = 'drag to reorder';
+      // Only arm dragging from the handle, so the row stays clickable.
+      grip.addEventListener('mousedown', function () { li.draggable = true; });
+      grip.addEventListener('touchstart', function () { li.draggable = true; }, { passive: true });
 
       var chk = document.createElement('input');
       chk.type = 'checkbox';
@@ -554,6 +583,7 @@ layout: default
       del.title = 'remove task';
       del.addEventListener('click', function () { deleteTask(task.id); });
 
+      li.appendChild(grip);
       li.appendChild(chk);
       if (time) li.appendChild(time);
       li.appendChild(label);
@@ -561,6 +591,53 @@ layout: default
       li.appendChild(del);
       els.taskList.appendChild(li);
     });
+  }
+
+  var dragFrom = null;
+
+  function clearDropMarks() {
+    Array.prototype.forEach.call(els.taskList.children, function (el) {
+      el.classList.remove('drop-above', 'drop-below');
+    });
+  }
+
+  function wireDrag(li, index) {
+    li.addEventListener('dragstart', function (e) {
+      dragFrom = index;
+      li.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', String(index)); } catch (err) {}
+      }
+    });
+    li.addEventListener('dragend', function () {
+      li.draggable = false;
+      dragFrom = null;
+      li.classList.remove('dragging');
+      clearDropMarks();
+    });
+    li.addEventListener('dragover', function (e) {
+      if (dragFrom === null || dragFrom === index) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      clearDropMarks();
+      li.classList.add(index > dragFrom ? 'drop-below' : 'drop-above');
+    });
+    li.addEventListener('dragleave', function () { li.classList.remove('drop-above', 'drop-below'); });
+    li.addEventListener('drop', function (e) {
+      e.preventDefault();
+      if (dragFrom === null || dragFrom === index) return;
+      moveTask(dragFrom, index);
+      dragFrom = null;
+    });
+  }
+
+  function moveTask(from, to) {
+    var tasks = currentTasks();
+    if (from < 0 || to < 0 || from >= tasks.length || to >= tasks.length) return;
+    tasks.splice(to, 0, tasks.splice(from, 1)[0]);
+    setEntry(cursor, { tasks: tasks });
+    renderTasks(tasks);
   }
 
   // Enter or focus leaving the row commits, Escape reverts, empty text reverts.
@@ -655,6 +732,11 @@ layout: default
   els.taskAdd.addEventListener('click', addTask);
   els.taskInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addTask(); } });
   els.taskTime.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addTask(); } });
+  els.taskSort.addEventListener('click', function () {
+    var tasks = sortTasks(currentTasks());
+    setEntry(cursor, { tasks: tasks });
+    renderTasks(tasks);
+  });
 
   els.dayText.addEventListener('change', function () { setEntry(cursor, { text: els.dayText.value }); });
   els.dayDone.addEventListener('change', function () { setEntry(cursor, { done: els.dayDone.checked }); });
@@ -684,7 +766,7 @@ layout: default
 
       var cur = getEntry(target);
       if (((cur.tasks && cur.tasks.length) || cur.text.trim()) &&
-          !confirm('Thu 9/24 already has something on it. Replace it with this plan?')) return;
+          !confirm('That day already has something on it. Replace it with this plan?')) return;
 
       var stamp = Date.now().toString(36);
       var tasks = [];
