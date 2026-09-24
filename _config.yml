@@ -20,8 +20,13 @@ defaults:
 sass:
   style: compressed
 
+# Keep docs and tooling out of the built site. Note this only stops them
+# being served at the URL; while the repo is public they are still readable
+# on GitHub itself.
 exclude:
+  - CLAUDE.md
   - Gemfile
   - Gemfile.lock
   - README.md
   - vendor
+  - .claude
