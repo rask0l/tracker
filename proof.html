@@ -1,0 +1,65 @@
+---
+layout: article
+permalink: /proof/
+title: Proof
+meta: Notes to self · does this actually work for people who start with nothing
+dek: People have gone from nothing to life-changing money doing this. That's true and it's documented. The distribution underneath those stories is brutal, and knowing both is the only way to plan honestly instead of alternating between fantasy and despair.
+foot: Not a lottery ticket. A long, boring, documented road that some people finish.
+order: 4
+blurb: Real people who made it, the brutal earnings distribution underneath, and the one structural advantage that actually applies here.
+---
+
+<p class="sect-h"><span class="n">01</span> — The people who actually did it</p>
+<p class="body"><b>Santiago Lopez</b>, Argentina, handle <code>@try_to_hack</code>. Started at 16, entirely self-taught from free YouTube tutorials and blogs, got into it after watching the 1995 film <i>Hackers</i>. By 19 he was the first person to earn $1,000,000 in bug bounties on HackerOne, roughly forty times the average software engineer salary in Buenos Aires.</p>
+<p class="body"><b>Aditi Singh</b>, Delhi. Self-taught over months of reading and YouTube. Earned $30,000 from a single Microsoft cloud flaw in 2021 and around ₹70 lakh across that year, after walking away from the medical career her parents had planned for her.</p>
+<p class="body"><b>Saugat Pokharel</b>, 22, Kathmandu: first bounty $2,000 from Facebook. <b>Prabha Basnet</b>, 24, a management student in Nepal: $3,000 from bugs in Instagram and Facebook. Reporting out of India, Egypt and across Africa describes hunters pulling their families out of poverty this way.</p>
+<div class="callout">Worth being straight about: there are no verified homeless-to-millionaire hacking stories. The real and repeated pattern is <b>modest or poor background in a lower-income country, self-taught, reaches life-changing income.</b> Less cinematic, considerably more reproducible, and the version actually worth aiming at.</div>
+
+<p class="sect-h"><span class="n">02</span> — What Lopez's numbers really say</p>
+<p class="body">The headline is the million. The useful numbers are underneath it. <b>His first payout was $50</b>, for a CSRF. <b>The largest single bounty he ever landed was $9,000</b>, for an SSRF. He got to a million through <b>more than 1,600 reports</b> submitted over several years.</p>
+<p class="body">There was no one enormous bug. No moment where a single finding changed his life. It was a very large number of ordinary findings, accumulated by someone who kept showing up, which is the <a href="{{ '/consistency/' | relative_url }}">consistency piece</a> playing out in someone else's biography.</p>
+<p class="body">This matters because the fantasy version of this path, the one where a single critical finding arrives and fixes everything, is the version that makes people quit. It sets up a wait for an event instead of a habit of submissions. The documented route is volume.</p>
+
+<p class="sect-h"><span class="n">03</span> — The distribution, honestly</p>
+<p class="body">Bug bounty earnings follow a severe power law. <b>The top 1% of hunters earn more than the bottom 90% combined.</b></p>
+<table>
+  <tr><th>Tier</th><th>Annual earnings</th></tr>
+  <tr><td>Top 1.1%</td><td>$350,000+</td></tr>
+  <tr><td>Top 3%</td><td>$100,000+</td></tr>
+  <tr><td>About 12% of all hackers</td><td>$20,000+</td></tr>
+  <tr class="hot"><td>Ranked 500 to 1,000</td><td>$5,000 – $20,000</td></tr>
+  <tr><td>Outside the top 2,000</td><td>under $1,000</td></tr>
+</table>
+<p class="body">That last row is where nearly everyone actually sits, and for a long time. Plan against that row, not against Lopez. The highlighted band is the realistic medium-term target, and reaching it still puts you ahead of the overwhelming majority of people who ever sign up.</p>
+<p class="body">Some further context that cuts the other way: about a quarter of hackers rely on bounties for at least half their annual income, and roughly 14% say bounties are 90 to 100% of what they earn. So people do live on this. It's just that they're a minority, and they got there slowly.</p>
+
+<p class="sect-h"><span class="n">04</span> — The lever nobody mentions</p>
+<p class="body">Here's the structural fact that changes the maths, and it's measured rather than inspirational. Bug bounty hunters earn on average <b>2.7 times the median software engineer salary in their own country.</b> In India that figure is <b>16 times.</b></p>
+<p class="body">The reason is simple: bounties are paid in USD, and they're paid at rates set by the cost of living in San Francisco, not the cost of living where you are. A payout that reads as unremarkable to an American lands very differently in Phnom Penh.</p>
+<div class="callout">This is why the $5,000 to $20,000 band above is not a consolation prize here. In a low-cost economy that band is the difference between being stuck in a job you hate and having options. <b>The target isn't the million. The target is the band that makes the day job optional</b>, and that band is a lot closer than the headline stories suggest.</div>
+
+<p class="sect-h"><span class="n">05</span> — Where you already stand</p>
+<p class="body">Lopez was 16 with no job and no income. Pokharel was 22 collecting his first bounty. Aditi Singh was self-teaching from YouTube with no industry access at all.</p>
+<p class="body">You're 22 and <b>already employed as a penetration tester</b>. Someone is paying you, however badly, to build the exact skill these people built in their spare time, and they've sanctioned training time on top of it. None of them had that when they started.</p>
+<p class="body">That doesn't feel like an advantage right now, because the job is draining and underpaid and the rejections have piled up. But structurally it's a head start on every story in section 01. Worth rereading on the days it doesn't feel that way.</p>
+
+<p class="sect-h"><span class="n">06</span> — The road, and what it costs</p>
+<ul class="protocol">
+  <li><span class="rn">01</span><span><b>PortSwigger Web Security Academy.</b> <span class="note">Free, unlimited, widely considered the best web security resource that exists, and it covers much of the same ground as CWES. Given money is tight, this is the highest-value zero-cost thing available.</span></span></li>
+  <li><span class="rn">02</span><span><b>TryHackMe and HackTheBox free tiers.</b> <span class="note">Guided paths and retired machines, alongside the Academy subscription already in hand.</span></span></li>
+  <li><span class="rn">03</span><span><b>A local lab, entirely free.</b> <span class="note">VirtualBox, Kali or Parrot, then Metasploitable, DVWA or OWASP Juice Shop as targets. No subscription, no VPN, runs offline.</span></span></li>
+  <li><span class="rn">04</span><span><b>Expect 3 to 6 months to basic competence, 1 to 2 years to professional level.</b> <span class="note">Consistent practice, not intensity. That timeline matches the habit-formation numbers almost exactly, which is reassuring rather than discouraging.</span></span></li>
+  <li><span class="rn">05</span><span><b>Reconsider CEH before paying for it.</b> <span class="note">The sources consistently put OSCP as the hands-on credential that counts for offensive work, and CEH as theory-heavy and beginner-oriented. You already do this for a living. Before spending $1,050+ plus clearing a two-year eligibility hurdle, ask whether OSCP is the better target, and ask your employer which one they'd fund.</span></span></li>
+</ul>
+
+<p class="sect-h"><span class="n">07</span> — Sources</p>
+<ul class="sources">
+  <li><a href="https://www.hackerone.com/press-release/teen-becomes-worlds-first-1-million-bug-bounty-hacker-hackerone">Teen Becomes World's First $1 Million Bug Bounty Hacker — HackerOne</a></li>
+  <li><a href="https://www.computerweekly.com/news/252458632/Teen-becomes-first-millionaire-through-HackerOne-bug-bounties">Teen becomes first millionaire through HackerOne bug bounties — Computer Weekly</a></li>
+  <li><a href="https://bug-bounties.as93.net/learn/bug-bounty-economics-what-hunters-actually-earn/">Bug Bounty Economics: What Hunters Actually Earn (With Real Data)</a></li>
+  <li><a href="https://www.eweek.com/security/bug-bounty-hackers-make-more-money-than-average-salaries-report-finds/">Bug Bounty Hackers Make More Money Than Average Salaries — eWeek</a></li>
+  <li><a href="https://www.globalindian.com/youth/story/global-indian-exclusive/bug-bounty-hunter-aditi-singh/">Bug Bounty Hunter: Aditi Singh — Global Indian</a></li>
+  <li><a href="https://nepalitimes.com/news/nepalis-go-bug-hunting-on-the-web">Nepalis go bug-hunting on the web — Nepali Times</a></li>
+  <li><a href="https://learn.secbyte.org/blog/learn-red-team-skills-for-free">Where to Learn Red Team Skills for Free</a></li>
+  <li><a href="https://pentestmindmap.com/guide-start-pentesting">How to Start Pentesting in 2026 — Beginner Guide</a></li>
+</ul>

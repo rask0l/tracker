@@ -95,6 +95,24 @@ layout: default
   .article .protocol .rn { font-weight: 800; color: var(--acc); font-size: 1.05rem; }
   .article .protocol .note { color: var(--muted); }
 
+  .article table {
+    width: 100%; max-width: 68ch; border-collapse: collapse;
+    border: 2px solid var(--line); margin: 0 0 1rem; font-size: 0.87rem;
+  }
+  .article table th, .article table td {
+    text-align: left; padding: 0.6rem 0.9rem; border-bottom: 2px solid var(--line);
+  }
+  .article table th {
+    font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--muted); font-weight: 700;
+  }
+  .article table tr:last-child td { border-bottom: 0; }
+  /* first column absorbs the slack so the last one hugs its content */
+  .article table th:first-child, .article table td:first-child { width: 100%; }
+  .article table td:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .article table tr.hot td { background: var(--accent-bg); }
+  .article table tr.hot td:first-child { font-weight: 700; }
+
   .article .sources { margin: 0; padding: 0; list-style: none; font-size: 0.78rem; }
   .article .sources li { margin: 0 0 0.5rem; }
   .article .sources a { color: var(--muted); }

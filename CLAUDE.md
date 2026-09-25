@@ -13,7 +13,7 @@ Pages in the nav, plus one hidden page:
 | Sched | `/sched/` | browser `localStorage` | a real day / week / month calendar planner: navigate months, click into a day, write a freeform note per day |
 | Notes | `/notes/` | browser `localStorage` | the Playbook, a rich note editor |
 | Gym | `/gym/` | `_data/gym.yml` | lifting progress: split, weights, sessions |
-| Blog | `/blog/` | static, one page per article | index of the write-ups on why the Loop and the gym log are shaped the way they are. Currently `/neuroplasticity/`, `/sleep/` and `/consistency/` |
+| Blog | `/blog/` | static, one page per article | index of the write-ups on why the Loop and the gym log are shaped the way they are. Currently `/neuroplasticity/`, `/sleep/`, `/consistency/` and `/proof/` |
 | project-fuckable | `/project-fuckable/` | `_data/project.yml` | the private north-star goal, unlinked and reachable only by URL |
 
 Loop and Sched are unrelated on purpose, despite the similar names: Loop is
