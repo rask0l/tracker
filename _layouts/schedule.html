@@ -292,32 +292,35 @@ layout: default
     </div>
   </div>
 
-  <div class="plan" data-date="2026-09-25" data-note="After work. ~2h20m study, no gym.">
-    <p class="plan-h"><span class="n">&darr;</span> Fri 9/25 &middot; work day &middot; split: ~50m on the clock, ~2h at home</p>
-    <p class="plan-sub">Two halves. Work hours take the no-traffic work (Anki, reading, writeups) on sanctioned training time. The labs wait until you're home and off the office network. Work-hours times are approximate, shift them to your real lunch and gaps.</p>
+  <div class="plan" data-date="2026-09-30" data-note="Noon start. Study first, gym (Lower) this evening.">
+    <p class="plan-h"><span class="n">&darr;</span> Wed 9/30 &middot; noon start &middot; study first, gym this evening</p>
+    <p class="plan-sub">Still SQL Injection Fundamentals, same module as last time. That's fine, not a broken run, just an open one. Today's only job is to move it forward. Times shift freely if work eats into a slot.</p>
     <p class="plan-load">
-      <button type="button" id="sc-plan-seed">&rarr; load into Fri 9/25 as a checklist</button>
+      <button type="button" id="sc-plan-seed">&rarr; load into Wed 9/30 as a checklist</button>
     </p>
 
     <ul class="plan-rows">
-      <li class="hot"><span class="pt">12:30</span><span><b>Lunch: Anki, 15 min.</b> Cap the deck at 20 cards <i>before</i> you open it. No VPN, no lab, just cards.</span><span class="mode">on clock</span></li>
-      <li class="hot"><span class="pt">15:00</span><span><b>First gap: read the HTB report template end to end.</b> Pure reading, nothing to connect to. Clears an <code>exam_prep</code> gate that's been sitting undone.</span><span class="mode">on clock</span></li>
-      <li><span class="pt">18:30</span><span>Home. Eat, shower, decompress. <i>Don't</i> open the laptop yet.</span><span class="mode"></span></li>
-      <li class="hot"><span class="pt">19:30</span><span><b>Sprint 1 + 2</b> (25/5). VPN up, open the SQLi labs, attack first, read only to unblock.</span><span class="mode">labs</span></li>
-      <li><span class="pt">20:30</span><span><b>Break</b>, 10 min. Stand up, off screens.</span><span class="mode"></span></li>
-      <li class="hot"><span class="pt">20:40</span><span><b>Sprint 3 + 4.</b> Keep attacking. This is the target for the night.</span><span class="mode">labs</span></li>
-      <li><span class="pt">21:40</span><span><b>Wind-down</b>, 5 min. Note where you stopped, then log the day in <code>cwes.yml</code>. Leave the writeup for tomorrow on purpose.</span><span class="mode"></span></li>
-      <li><span class="pt">21:45</span><span><b>Done.</b> Screens down. No study guilt after this.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">12:00</span><span><b>Anki, 15 min.</b> Cap the deck at 20 cards <i>before</i> you open it.</span><span class="mode">warm-up</span></li>
+      <li class="hot"><span class="pt">12:15</span><span><b>Sprint 1 + 2</b> (25/5). Back into the SQLi labs from where you stopped. Push toward the blind and time-based sections, that's where the real learning is.</span><span class="mode">new</span></li>
+      <li><span class="pt">13:15</span><span><b>Real lunch</b>, 30 to 40 min.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">13:55</span><span><b>Sprint 3 + 4.</b> Keep attacking.</span><span class="mode">new</span></li>
+      <li><span class="pt">14:55</span><span><b>Break</b>, 10 min. Off screens.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">15:05</span><span><b>Sprint 5 + 6.</b> Target: finish SQL Injection Fundamentals here.</span><span class="mode">new</span></li>
+      <li><span class="pt">16:05</span><span><b>Flex slot.</b> If work pulls you away, lose this one first. Otherwise: read the HTB report template end to end, no lab needed, clears an <code>exam_prep</code> gate that's been open since July.</span><span class="mode">flex</span></li>
+      <li><span class="pt">17:00</span><span><b>Gym (Lower)</b>, per today's split. Slide to whenever it actually is.</span><span class="mode">gym</span></li>
+      <li><span class="pt">19:00</span><span>Food, shower, decompress.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">19:45</span><span><b>Only if SQLi actually finished today:</b> closed-book writeup, then patch gaps into Anki cards. <b>If it didn't finish:</b> light review only. Don't push new material this late.</span><span class="mode">consolidate</span></li>
+      <li><span class="pt">20:30</span><span><b>Wind-down</b>, 5 min. Tomorrow's first action, then log today in <code>cwes.yml</code>.</span><span class="mode"></span></li>
     </ul>
 
     <ul class="plan-notes">
-      <li><b>The loop this sets up.</b> Evening does the labs, the next work day does the retrieval on that lab work: closed-book writeup, then gaps into Anki cards. That keeps do-first intact (you still attack before you read), moves the low-dopamine writing onto sanctioned work time instead of making it compete with your evening, and puts encoding and retrieval in <i>separate sessions</i>, which is the spacing effect doing the work for free.</li>
-      <li><b>Keep the labs off the office network.</b> Training being approved isn't the same as approval to run offensive tooling over work WiFi. A dropped or split-tunnelled HTB VPN can put scan traffic on the corporate LAN, which is a bad look for a pentester even when it's an accident. Worth asking whoever signed off on the training whether lab traffic is in scope, since sanctioned time probably means they'll just say yes or point you at a guest network.</li>
-      <li><b>Floor and ceiling.</b> Two evening sprints is a real day and it counts. Four is the target. Stopping at two is not a failed evening, and treating it as one is exactly the move that turned a single missed day into eight weeks last time.</li>
-      <li><b>Protect the sleep.</b> A short night costs an ADHD brain disproportionately more than it costs everyone else. If it's 22:00 and you're deciding whether to push on, the answer is no.</li>
+      <li><b>Same module as last time, and that's fine.</b> This is exactly what the <a href="{{ '/consistency/' | relative_url }}">consistency piece</a> is about: a slow stretch isn't a broken run, only the story told about it can break it. Rule 01 on the Loop page exists for this.</li>
+      <li><b>Floor and ceiling.</b> Two sprints today is a real day. Finishing the module is the ceiling. Either is fine, and stopping at the floor is not a failed day.</li>
+      <li><b>The Anki trap.</b> Whatever the backlog shows, cap the deck at 20 first. You're not clearing it in one sitting.</li>
+      <li><b>Protect the sleep.</b> If the module isn't done by the evening block, don't chase it late. A short night costs an ADHD brain disproportionately more than it costs everyone else.</li>
     </ul>
 
-    <p class="plan-win"><b>Win condition:</b> one working SQL injection you found with your own hands. Everything else is volume.</p>
+    <p class="plan-win"><b>Win condition:</b> SQL Injection Fundamentals moves forward from where it is right now. Finishing it is the ceiling, not the requirement.</p>
   </div>
 </div>
 
