@@ -1,0 +1,48 @@
+---
+layout: article
+permalink: /game-theory/
+title: Game Theory
+meta: Notes to self · the math of what to do when someone else is also deciding
+dek: "Most of the frameworks on this blog are about managing yourself: your attention, your sleep, your habits. This one is different. It's about situations where the outcome depends on someone else's move too, and they're reasoning about yours the same way. Three places that applies directly: red teaming, bug bounty, and the raise you haven't asked for yet."
+foot: The edge isn't knowing more. It's modeling the other player correctly.
+order: 7
+blurb: Why red teaming, bug bounty racing, and asking for a raise are all the same kind of math problem.
+---
+
+<p class="sect-h"><span class="n">01</span> — What it actually is</p>
+<p class="body">Game theory is the formal study of strategic decisions, situations where your best move depends on what someone else does, and they're choosing their move with your likely reaction already factored in. It came out of Cold War military planning and economics, but the core object is simple: two or more agents, each trying to do well, each aware the others are trying too.</p>
+<p class="body">Three concepts worth actually carrying around:</p>
+<ul class="protocol">
+  <li><span class="rn">01</span><span><b>Nash equilibrium.</b> <span class="note">A state where nobody can improve their outcome by changing their own move alone, given what everyone else is doing. Most real standoffs, negotiations, and competitive markets settle here, not at the outcome that would be best for anyone individually.</span></span></li>
+  <li><span class="rn">02</span><span><b>Zero-sum vs. non-zero-sum.</b> <span class="note">Zero-sum means your gain is exactly my loss. Most real situations aren't actually zero-sum, there's often a move that leaves both sides better off than walking away, and treating a non-zero-sum situation as a fight is the most common strategic error people make.</span></span></li>
+  <li><span class="rn">03</span><span><b>Repeated games.</b> <span class="note">A one-off interaction and an ongoing relationship call for opposite strategies. Burning trust can be rational once. It's almost never rational against someone you'll deal with again, which is most of work and most of client relationships.</span></span></li>
+</ul>
+
+<p class="sect-h"><span class="n">02</span> — Red teaming is applied game theory, not a metaphor</p>
+<p class="body">The formal model is a <b>Stackelberg security game</b>: the defender commits to a strategy first, patrol routes, which systems get hardened, where the checkpoints sit, and the attacker observes that commitment and reacts optimally to it. This isn't a classroom exercise. <b>ARMOR</b> (Assistant for Randomized Monitoring over Routes) has run at LAX since August 2007, generating the randomized placement of police checkpoints and canine patrol routes specifically so the pattern can't be learned and exploited. LAX police reported a real increase in firearm and drug seizures after it went live. <b>IRIS</b>, the sibling system, has randomized Federal Air Marshal flight schedules on international routes since 2009. Both are literally Bayesian Stackelberg games, solved computationally, running decisions that used to be made by habit and gut feeling.</p>
+<div class="callout">The transferable idea for offensive work: <b>the interesting question usually isn't "where's the vulnerability," it's "what does the defender's committed strategy predict about where they under-invested."</b> A blue team that hardens the obvious perimeter and treats internal segmentation as an afterthought is a Stackelberg leader with a specific, modelable blind spot. Thinking about a target's incentive structure, what gets budget, what gets ignored, what's optimized for an audit checklist rather than a real adversary, is the actual skill separating pattern-matching from genuine red-team thinking.</div>
+
+<p class="sect-h"><span class="n">03</span> — Bug bounty hunting has a race condition built into the payout structure</p>
+<p class="body">HackerOne's rule is explicit: you must be <b>first to report</b> to be eligible for a bounty. A duplicate, even a correct one, closes with no payout. And duplicates aren't rare, they're the single most common reason a first report fails, because a popular public program gets hit by thousands of researchers running the same scanners against the same well-known endpoints within hours of launch. HackerOne has paid out over $300M total, and a meaningful share of submitted reports still lose purely to timing, not quality.</p>
+<p class="body">That changes the actual strategy question. It's not purely "find the best bug," it's a trade-off between <b>speed of reporting and thoroughness of verification</b>, and the right balance shifts with program popularity. A brand-new or lower-traffic program is a different race than a famous one with thousands of hunters already crawling it. Scope and program selection aren't just about payout size, they're about how crowded the race already is before you've written a single request.</p>
+
+<p class="sect-h"><span class="n">04</span> — Negotiation: the next conversation</p>
+<p class="body">Sponsorship for both CWES and CEH is already secured, so that one's done. These two concepts are for the next negotiation: a raise, a job offer, a rate for contract work.</p>
+<ul class="protocol">
+  <li><span class="rn">01</span><span><b>BATNA</b> — best alternative to a negotiated agreement. <span class="note">Your actual leverage in any negotiation isn't your argument, it's how good your walk-away option is. Game theorists call it an "outside option": the better it is, the more attractive an offer your counterpart has to make to keep you around. This is the direct, practical reason the bounty and public-writeup side of this isn't just extra income, it's what makes the day-job conversation land differently. No BATNA means every ask is a request for charity. A real one means it's a negotiation.</span></span></li>
+  <li><span class="rn">02</span><span><b>Schelling's commitment paradox.</b> <span class="note">Counterintuitively, having fewer visible options can increase bargaining power. A negotiator who can credibly say "I genuinely can't go lower than this" holds a stronger position than one who signals flexibility, because flexibility reads as room to be pushed further. Vague openness isn't goodwill in a negotiation, it's a tell.</span></span></li>
+</ul>
+<div class="callout">Concretely: the best moment for the next ask is <b>right after CWES lands</b>, because that's when your outside option jumps. A certified web exploitation specialist has more places to walk to than an uncertified one, and both sides of the table know it. Before that conversation, decide what you'd do if the answer is no, and let that certainty, not desperation, shape the ask. That's the whole lesson of BATNA in one sentence.</div>
+
+<p class="sect-h"><span class="n">05</span> — Where this connects to what's already on this blog</p>
+<p class="body">The <a href="{{ '/proof/' | relative_url }}">proof piece</a> named the geographic pay-arbitrage multiplier, 2.7x on average, 16x in India, as the structural lever that actually applies to you. Game theory is the reason that lever works as leverage and not just as income: every dollar of bounty or reputation built outside the day job is a direct improvement to your BATNA inside it. It's not a separate hustle running in parallel. It's the same system, the Loop building the skill, bounty and writeups building the outside option, that outside option changing the shape of every conversation with the current job from here forward.</p>
+
+<p class="sect-h"><span class="n">06</span> — Sources</p>
+<ul class="sources">
+  <li><a href="https://www.researchgate.net/publication/221456109_Deployed_ARMOR_protection_The_application_of_a_game_theoretic_model_for_security_at_the_Los_Angeles_International_Airport">Deployed ARMOR protection: game theory at LAX</a></li>
+  <li><a href="https://www.ifaamas.org/Proceedings/aamas09/pdf/03_Industrial_Track/13_71_it.pdf">IRIS: a tool for strategic security allocation</a></li>
+  <li><a href="https://www.ijcai.org/proceedings/2018/0775.pdf">Stackelberg Security Games: Looking Beyond a Decade of Success</a></li>
+  <li><a href="https://docs.hackerone.com/en/articles/8369826-detailed-platform-standards">HackerOne — Detailed Platform Standards (duplicate handling)</a></li>
+  <li><a href="https://economics.virginia.edu/using-game-theory-salary-bargaining">Using Game Theory in Salary Bargaining</a></li>
+  <li><a href="https://en.wikipedia.org/wiki/Best_alternative_to_a_negotiated_agreement">Best Alternative to a Negotiated Agreement — Wikipedia</a></li>
+</ul>
