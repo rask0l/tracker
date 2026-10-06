@@ -49,14 +49,19 @@ The pages behave differently, so be careful about the source of truth:
 - **Sched is browser only.** Nothing in the repo. Every day saves to
   `localStorage` (key `sched-v1`) as `entries: { 'YYYY-MM-DD': { text, done,
   tasks } }`, where each task is `{ id, text, done, time }`. `time` is an
-  optional `"HH:MM"` string: timed tasks sort chronologically and lead,
-  untimed ones keep insertion order and sit below. Tasks predating the time
-  field have no `time` key and read as untimed. No export/import panel exists
+  optional `"HH:MM"` string. The stored array order is the display order,
+  so rows stay where they're dragged and new tasks append. A "sort by time"
+  button sorts on demand: timed tasks chronologically first, untimed below.
+  Tasks predating the time field have no `time` key and read as untimed. No export/import panel exists
   yet, so clearing site data wipes it.
-  The one static thing on the page is the dated plan card at the bottom of
-  `_layouts/schedule.html`, whose button seeds its rows into that day's
-  checklist. Its target date lives in `data-date` on `.plan`, so it needs
-  editing by hand when the plan moves on.
+  The static part of the page is the plan cards at the bottom of
+  `_layouts/schedule.html`. Right now there are four reusable templates:
+  "Work day, no gym", "Work day, with gym", "Saturday" and "Sunday". Each
+  card's `.plan-seed` button copies its rows into a day's checklist as timed
+  tasks. A card with
+  no `data-date` loads into whichever day is selected in the calendar, and
+  its button label updates to name that day. Adding `data-date="YYYY-MM-DD"`
+  to a `.plan` pins it to that date instead, for a one-off dated plan.
 - **Gym (`/gym/`) is YAML seed plus browser state.** `_data/gym.yml` only
   seeds the *initial* weights and split. Once the owner edits weights, logs a
   session, or reorders exercises in the browser, those changes save to

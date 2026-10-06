@@ -292,35 +292,117 @@ layout: default
     </div>
   </div>
 
-  <div class="plan" data-date="2026-09-30" data-note="Noon start. Study first, gym (Lower) this evening.">
-    <p class="plan-h"><span class="n">&darr;</span> Wed 9/30 &middot; noon start &middot; study first, gym this evening</p>
-    <p class="plan-sub">Still SQL Injection Fundamentals, same module as last time. That's fine, not a broken run, just an open one. Today's only job is to move it forward. Times shift freely if work eats into a slot.</p>
+  <div class="plan" data-note="Work day, no gym. Commute drill, training time at work, four sprints tonight.">
+    <p class="plan-h"><span class="n">&darr;</span> Work day &middot; no gym &middot; Mon, Thu</p>
+    <p class="plan-sub">The full evening goes to labs. Pick a day in the calendar above first, then load this into it.</p>
     <p class="plan-load">
-      <button type="button" id="sc-plan-seed">&rarr; load into Wed 9/30 as a checklist</button>
+      <button type="button" class="plan-seed">&rarr; load into the selected day as a checklist</button>
     </p>
 
     <ul class="plan-rows">
-      <li class="hot"><span class="pt">12:00</span><span><b>Anki, 15 min.</b> Cap the deck at 20 cards <i>before</i> you open it.</span><span class="mode">warm-up</span></li>
-      <li class="hot"><span class="pt">12:15</span><span><b>Sprint 1 + 2</b> (25/5). Back into the SQLi labs from where you stopped. Push toward the blind and time-based sections, that's where the real learning is.</span><span class="mode">new</span></li>
-      <li><span class="pt">13:15</span><span><b>Real lunch</b>, 30 to 40 min.</span><span class="mode"></span></li>
-      <li class="hot"><span class="pt">13:55</span><span><b>Sprint 3 + 4.</b> Keep attacking.</span><span class="mode">new</span></li>
-      <li><span class="pt">14:55</span><span><b>Break</b>, 10 min. Off screens.</span><span class="mode"></span></li>
-      <li class="hot"><span class="pt">15:05</span><span><b>Sprint 5 + 6.</b> Target: finish SQL Injection Fundamentals here.</span><span class="mode">new</span></li>
-      <li><span class="pt">16:05</span><span><b>Flex slot.</b> If work pulls you away, lose this one first. Otherwise: read the HTB report template end to end, no lab needed, clears an <code>exam_prep</code> gate that's been open since July.</span><span class="mode">flex</span></li>
-      <li><span class="pt">17:00</span><span><b>Gym (Lower)</b>, per today's split. Slide to whenever it actually is.</span><span class="mode">gym</span></li>
-      <li><span class="pt">19:00</span><span>Food, shower, decompress.</span><span class="mode"></span></li>
-      <li class="hot"><span class="pt">19:45</span><span><b>Only if SQLi actually finished today:</b> closed-book writeup, then patch gaps into Anki cards. <b>If it didn't finish:</b> light review only. Don't push new material this late.</span><span class="mode">consolidate</span></li>
-      <li><span class="pt">20:30</span><span><b>Wind-down</b>, 5 min. Tomorrow's first action, then log today in <code>cwes.yml</code>.</span><span class="mode"></span></li>
+      <li><span class="pt">09:00</span><span>Wake, get ready.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">09:10</span><span><b>Commute drill.</b> No phone, no music. Think only about last night's next-step line. When your mind drifts, bring it back.</span><span class="mode">focus</span></li>
+      <li class="hot"><span class="pt">09:30</span><span><b>Arrive.</b> One line in your phone notes: what you figured out on the way, even if it's "nothing yet".</span><span class="mode">focus</span></li>
+      <li class="hot"><span class="pt">12:30</span><span><b>Lunch: Anki, 15 min.</b> Cap the deck at 20 cards first.</span><span class="mode">on clock</span></li>
+      <li class="hot"><span class="pt">15:00</span><span><b>Training time:</b> closed-book writeup of last night's lab, then turn the gaps into Anki cards.</span><span class="mode">on clock</span></li>
+      <li><span class="pt">18:30</span><span>Home. Eat, rest. Laptop stays closed.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">19:30</span><span><b>Sprint 1 + 2</b> (25/5). Start with the next-step line, so there's no warm-up.</span><span class="mode">labs</span></li>
+      <li><span class="pt">20:30</span><span><b>Break</b>, 10 min. Off screens.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">20:40</span><span><b>Sprint 3 + 4.</b> Keep attacking.</span><span class="mode">labs</span></li>
+      <li class="hot"><span class="pt">21:40</span><span><b>Shutdown line.</b> Write tomorrow's exact next step, then log the day in <code>cwes.yml</code>.</span><span class="mode">shutdown</span></li>
+      <li><span class="pt">21:45</span><span><b>Done.</b> Screens down.</span><span class="mode"></span></li>
     </ul>
 
     <ul class="plan-notes">
-      <li><b>Same module as last time, and that's fine.</b> This is exactly what the <a href="{{ '/consistency/' | relative_url }}">consistency piece</a> is about: a slow stretch isn't a broken run, only the story told about it can break it. Rule 01 on the Loop page exists for this.</li>
-      <li><b>Floor and ceiling.</b> Two sprints today is a real day. Finishing the module is the ceiling. Either is fine, and stopping at the floor is not a failed day.</li>
-      <li><b>The Anki trap.</b> Whatever the backlog shows, cap the deck at 20 first. You're not clearing it in one sitting.</li>
-      <li><b>Protect the sleep.</b> If the module isn't done by the evening block, don't chase it late. A short night costs an ADHD brain disproportionately more than it costs everyone else.</li>
+      <li><b>Floor and ceiling.</b> Two sprints plus the shutdown line is a real day. Four is the target.</li>
+      <li><b>The shutdown line is the one not to skip.</b> Make it the literal next move, not where you stopped. It's also tomorrow's commute problem.</li>
     </ul>
 
-    <p class="plan-win"><b>Win condition:</b> SQL Injection Fundamentals moves forward from where it is right now. Finishing it is the ceiling, not the requirement.</p>
+    <p class="plan-win"><b>Win condition:</b> four sprints and a specific next step written down.</p>
+  </div>
+
+  <div class="plan" data-note="Work day with gym. Commute drill, training time at work, gym late afternoon, then labs.">
+    <p class="plan-h"><span class="n">&darr;</span> Work day &middot; with gym &middot; Tue, Wed, Fri</p>
+    <p class="plan-sub">Gym late afternoon, labs in the evening right after, since that's when your brain learns best (rule 05). Start the gym anywhere between 16:00 and 17:00 and slide the rest to match. Pick a day in the calendar above first, then load this into it.</p>
+    <p class="plan-load">
+      <button type="button" class="plan-seed">&rarr; load into the selected day as a checklist</button>
+    </p>
+
+    <ul class="plan-rows">
+      <li><span class="pt">09:00</span><span>Wake, get ready.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">09:10</span><span><b>Commute drill.</b> No phone, no music. Think only about last night's next-step line. When your mind drifts, bring it back.</span><span class="mode">focus</span></li>
+      <li class="hot"><span class="pt">09:30</span><span><b>Arrive.</b> One line in your phone notes: what you figured out on the way, even if it's "nothing yet".</span><span class="mode">focus</span></li>
+      <li class="hot"><span class="pt">12:30</span><span><b>Lunch: Anki, 15 min.</b> Cap the deck at 20 cards first. Eat properly too, you're lifting later.</span><span class="mode">on clock</span></li>
+      <li class="hot"><span class="pt">15:00</span><span><b>Training time:</b> closed-book writeup of last night's lab, then turn the gaps into Anki cards.</span><span class="mode">on clock</span></li>
+      <li><span class="pt">16:30</span><span><b>Gym.</b> Upper on Tue and Fri, Lower on Wed. About 2h. Start anywhere 16:00 to 17:00.</span><span class="mode">gym</span></li>
+      <li><span class="pt">18:30</span><span>Home. Shower, real dinner, rest.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">19:30</span><span><b>Sprint 1 + 2</b> (25/5). Start with the next-step line, so there's no warm-up.</span><span class="mode">labs</span></li>
+      <li><span class="pt">20:30</span><span><b>Break</b>, 10 min. Off screens.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">20:40</span><span><b>Sprint 3 + 4</b>, only if you've still got it after work and the gym.</span><span class="mode">labs</span></li>
+      <li class="hot"><span class="pt">21:40</span><span><b>Shutdown line.</b> Write tomorrow's exact next step, then log the day in <code>cwes.yml</code>.</span><span class="mode">shutdown</span></li>
+      <li><span class="pt">21:45</span><span><b>Done.</b> Screens down.</span><span class="mode"></span></li>
+    </ul>
+
+    <ul class="plan-notes">
+      <li><b>Floor and ceiling.</b> Gym plus two sprints is a real day. Four is a great one. You've worked and trained, so stopping at two is not a failed day.</li>
+      <li><b>Too wiped after the gym?</b> Skip the sprints, keep the shutdown line. That alone keeps tomorrow easy to start.</li>
+    </ul>
+
+    <p class="plan-win"><b>Win condition:</b> gym done, at least two sprints, and a specific next step written down.</p>
+  </div>
+
+  <div class="plan" data-note="Saturday. Study first, gym mid-afternoon, then root a box.">
+    <p class="plan-h"><span class="n">&darr;</span> Weekend &middot; Saturday &middot; long block + gym</p>
+    <p class="plan-sub">No work, so this is where the week's module gets finished and proven on a real box. Study the module while you're fresh, gym in the afternoon, then the box after, while your brain is in its best post-training window (rule 05).</p>
+    <p class="plan-load">
+      <button type="button" class="plan-seed">&rarr; load into the selected day as a checklist</button>
+    </p>
+
+    <ul class="plan-rows">
+      <li><span class="pt">10:00</span><span>Wake, breakfast. No alarm needed.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">11:00</span><span><b>Anki, 15 min.</b> Cap the deck at 20 cards first.</span><span class="mode">warm-up</span></li>
+      <li class="hot"><span class="pt">11:15</span><span><b>Sprint 1 + 2</b> (25/5). Start with the next-step line from last night.</span><span class="mode">labs</span></li>
+      <li><span class="pt">12:15</span><span><b>Break</b>, 15 min. Off screens.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">12:30</span><span><b>Sprint 3 + 4.</b> Aim to finish this week's module here.</span><span class="mode">labs</span></li>
+      <li><span class="pt">13:30</span><span><b>Real lunch.</b> Eat properly, you're lifting in a couple of hours.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">14:45</span><span><b>On the way to the gym:</b> phone in your pocket, hold one stuck problem in your head, same as the commute drill.</span><span class="mode">focus</span></li>
+      <li><span class="pt">15:00</span><span><b>Gym (Lower)</b>, about 2h.</span><span class="mode">gym</span></li>
+      <li><span class="pt">17:00</span><span>Shower, food, rest.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">18:00</span><span><b>Sprint 5 + 6: the box.</b> Root a machine where this week's bug is the way in. Screenshot each step in report language.</span><span class="mode">apply</span></li>
+      <li class="hot"><span class="pt">19:00</span><span><b>Shutdown line.</b> Write the next step, log the day in <code>cwes.yml</code>, and if the module's done, tick it on the Loop roadmap.</span><span class="mode">shutdown</span></li>
+      <li><span class="pt">19:10</span><span><b>Done.</b> The evening is yours.</span><span class="mode"></span></li>
+    </ul>
+
+    <ul class="plan-notes">
+      <li><b>Floor and ceiling.</b> Two sprints plus the gym is a real Saturday. All six plus the box is a great one.</li>
+      <li><b>Module not finished by lunch?</b> Use the 18:00 block to keep going on the module instead of the box. The box can wait a week.</li>
+    </ul>
+
+    <p class="plan-win"><b>Win condition:</b> the week's module moves to done, or as close as you can get it.</p>
+  </div>
+
+  <div class="plan" data-note="Sunday. Rest. A short weekly review, then plan the week ahead.">
+    <p class="plan-h"><span class="n">&darr;</span> Weekend &middot; Sunday &middot; rest + plan the week</p>
+    <p class="plan-sub">No new material today. Thirty minutes of looking back, ten minutes of setting up the week, and the rest of the day is off.</p>
+    <p class="plan-load">
+      <button type="button" class="plan-seed">&rarr; load into the selected day as a checklist</button>
+    </p>
+
+    <ul class="plan-rows">
+      <li><span class="pt">10:00</span><span>Wake whenever. No alarm.</span><span class="mode"></span></li>
+      <li class="hot"><span class="pt">11:00</span><span><b>Weekly review</b>, 30 min max. Reread this week's writeups, and read the <code>failures</code> list in <code>cwes.yml</code>.</span><span class="mode">review</span></li>
+      <li class="hot"><span class="pt">11:30</span><span><b>Plan the week</b>, 10 min. Load these templates into Mon to Sat in the calendar, and pick the next module.</span><span class="mode">plan</span></li>
+      <li><span class="pt">11:40</span><span><b>Rest of the day off.</b> No labs, no new material.</span><span class="mode">rest</span></li>
+      <li class="hot"><span class="pt">21:00</span><span><b>Shutdown line.</b> Write Monday's exact first step, so tomorrow's commute has a problem to think about.</span><span class="mode">shutdown</span></li>
+      <li><span class="pt">21:30</span><span><b>Screens down.</b> Work tomorrow, so an early night.</span><span class="mode"></span></li>
+    </ul>
+
+    <ul class="plan-notes">
+      <li><b>Rest is part of the plan.</b> Your brain does the rewiring while you're not studying, which is the whole point of the <a href="{{ '/sleep/' | relative_url }}">sleep piece</a>. A real day off makes the next week work.</li>
+      <li><b>Behind on the week?</b> Don't catch up today. Missed time doesn't roll into next week, it just resets. Rule 01 on the Loop page: resume, don't double up.</li>
+    </ul>
+
+    <p class="plan-win"><b>Win condition:</b> next week is loaded into the calendar and you actually rested.</p>
   </div>
 </div>
 
@@ -755,17 +837,35 @@ layout: default
     if (view === 'month') renderMonth();
     else if (view === 'week') renderWeek();
     else renderDay();
+    labelPlanButtons();
   }
 
-  // Push the static plan card's rows into that day's checklist as timed tasks.
-  var planEl = document.querySelector('.plan');
-  var planSeed = document.getElementById('sc-plan-seed');
-  if (planEl && planSeed) {
-    planSeed.addEventListener('click', function () {
-      var p = (planEl.dataset.date || '').split('-');
-      if (p.length !== 3) return;
-      var target = new Date(+p[0], +p[1] - 1, +p[2]);
-      target.setHours(0, 0, 0, 0);
+  // Plan cards: a card with data-date seeds that fixed day; a card without
+  // one is a reusable template that seeds whichever day is selected.
+  var planCards = Array.prototype.slice.call(document.querySelectorAll('.plan'));
+
+  function planTarget(card) {
+    var p = (card.dataset.date || '').split('-');
+    if (p.length !== 3) return new Date(cursor);
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function labelPlanButtons() {
+    planCards.forEach(function (card) {
+      var btn = card.querySelector('.plan-seed');
+      if (!btn) return;
+      var d = planTarget(card);
+      btn.textContent = '→ load into ' + DOW[d.getDay()] + ' ' + d.getDate() + ' ' + MON[d.getMonth()] + ' as a checklist';
+    });
+  }
+
+  planCards.forEach(function (card) {
+    var btn = card.querySelector('.plan-seed');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var target = planTarget(card);
 
       var cur = getEntry(target);
       if (((cur.tasks && cur.tasks.length) || cur.text.trim()) &&
@@ -773,7 +873,7 @@ layout: default
 
       var stamp = Date.now().toString(36);
       var tasks = [];
-      Array.prototype.forEach.call(planEl.querySelectorAll('.plan-rows li'), function (li, i) {
+      Array.prototype.forEach.call(card.querySelectorAll('.plan-rows li'), function (li, i) {
         var body = li.children[1];
         if (!body) return;
         tasks.push({
@@ -785,12 +885,12 @@ layout: default
       });
       if (!tasks.length) return;
 
-      setEntry(target, { text: planEl.dataset.note || '', tasks: tasks, done: false });
+      setEntry(target, { text: card.dataset.note || '', tasks: tasks, done: false });
       cursor = target;
       setView('day');
       els.day.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-  }
+  });
 
   els.prev.addEventListener('click', function () { navigate(-1); });
   els.next.addEventListener('click', function () { navigate(1); });
