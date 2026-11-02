@@ -17,7 +17,7 @@
     font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     line-height:1.5; -webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:560px; margin:0 auto; padding:3rem 1rem 5rem;}
+  .wrap{max-width:840px; margin:0 auto; padding:3rem 1rem 5rem;}
 
   header{border-bottom:2px solid var(--fg); padding-bottom:1rem; margin-bottom:2rem;}
   h1{font-size:2rem; letter-spacing:.08em; margin:0; font-weight:700;}
@@ -37,28 +37,108 @@
   }
   .count{font-size:1.5rem; color:var(--fg); letter-spacing:.04em;}
   .count b{color:var(--accent);}
-
   .bar{height:10px; border:2px solid var(--fg); margin-bottom:2rem; position:relative;}
   .bar > i{display:block; height:100%; background:var(--accent); width:0;
     transition:width .18s ease;}
 
+  .layout{display:flex; gap:1.5rem; align-items:flex-start;}
+  .grid-col{flex:1 1 auto; min-width:0;}
+  .side{flex:0 0 250px; display:flex; flex-direction:column; gap:1.25rem;}
+  .stickies{display:flex; flex-direction:column; gap:1.25rem;}
+
   .grid{display:grid; grid-template-columns:repeat(10,1fr); gap:6px;}
   .cell{
-    aspect-ratio:1/1; border:2px solid var(--line); background:transparent;
-    color:var(--muted); font:inherit; font-size:.72rem; cursor:pointer;
-    display:flex; align-items:center; justify-content:center; padding:0;
-    transition:background .1s ease,border-color .1s ease,color .1s ease;
+    position:relative; aspect-ratio:1/1; border:2px solid var(--line);
+    background:transparent; color:var(--muted); font:inherit; font-size:.72rem;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    padding:0; transition:background .1s ease,border-color .1s ease,color .1s ease;
   }
   .cell:hover{border-color:var(--fg); color:var(--fg);}
-  .cell.done{
-    background:var(--accent); border-color:var(--accent);
-    color:var(--accent-ink); font-weight:700;
-  }
+  .cell.done{background:var(--accent); border-color:var(--accent);
+    color:var(--accent-ink); font-weight:700;}
   .cell.today{box-shadow:inset 0 0 0 2px var(--fg);}
+  .cell.sel{outline:2px solid var(--fg); outline-offset:2px;}
+  .cell.note::after{
+    content:""; position:absolute; top:3px; right:3px; width:5px; height:5px;
+    background:var(--accent);
+  }
+  .cell.done.note::after{background:var(--accent-ink);}
   .cell:focus-visible{outline:2px solid var(--fg); outline-offset:2px;}
 
+  /* ---- note card ---- */
+  .panel{border:2px solid var(--line); padding:.85rem; background:var(--bg);}
+  .panel.pinned{border-left:5px solid var(--accent);}
+  .panel.float{position:fixed; z-index:50; width:250px;
+    box-shadow:6px 6px 0 var(--line); border-color:var(--fg);}
+  .grip{flex:0 0 auto; color:var(--line); cursor:move; font-size:.85rem;
+    letter-spacing:-1px; touch-action:none;}
+  .grip:hover{color:var(--muted);}
+  .panel h2{
+    margin:0 0 .55rem; font-size:.72rem; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted); font-weight:700;
+    display:flex; align-items:center; gap:.5rem;
+  }
+  .ck{
+    flex:0 0 auto; width:15px; height:15px; border:2px solid var(--line);
+    background:transparent; cursor:pointer; padding:0; display:inline-flex;
+    align-items:center; justify-content:center; line-height:1; color:var(--accent-ink);
+    font-size:.7rem;
+  }
+  .ck:hover{border-color:var(--fg);}
+  .ck.on{background:var(--accent); border-color:var(--accent);}
+  .ttl-input{
+    flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none;
+    font:inherit; font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--muted); font-weight:700; padding:0;
+  }
+  .ttl-input::placeholder{color:var(--line);}
+  .ttl-input:focus{color:var(--fg);}
+  .ttl-input.done{text-decoration:line-through; color:var(--muted);}
+  .ttl-input[readonly]{color:var(--muted); cursor:default;}
+  .pin, .del{
+    flex:0 0 auto; background:transparent; border:none; color:var(--muted);
+    cursor:pointer; font:inherit; line-height:1; padding:0 .15rem;
+  }
+  .pin{font-size:.85rem;}
+  .pin:hover{color:var(--fg);}
+  .pin.on{color:var(--accent);}
+  .del{font-size:.9rem;}
+  .del:hover{color:var(--accent);}
+
+  /* ---- note body: iphone-style lines ---- */
+  .blocks{display:flex; flex-direction:column;}
+  .blk{display:flex; align-items:center; gap:.5rem; padding:.12rem 0;}
+  .blk-text{
+    flex:1 1 auto; min-width:0; background:transparent; border:none;
+    color:var(--fg); font:inherit; font-size:.82rem; padding:.1rem 0; outline:none;
+  }
+  .blk-text::placeholder{color:var(--line);}
+  .blk-text.done{text-decoration:line-through; color:var(--muted);}
+  .bdel{
+    flex:0 0 auto; background:transparent; border:none; color:var(--muted);
+    cursor:pointer; font:inherit; font-size:.85rem; line-height:1; padding:0 .15rem;
+    opacity:0; transition:opacity .1s;
+  }
+  .blk:hover .bdel{opacity:.6;}
+  .bdel:hover{opacity:1; color:var(--accent);}
+  .blkbar{display:flex; gap:.4rem; margin-top:.5rem;}
+  .blkbar button{
+    background:transparent; border:2px dashed var(--line); color:var(--muted);
+    font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
+    padding:.3rem .5rem; cursor:pointer;
+  }
+  .blkbar button:hover{border-color:var(--accent); color:var(--accent);}
+
+  .addnote{
+    background:transparent; border:2px dashed var(--line); color:var(--muted);
+    font:inherit; font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+    padding:.6rem; cursor:pointer; width:100%;
+  }
+  .addnote:hover{border-color:var(--accent); color:var(--accent);}
+
   footer{margin-top:2.5rem; display:flex; justify-content:space-between;
-    align-items:center; gap:1rem; flex-wrap:wrap;}
+    align-items:center; gap:1rem; flex-wrap:wrap;
+    border-top:2px solid var(--line); padding-top:1.25rem;}
   .reset{
     background:transparent; border:2px solid var(--line); color:var(--muted);
     font:inherit; font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
@@ -70,10 +150,13 @@
   .hint{font-size:.72rem; letter-spacing:.08em; color:var(--muted);
     text-transform:uppercase;}
 
-  @media (max-width:420px){
+  @media (max-width:640px){
+    .layout{flex-direction:column;}
+    .side{flex:1 1 auto; width:100%;}
+    h1{font-size:1.6rem;}
     .grid{gap:4px;}
     .cell{font-size:.62rem;}
-    h1{font-size:1.6rem;}
+    .bdel{opacity:.5;}
   }
 </style>
 </head>
@@ -91,7 +174,17 @@
     </div>
     <div class="bar"><i id="fill"></i></div>
 
-    <div class="grid" id="grid" role="group" aria-label="100 day checkboxes"></div>
+    <div class="layout">
+      <div class="grid-col">
+        <div class="grid" id="grid" role="group" aria-label="100 day checkboxes"></div>
+      </div>
+
+      <div class="side">
+        <div id="dayCard"></div>
+        <div class="stickies" id="stickies"></div>
+        <button class="addnote" id="addnote" type="button">+ add note</button>
+      </div>
+    </div>
 
     <footer>
       <button class="reset" id="reset" type="button">reset all</button>
@@ -104,6 +197,32 @@
   "use strict";
   var KEY = "hundred-v1";
   var N = 100;
+  function uid(){ return "n" + Math.random().toString(36).slice(2,9); }
+
+  function mkBlock(type, text, done){
+    return { id:uid(), type:(type==="todo"?"todo":"text"),
+             text:String(text||""), done:!!done };
+  }
+  function normBlocks(arr){
+    if(!Array.isArray(arr)) return null;
+    var out = arr.map(function(b){
+      return { id:String(b && b.id || uid()),
+               type:(b && b.type==="todo") ? "todo" : "text",
+               text:String(b && b.text || ""), done:!!(b && b.done) };
+    });
+    return out.length ? out : [mkBlock("text","",false)];
+  }
+  // turn an old {text, items} note into a block list
+  function migrateBlocks(text, items){
+    var out = [];
+    if(text){
+      String(text).split("\n").forEach(function(ln){ out.push(mkBlock("text", ln, false)); });
+    }
+    if(Array.isArray(items)){
+      items.forEach(function(it){ out.push(mkBlock("todo", it && it.text, it && it.done)); });
+    }
+    return out.length ? out : [mkBlock("text","",false)];
+  }
 
   function load(){
     try{
@@ -111,32 +230,81 @@
       if(raw){
         var o = JSON.parse(raw);
         if(o && Array.isArray(o.days) && o.days.length === N){
-          return { days:o.days.map(Boolean), label:(o.label||"") };
+          var pos = (o.pos && typeof o.pos === "object") ? o.pos : {};
+          // notes per day -> block lists
+          var dayNotes = {};
+          if(o.dayNotes && typeof o.dayNotes === "object"){
+            Object.keys(o.dayNotes).forEach(function(k){
+              var nb = normBlocks(o.dayNotes[k]); if(nb) dayNotes[k] = nb;
+            });
+          }else if(o.notes && typeof o.notes === "object"){
+            Object.keys(o.notes).forEach(function(k){
+              var t = o.notes[k];
+              if(t && String(t).trim()) dayNotes[k] = migrateBlocks(t, null);
+            });
+          }
+
+          var stickies;
+          if(Array.isArray(o.stickies)){
+            stickies = o.stickies.map(function(s){
+              var blocks = Array.isArray(s && s.blocks) ? normBlocks(s.blocks)
+                                                        : migrateBlocks(s && s.text, s && s.items);
+              return { id:String(s && s.id || uid()),
+                       title:String(s && s.title || ""),
+                       pinned:!!(s && s.pinned),
+                       done:!!(s && s.done),
+                       blocks:blocks };
+            });
+          }else{
+            stickies = [ { id:uid(), title:"", pinned:false, done:false,
+                           blocks:(o.scratch ? migrateBlocks(o.scratch,null) : [mkBlock("text","",false)]) } ];
+          }
+
+          return {
+            days: o.days.map(Boolean),
+            label: o.label || "",
+            dayNotes: dayNotes,
+            stickies: stickies,
+            pos: pos
+          };
         }
       }
     }catch(e){}
-    return { days:new Array(N).fill(false), label:"" };
+    return { days:new Array(N).fill(false), label:"", dayNotes:{},
+             stickies:[ { id:uid(), title:"", pinned:false, done:false,
+                          blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
-  function save(){
-    try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
-  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
 
   var state = load();
-  var grid  = document.getElementById("grid");
-  var doneEl= document.getElementById("done");
-  var pctEl = document.getElementById("pct");
-  var fill  = document.getElementById("fill");
-  var label = document.getElementById("label");
-  var reset = document.getElementById("reset");
+  var grid   = document.getElementById("grid");
+  var doneEl = document.getElementById("done");
+  var pctEl  = document.getElementById("pct");
+  var fill   = document.getElementById("fill");
+  var label  = document.getElementById("label");
+  var reset  = document.getElementById("reset");
+  var dayCard  = document.getElementById("dayCard");
+  var stickyBox = document.getElementById("stickies");
+  var addBtn    = document.getElementById("addnote");
+  var nodeById = {};
   var cells = [];
+  var sel = 0;
 
-  // which box counts as "today": the first unticked box (your current day)
   function currentIndex(){
     for(var i=0;i<N;i++){ if(!state.days[i]) return i; }
-    return -1; // all done
+    return -1;
+  }
+  function dayHasContent(idx){
+    var a = state.dayNotes[idx];
+    return !!(a && a.some(function(b){ return b.text && b.text.trim(); }));
+  }
+  function getDayBlocks(idx){
+    if(!state.dayNotes[idx] || !state.dayNotes[idx].length)
+      state.dayNotes[idx] = [mkBlock("text","",false)];
+    return state.dayNotes[idx];
   }
 
-  function render(){
+  function renderGrid(){
     var done = 0;
     for(var i=0;i<N;i++) if(state.days[i]) done++;
     doneEl.textContent = done;
@@ -146,54 +314,332 @@
 
     var cur = currentIndex();
     for(var j=0;j<N;j++){
-      var c = cells[j];
-      c.className = "cell" + (state.days[j] ? " done" : "") + (j===cur ? " today" : "");
+      var cls = "cell";
+      if(state.days[j]) cls += " done";
+      if(j===cur) cls += " today";
+      if(j===sel) cls += " sel";
+      if(dayHasContent(j)) cls += " note";
+      cells[j].className = cls;
     }
   }
 
+  function focusEnd(inp){ inp.focus(); var l=inp.value.length; try{ inp.setSelectionRange(l,l); }catch(e){} }
+  function insertAfter(node, ref){ ref.parentNode.insertBefore(node, ref.nextSibling); }
+
+  function clampPos(p){
+    return { x: Math.min(Math.max(p.x, 0), window.innerWidth  - 60),
+             y: Math.min(Math.max(p.y, 0), window.innerHeight - 40) };
+  }
+  function applyPositions(){
+    Array.prototype.forEach.call(document.querySelectorAll(".panel[data-pid]"), function(panel){
+      var p = state.pos[panel.getAttribute("data-pid")];
+      if(p){ var c = clampPos(p); panel.classList.add("float");
+             panel.style.left = c.x+"px"; panel.style.top = c.y+"px"; }
+      else { panel.classList.remove("float");
+             panel.style.left = panel.style.top = panel.style.width = ""; }
+    });
+  }
+  function applyPos(panel){
+    var p = state.pos[panel.getAttribute("data-pid")];
+    if(p){ var c = clampPos(p); panel.classList.add("float");
+           panel.style.left = c.x+"px"; panel.style.top = c.y+"px"; }
+  }
+  function makeDraggable(panel, pid, handle){
+    var dragging=false, sx=0, sy=0, ox=0, oy=0;
+    handle.addEventListener("pointerdown", function(e){
+      dragging=true;
+      var r=panel.getBoundingClientRect();
+      panel.classList.add("float");
+      panel.style.width=r.width+"px"; panel.style.left=r.left+"px"; panel.style.top=r.top+"px";
+      sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top;
+      handle.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    handle.addEventListener("pointermove", function(e){
+      if(!dragging) return;
+      panel.style.left=(ox+(e.clientX-sx))+"px";
+      panel.style.top =(oy+(e.clientY-sy))+"px";
+    });
+    function end(e){
+      if(!dragging) return; dragging=false;
+      try{ handle.releasePointerCapture(e.pointerId); }catch(_){}
+      state.pos[pid]={ x:parseFloat(panel.style.left), y:parseFloat(panel.style.top) };
+      panel.style.width=""; save();
+    }
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+    handle.addEventListener("dblclick", function(){
+      delete state.pos[pid]; save(); applyPositions();
+    });
+  }
+
+  // build one body line. opts: {listEl, getBlocks, save, onChange}
+  function addBlockRow(opts, block, afterRow, focus){
+    var row = document.createElement("div");
+    row.className = "blk";
+
+    var ck = null;
+    if(block.type === "todo"){
+      ck = document.createElement("button");
+      ck.type = "button"; ck.className = "ck" + (block.done ? " on" : "");
+      ck.setAttribute("aria-label","check item");
+      ck.textContent = block.done ? "✓" : "";
+      ck.addEventListener("click", function(){
+        block.done = !block.done;
+        ck.classList.toggle("on", block.done);
+        ck.textContent = block.done ? "✓" : "";
+        txt.classList.toggle("done", block.done);
+        opts.save();
+      });
+      row.appendChild(ck);
+    }
+
+    var txt = document.createElement("input");
+    txt.type = "text"; txt.className = "blk-text" + (block.done ? " done" : "");
+    txt.value = block.text; txt.spellcheck = false;
+    txt.placeholder = block.type === "todo" ? "to-do" : "write...";
+    row.appendChild(txt);
+
+    var bdel = document.createElement("button");
+    bdel.type = "button"; bdel.className = "bdel"; bdel.textContent = "×";
+    bdel.setAttribute("aria-label","delete line");
+    row.appendChild(bdel);
+
+    if(afterRow) insertAfter(row, afterRow); else opts.listEl.appendChild(row);
+
+    txt.addEventListener("input", function(){
+      block.text = txt.value; opts.save();
+      opts.onChange && opts.onChange();
+    });
+    txt.addEventListener("keydown", function(e){
+      var blocks = opts.getBlocks();
+      if(e.key === "Enter"){
+        e.preventDefault();
+        var idx = blocks.indexOf(block);
+        var nb = mkBlock(block.type, "", false);
+        blocks.splice(idx+1, 0, nb); opts.save();
+        addBlockRow(opts, nb, row, true);
+        opts.onChange && opts.onChange();
+      }else if(e.key === "Backspace" && txt.value === "" &&
+               txt.selectionStart === 0 && txt.selectionEnd === 0){
+        if(blocks.length > 1){
+          e.preventDefault();
+          var k = blocks.indexOf(block);
+          blocks.splice(k, 1); opts.save();
+          var prev = row.previousElementSibling;
+          row.parentNode.removeChild(row);
+          if(prev){ var pt = prev.querySelector(".blk-text"); pt && focusEnd(pt); }
+          opts.onChange && opts.onChange();
+        }
+      }
+    });
+    bdel.addEventListener("click", function(){
+      var blocks = opts.getBlocks();
+      var k = blocks.indexOf(block);
+      if(blocks.length > 1){ blocks.splice(k,1); row.parentNode.removeChild(row); }
+      else { block.text=""; block.done=false; txt.value=""; txt.classList.remove("done"); }
+      opts.save(); opts.onChange && opts.onChange();
+    });
+
+    if(focus) focusEnd(txt);
+    return row;
+  }
+
+  function buildBody(panel, opts){
+    var list = document.createElement("div");
+    list.className = "blocks";
+    opts.listEl = list;
+
+    var bar = document.createElement("div");
+    bar.className = "blkbar";
+    var addText = document.createElement("button");
+    addText.type = "button"; addText.textContent = "+ line";
+    var addCheck = document.createElement("button");
+    addCheck.type = "button"; addCheck.textContent = "+ checklist";
+    bar.appendChild(addText); bar.appendChild(addCheck);
+
+    panel.appendChild(list); panel.appendChild(bar);
+
+    function append(type){
+      var blocks = opts.getBlocks();
+      var nb = mkBlock(type, "", false);
+      blocks.push(nb); opts.save();
+      addBlockRow(opts, nb, null, true);
+      opts.onChange && opts.onChange();
+    }
+    addText.addEventListener("click", function(){ append("text"); });
+    addCheck.addEventListener("click", function(){ append("todo"); });
+
+    return list;
+  }
+
+  // ---------- Day card ----------
+  var dayCk, dayTitle, dayList, dayOpts;
+  function buildDayCard(){
+    var panel = document.createElement("div");
+    panel.className = "panel"; panel.setAttribute("data-pid","day");
+
+    var h = document.createElement("h2");
+    var grip = document.createElement("span");
+    grip.className = "grip"; grip.setAttribute("aria-hidden","true"); grip.textContent = "⠿";
+    dayCk = document.createElement("button");
+    dayCk.type = "button"; dayCk.className = "ck";
+    dayCk.setAttribute("aria-label","mark this day done");
+    dayTitle = document.createElement("input");
+    dayTitle.type = "text"; dayTitle.className = "ttl-input"; dayTitle.readOnly = true;
+    dayTitle.setAttribute("aria-label","day");
+    h.appendChild(grip); h.appendChild(dayCk); h.appendChild(dayTitle);
+    panel.appendChild(h);
+
+    dayOpts = { listEl:null, getBlocks:function(){ return getDayBlocks(sel); },
+                save:save, onChange:renderGrid };
+    dayList = buildBody(panel, dayOpts);
+
+    dayCk.addEventListener("click", function(){
+      state.days[sel] = !state.days[sel];
+      save(); renderGrid(); refreshDayHead();
+    });
+
+    dayCard.appendChild(panel);
+    makeDraggable(panel, "day", grip);
+    applyPos(panel);
+  }
+  function refreshDayHead(){
+    dayTitle.value = "DAY " + (sel+1);
+    var on = state.days[sel];
+    dayCk.classList.toggle("on", on);
+    dayCk.textContent = on ? "✓" : "";
+    dayTitle.classList.toggle("done", on);
+  }
+  function refreshDayBody(){
+    dayList.innerHTML = "";
+    getDayBlocks(sel).forEach(function(b){ addBlockRow(dayOpts, b, null, false); });
+  }
+  function refreshDay(){ refreshDayHead(); refreshDayBody(); }
+
+  // ---------- Sticky notes ----------
+  function reorderStickies(){
+    var pinned = state.stickies.filter(function(s){ return s.pinned; });
+    var rest   = state.stickies.filter(function(s){ return !s.pinned; });
+    state.stickies = pinned.concat(rest);
+    state.stickies.forEach(function(s){
+      var n = nodeById[s.id]; if(n) stickyBox.appendChild(n);
+    });
+    save();
+  }
+
+  function addStickyDom(sticky, focus){
+    var panel = document.createElement("div");
+    panel.className = "panel" + (sticky.pinned ? " pinned" : "");
+    panel.setAttribute("data-pid", "s:" + sticky.id);
+    nodeById[sticky.id] = panel;
+
+    var h = document.createElement("h2");
+
+    var grip = document.createElement("span");
+    grip.className = "grip"; grip.setAttribute("aria-hidden","true"); grip.textContent = "⠿";
+
+    var pin = document.createElement("button");
+    pin.type = "button"; pin.className = "pin" + (sticky.pinned ? " on" : "");
+    pin.setAttribute("aria-label","pin note"); pin.textContent = "⚑";
+
+    var ck = document.createElement("button");
+    ck.type = "button"; ck.className = "ck" + (sticky.done ? " on" : "");
+    ck.setAttribute("aria-label","cross off note");
+    ck.textContent = sticky.done ? "✓" : "";
+
+    var title = document.createElement("input");
+    title.type = "text"; title.className = "ttl-input" + (sticky.done ? " done" : "");
+    title.maxLength = 40; title.spellcheck = false;
+    title.value = sticky.title; title.placeholder = "untitled note";
+    title.setAttribute("aria-label","note name");
+
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "del"; del.textContent = "×";
+    del.setAttribute("aria-label","delete note");
+
+    h.appendChild(grip); h.appendChild(pin); h.appendChild(ck); h.appendChild(title); h.appendChild(del);
+    panel.appendChild(h);
+
+    var opts = { listEl:null, getBlocks:function(){ return sticky.blocks; }, save:save };
+    buildBody(panel, opts);
+
+    stickyBox.appendChild(panel);
+
+    pin.addEventListener("click", function(){
+      sticky.pinned = !sticky.pinned;
+      pin.classList.toggle("on", sticky.pinned);
+      panel.classList.toggle("pinned", sticky.pinned);
+      reorderStickies();
+    });
+    ck.addEventListener("click", function(){
+      sticky.done = !sticky.done;
+      ck.classList.toggle("on", sticky.done);
+      ck.textContent = sticky.done ? "✓" : "";
+      title.classList.toggle("done", sticky.done);
+      save();
+    });
+    title.addEventListener("input", function(){ sticky.title = title.value; save(); });
+    del.addEventListener("click", function(){
+      state.stickies = state.stickies.filter(function(s){ return s.id !== sticky.id; });
+      delete nodeById[sticky.id];
+      panel.parentNode && panel.parentNode.removeChild(panel);
+      save();
+    });
+
+    sticky.blocks.forEach(function(b){ addBlockRow(opts, b, null, false); });
+    makeDraggable(panel, "s:" + sticky.id, grip);
+    applyPos(panel);
+    if(focus) title.focus();
+  }
+
+  // ---------- Grid ----------
   for(var i=0;i<N;i++){
     (function(idx){
       var b = document.createElement("button");
-      b.type = "button";
-      b.className = "cell";
-      b.textContent = idx+1;
+      b.type = "button"; b.className = "cell"; b.textContent = idx+1;
       b.setAttribute("aria-label","day "+(idx+1));
       b.addEventListener("click", function(){
         state.days[idx] = !state.days[idx];
-        save(); render();
+        sel = idx;
+        save(); renderGrid(); refreshDay();
       });
-      grid.appendChild(b);
-      cells.push(b);
+      grid.appendChild(b); cells.push(b);
     })(i);
   }
 
-  label.value = state.label;
-  label.addEventListener("input", function(){
-    state.label = label.value; save();
+  var start = currentIndex();
+  sel = start === -1 ? N-1 : start;
+
+  buildDayCard();
+  reorderStickies();                       // put pinned first on load
+  state.stickies.forEach(function(s){ addStickyDom(s, false); });
+
+  addBtn.addEventListener("click", function(){
+    var s = { id:uid(), title:"", pinned:false, done:false, blocks:[mkBlock("text","",false)] };
+    state.stickies.push(s); reorderStickies();
+    addStickyDom(s, true);
   });
 
-  // two-click reset so a stray tap never wipes 100 days
+  label.value = state.label;
+  label.addEventListener("input", function(){ state.label = label.value; save(); });
+
   var armed = false, armTimer = null;
   reset.addEventListener("click", function(){
     if(!armed){
-      armed = true;
-      reset.classList.add("armed");
+      armed = true; reset.classList.add("armed");
       reset.textContent = "sure? click again";
-      armTimer = setTimeout(disarm, 3000);
-      return;
+      armTimer = setTimeout(disarm, 3000); return;
     }
-    clearTimeout(armTimer);
-    disarm();
+    clearTimeout(armTimer); disarm();
     state.days = new Array(N).fill(false);
-    save(); render();
+    state.dayNotes = {};
+    sel = 0; save(); renderGrid(); refreshDay();
   });
-  function disarm(){
-    armed = false;
-    reset.classList.remove("armed");
-    reset.textContent = "reset all";
-  }
+  function disarm(){ armed=false; reset.classList.remove("armed"); reset.textContent="reset all"; }
 
-  render();
+  window.addEventListener("resize", applyPositions);
+
+  renderGrid(); refreshDay();
 })();
 </script>
 </body>
