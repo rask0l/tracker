@@ -1,0 +1,26 @@
+# 100 days — a single-page tick-box tracker. Private: noindex, not linked anywhere.
+title: 100 days
+description: A 100-day tick-box tracker.
+lang: en
+timezone: Asia/Phnom_Penh
+
+# Deployed as a GitHub Pages project site at rask0l.github.io/tracker
+url: "https://rask0l.github.io"
+baseurl: "/tracker"
+
+# Keep the whole site out of search engines.
+defaults:
+  - scope:
+      path: ""
+    values:
+      noindex: true
+      sitemap: false
+
+# Keep docs and tooling out of the built site.
+exclude:
+  - CLAUDE.md
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - vendor
+  - .claude

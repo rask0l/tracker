@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>100 days</title>
+<style>
+  :root{
+    --bg:#0f0f0f; --fg:#e7e7e7; --muted:#8f8f8f;
+    --line:#2d2d2d; --accent:#e5484b; --accent-ink:#0f0f0f;
+  }
+  *{box-sizing:border-box;}
+  html{font-size:16px;}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:560px; margin:0 auto; padding:3rem 1rem 5rem;}
+
+  header{border-bottom:2px solid var(--fg); padding-bottom:1rem; margin-bottom:2rem;}
+  h1{font-size:2rem; letter-spacing:.08em; margin:0; font-weight:700;}
+  h1 .n{color:var(--accent);}
+  .sub{
+    display:block; width:100%; margin-top:.6rem; padding:.35rem 0;
+    background:transparent; border:none; border-bottom:2px solid var(--line);
+    color:var(--muted); font:inherit; font-size:.85rem; letter-spacing:.12em;
+    text-transform:uppercase; outline:none;
+  }
+  .sub:focus{border-bottom-color:var(--accent); color:var(--fg);}
+
+  .stats{
+    display:flex; align-items:baseline; gap:1rem; justify-content:space-between;
+    margin-bottom:1.25rem; font-size:.85rem; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  .count{font-size:1.5rem; color:var(--fg); letter-spacing:.04em;}
+  .count b{color:var(--accent);}
+
+  .bar{height:10px; border:2px solid var(--fg); margin-bottom:2rem; position:relative;}
+  .bar > i{display:block; height:100%; background:var(--accent); width:0;
+    transition:width .18s ease;}
+
+  .grid{display:grid; grid-template-columns:repeat(10,1fr); gap:6px;}
+  .cell{
+    aspect-ratio:1/1; border:2px solid var(--line); background:transparent;
+    color:var(--muted); font:inherit; font-size:.72rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; padding:0;
+    transition:background .1s ease,border-color .1s ease,color .1s ease;
+  }
+  .cell:hover{border-color:var(--fg); color:var(--fg);}
+  .cell.done{
+    background:var(--accent); border-color:var(--accent);
+    color:var(--accent-ink); font-weight:700;
+  }
+  .cell.today{box-shadow:inset 0 0 0 2px var(--fg);}
+  .cell:focus-visible{outline:2px solid var(--fg); outline-offset:2px;}
+
+  footer{margin-top:2.5rem; display:flex; justify-content:space-between;
+    align-items:center; gap:1rem; flex-wrap:wrap;}
+  .reset{
+    background:transparent; border:2px solid var(--line); color:var(--muted);
+    font:inherit; font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+    padding:.45rem .8rem; cursor:pointer;
+  }
+  .reset:hover{border-color:var(--accent); color:var(--accent);}
+  .reset.armed{border-color:var(--accent); color:var(--accent-ink);
+    background:var(--accent); font-weight:700;}
+  .hint{font-size:.72rem; letter-spacing:.08em; color:var(--muted);
+    text-transform:uppercase;}
+
+  @media (max-width:420px){
+    .grid{gap:4px;}
+    .cell{font-size:.62rem;}
+    h1{font-size:1.6rem;}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>100 <span class="n">DAYS</span></h1>
+      <input class="sub" id="label" maxlength="48" spellcheck="false"
+             placeholder="name your challenge" aria-label="challenge name">
+    </header>
+
+    <div class="stats">
+      <span class="count"><b id="done">0</b> / 100</span>
+      <span id="pct">0%</span>
+    </div>
+    <div class="bar"><i id="fill"></i></div>
+
+    <div class="grid" id="grid" role="group" aria-label="100 day checkboxes"></div>
+
+    <footer>
+      <button class="reset" id="reset" type="button">reset all</button>
+      <span class="hint">tick one box a day</span>
+    </footer>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = "hundred-v1";
+  var N = 100;
+
+  function load(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(raw){
+        var o = JSON.parse(raw);
+        if(o && Array.isArray(o.days) && o.days.length === N){
+          return { days:o.days.map(Boolean), label:(o.label||"") };
+        }
+      }
+    }catch(e){}
+    return { days:new Array(N).fill(false), label:"" };
+  }
+  function save(){
+    try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
+  }
+
+  var state = load();
+  var grid  = document.getElementById("grid");
+  var doneEl= document.getElementById("done");
+  var pctEl = document.getElementById("pct");
+  var fill  = document.getElementById("fill");
+  var label = document.getElementById("label");
+  var reset = document.getElementById("reset");
+  var cells = [];
+
+  // which box counts as "today": the first unticked box (your current day)
+  function currentIndex(){
+    for(var i=0;i<N;i++){ if(!state.days[i]) return i; }
+    return -1; // all done
+  }
+
+  function render(){
+    var done = 0;
+    for(var i=0;i<N;i++) if(state.days[i]) done++;
+    doneEl.textContent = done;
+    var pct = Math.round(done/N*100);
+    pctEl.textContent = pct + "%";
+    fill.style.width = pct + "%";
+
+    var cur = currentIndex();
+    for(var j=0;j<N;j++){
+      var c = cells[j];
+      c.className = "cell" + (state.days[j] ? " done" : "") + (j===cur ? " today" : "");
+    }
+  }
+
+  for(var i=0;i<N;i++){
+    (function(idx){
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "cell";
+      b.textContent = idx+1;
+      b.setAttribute("aria-label","day "+(idx+1));
+      b.addEventListener("click", function(){
+        state.days[idx] = !state.days[idx];
+        save(); render();
+      });
+      grid.appendChild(b);
+      cells.push(b);
+    })(i);
+  }
+
+  label.value = state.label;
+  label.addEventListener("input", function(){
+    state.label = label.value; save();
+  });
+
+  // two-click reset so a stray tap never wipes 100 days
+  var armed = false, armTimer = null;
+  reset.addEventListener("click", function(){
+    if(!armed){
+      armed = true;
+      reset.classList.add("armed");
+      reset.textContent = "sure? click again";
+      armTimer = setTimeout(disarm, 3000);
+      return;
+    }
+    clearTimeout(armTimer);
+    disarm();
+    state.days = new Array(N).fill(false);
+    save(); render();
+  });
+  function disarm(){
+    armed = false;
+    reset.classList.remove("armed");
+    reset.textContent = "reset all";
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
