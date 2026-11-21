@@ -150,6 +150,27 @@
   }
   .blk:hover .bdel{opacity:.6;}
   .bdel:hover{opacity:1; color:var(--accent);}
+  /* block styles from the slash menu */
+  .bt-h .blk-text{font-size:1rem; font-weight:700; letter-spacing:.02em;}
+  .bt-quote{border-left:3px solid var(--fg); padding-left:.6rem; margin:.2rem 0;}
+  .bt-quote .blk-text{font-style:italic;}
+  .bt-callout{border:2px solid var(--line); background:#161616;
+    padding:.35rem .5rem; margin:.25rem 0;}
+  .blk-icon{flex:0 0 auto; color:var(--accent); font-weight:700; width:15px; text-align:center;}
+  .bt-divider hr{flex:1 1 auto; border:none; border-top:2px solid var(--line); margin:.55rem 0;}
+  .blk-img{display:block; flex:1 1 auto; min-width:0; max-width:100%; height:auto;
+    border:2px solid var(--line); margin:.25rem 0;}
+  .slash{position:fixed; z-index:100; min-width:220px; padding:.25rem 0;
+    background:var(--bg); border:2px solid var(--fg); box-shadow:6px 6px 0 var(--line);}
+  .slash-item{display:flex; justify-content:space-between; align-items:baseline; gap:1rem;
+    padding:.3rem .65rem; font-size:.75rem; letter-spacing:.06em; cursor:pointer;}
+  .slash-item small{color:var(--muted); font-size:.62rem; letter-spacing:.08em; text-transform:uppercase;}
+  .slash-item.on{background:var(--accent); color:var(--accent-ink);}
+  .slash-item.on small{color:var(--accent-ink);}
+  .toast{position:fixed; left:50%; bottom:1rem; transform:translateX(-50%); z-index:200;
+    max-width:calc(100vw - 2rem); background:var(--accent); color:var(--accent-ink);
+    padding:.55rem .9rem; font-size:.72rem; font-weight:700; letter-spacing:.08em;
+    text-transform:uppercase;}
   /* the add-line buttons stay hidden until the card's small + is clicked */
   .blkbar{display:none; flex-wrap:wrap; gap:.4rem; margin-top:.5rem;}
   .blkbar.open{display:flex;}
@@ -287,6 +308,7 @@
       </div>
     </div>
 
+    <div class="toast" id="toast" role="alert" hidden></div>
     <footer>
       <div class="tools">
         <button class="reset" id="reset" type="button">reset all</button>
@@ -306,18 +328,26 @@
   var N = 100;
   function uid(){ return "n" + Math.random().toString(36).slice(2,9); }
 
+  // block types; divider and image carry no text, an image keeps its picture in src
+  var BLOCK_TYPES = ["text","todo","h","quote","callout","divider","image"];
+  function normType(t){ return BLOCK_TYPES.indexOf(t) >= 0 ? t : "text"; }
+  function hasText(t){ return t !== "divider" && t !== "image"; }
+  function okSrc(src){ return typeof src === "string" && /^(data:image\/|https?:\/\/)/.test(src); }
   function mkBlock(type, text, done){
-    return { id:uid(), type:(type==="todo"?"todo":"text"),
-             text:String(text||""), done:!!done };
+    return { id:uid(), type:normType(type), text:String(text||""), done:!!done };
   }
   function normBlocks(arr){
     if(!Array.isArray(arr)) return null;
     var out = arr.map(function(b){
-      return { id:String(b && b.id || uid()),
-               type:(b && b.type==="todo") ? "todo" : "text",
-               text:String(b && b.text || ""), done:!!(b && b.done) };
+      var o = { id:String(b && b.id || uid()), type:normType(b && b.type),
+                text:String(b && b.text || ""), done:!!(b && b.done) };
+      if(o.type === "image"){ if(okSrc(b.src)) o.src = b.src; else o.type = "text"; }
+      return o;
     });
     return out.length ? out : [mkBlock("text","",false)];
+  }
+  function blockHasContent(b){
+    return b.type === "image" || (hasText(b.type) && !!(b.text && b.text.trim()));
   }
   // turn an old {text, items} note into a block list
   function migrateBlocks(text, items){
@@ -421,7 +451,22 @@
              stickies:[ { id:uid(), title:"", pinned:false, done:false,
                           blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
-  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  // a failed save (usually storage full from photos) must never be silent
+  var saveFailed = false;
+  function toast(msg){
+    var t = document.getElementById("toast");
+    if(!t) return;
+    t.textContent = msg || ""; t.hidden = !msg;
+  }
+  function save(){
+    try{
+      localStorage.setItem(KEY, JSON.stringify(state));
+      if(saveFailed){ saveFailed = false; toast(null); }
+    }catch(e){
+      saveFailed = true;
+      toast("storage full: changes are not being saved. delete a photo, then export a backup");
+    }
+  }
 
   var state = load();
   var grid   = document.getElementById("grid");
@@ -505,10 +550,10 @@
   }
   function dayHasContent(idx){
     var a = state.dayNotes[idx];
-    return !!(a && a.some(function(b){ return b.text && b.text.trim(); }));
+    return !!(a && a.some(blockHasContent));
   }
   function isBlank(blocks){
-    return !blocks || !blocks.some(function(b){ return b.text && b.text.trim(); });
+    return !blocks || !blocks.some(blockHasContent);
   }
   // the blocks shown in the Day card; an empty day joins state.dayNotes
   // only once something is written in it
@@ -600,13 +645,153 @@
     });
   }
 
-  // build one body line. opts: {listEl, getBlocks, save, onChange}
-  function addBlockRow(opts, block, afterRow, focus){
-    var row = document.createElement("div");
-    row.className = "blk";
+  // ---------- slash menu: "/" at the start of a line picks a block type ----------
+  var SLASH = [
+    { type:"text",    label:"text",      hint:"plain line",       keys:"text plain line paragraph" },
+    { type:"todo",    label:"checklist", hint:"tick-box item",    keys:"checklist todo task check" },
+    { type:"h",       label:"heading",   hint:"big bold line",    keys:"heading title header h1" },
+    { type:"quote",   label:"quote",     hint:"line with a bar",  keys:"quote cite" },
+    { type:"callout", label:"tip box",   hint:"highlighted note", keys:"tip box callout note info" },
+    { type:"divider", label:"divider",   hint:"horizontal line",  keys:"divider line hr separator" },
+    { type:"image",   label:"photo",     hint:"from your device", keys:"photo image picture pic" }
+  ];
+  var slash = { el:null, input:null, items:[], idx:0, pick:null };
+  // best match first: name starts with it, then a keyword does, then the name contains it
+  function slashMatches(q){
+    q = q.toLowerCase().replace(/^\s+/, "");
+    if(!q) return SLASH.slice();
+    var scored = [];
+    SLASH.forEach(function(c, i){
+      var sc = c.label.indexOf(q) === 0 ? 0
+             : c.keys.split(" ").some(function(k){ return k.indexOf(q) === 0; }) ? 1
+             : c.label.indexOf(q) >= 0 ? 2 : -1;
+      if(sc >= 0) scored.push({ c:c, sc:sc, i:i });
+    });
+    scored.sort(function(a, b){ return a.sc - b.sc || a.i - b.i; });
+    return scored.map(function(x){ return x.c; });
+  }
+  function slashClose(){
+    if(slash.el && slash.el.parentNode) slash.el.parentNode.removeChild(slash.el);
+    slash.el = slash.input = slash.pick = null; slash.items = []; slash.idx = 0;
+  }
+  function slashRender(){
+    var el = slash.el;
+    el.innerHTML = "";
+    slash.items.forEach(function(c, i){
+      var it = document.createElement("div");
+      it.className = "slash-item" + (i === slash.idx ? " on" : "");
+      var name = document.createElement("span"); name.textContent = c.label;
+      var hint = document.createElement("small"); hint.textContent = c.hint;
+      it.appendChild(name); it.appendChild(hint);
+      // mousedown, not click, so the line keeps focus
+      it.addEventListener("mousedown", function(e){ e.preventDefault(); slashChoose(i); });
+      el.appendChild(it);
+    });
+    var r = slash.input.getBoundingClientRect();
+    el.style.left = Math.max(Math.min(r.left, window.innerWidth - el.offsetWidth - 8), 4) + "px";
+    var below = r.bottom + 4;
+    el.style.top = (below + el.offsetHeight > window.innerHeight
+                    ? Math.max(r.top - el.offsetHeight - 4, 4) : below) + "px";
+  }
+  function slashUpdate(input, pick){
+    var v = input.value;
+    if(v.charAt(0) !== "/"){ if(slash.input === input) slashClose(); return; }
+    var items = slashMatches(v.slice(1));
+    if(!items.length){ if(slash.input === input) slashClose(); return; }
+    if(slash.input !== input){
+      slashClose();
+      slash.el = document.createElement("div");
+      slash.el.className = "slash"; slash.el.setAttribute("role","listbox");
+      document.body.appendChild(slash.el);
+      slash.input = input;
+    }
+    slash.pick = pick; slash.items = items;
+    slash.idx = Math.max(0, Math.min(slash.idx, items.length - 1));
+    slashRender();
+  }
+  function slashChoose(i){
+    var c = slash.items[i], pick = slash.pick;
+    slashClose();
+    if(c && pick) pick(c.type);
+  }
+  // true when the key was used by the open menu
+  function slashKey(input, e){
+    if(slash.input !== input) return false;
+    if(e.key === "ArrowDown" || e.key === "ArrowUp"){
+      var n = slash.items.length;
+      slash.idx = (slash.idx + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+      slashRender(); e.preventDefault(); return true;
+    }
+    if(e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); slashChoose(slash.idx); return true; }
+    if(e.key === "Escape"){ e.preventDefault(); slashClose(); return true; }
+    return false;
+  }
+  window.addEventListener("resize", slashClose);
+  window.addEventListener("scroll", function(){ if(slash.el) slashRender(); }, true);
 
-    var ck = null;
-    if(block.type === "todo"){
+  // ---------- photos: shrunk to a JPEG so localStorage can hold them ----------
+  var photoInput = document.createElement("input");
+  photoInput.type = "file"; photoInput.accept = "image/*"; photoInput.hidden = true;
+  document.body.appendChild(photoInput);
+  function pickPhoto(cb){
+    photoInput.value = "";
+    photoInput.onchange = function(){
+      var f = photoInput.files[0];
+      if(!f) return;
+      var r = new FileReader();
+      r.onload = function(){
+        var im = new Image();
+        im.onload = function(){
+          var max = 720, sc = Math.min(1, max / Math.max(im.width, im.height));
+          var c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(im.width * sc));
+          c.height = Math.max(1, Math.round(im.height * sc));
+          var g = c.getContext("2d");
+          g.fillStyle = "#0f0f0f"; g.fillRect(0, 0, c.width, c.height);  // transparent PNGs
+          g.drawImage(im, 0, 0, c.width, c.height);
+          cb(c.toDataURL("image/jpeg", 0.72));
+        };
+        im.onerror = function(){
+          toast("couldn't read that photo");
+          setTimeout(function(){ if(!saveFailed) toast(null); }, 3000);
+        };
+        im.src = r.result;
+      };
+      r.readAsDataURL(f);
+    };
+    photoInput.click();
+  }
+
+  // ---------- one body line ----------
+  var PLACEHOLDER = { text:"write, or / for blocks", todo:"to-do", h:"heading",
+                      quote:"quote", callout:"tip" };
+  function focusText(row){
+    var t = row && row.querySelector(".blk-text");
+    if(t){ focusEnd(t); return true; }
+    return false;
+  }
+  // swap a row for a freshly built one (after its block changed type)
+  function rerender(opts, block, row, focus){
+    var nr = addBlockRow(opts, block, row, focus);
+    row.parentNode.removeChild(row);
+    return nr;
+  }
+  // build one body line. opts: {listEl, getBlocks, save, onChange, onCheck}
+  function addBlockRow(opts, block, afterRow, focus){
+    var t = block.type;
+    var row = document.createElement("div");
+    row.className = "blk bt-" + t;   // bt-*, not blk-*: .blk-text is the input
+
+    if(t === "divider"){
+      row.appendChild(document.createElement("hr"));
+    }else if(t === "image"){
+      var im = document.createElement("img");
+      im.className = "blk-img"; im.src = block.src; im.alt = "";
+      row.appendChild(im);
+    }
+
+    var ck = null, txt = null;
+    if(t === "todo"){
       ck = document.createElement("button");
       ck.type = "button"; ck.className = "ck" + (block.done ? " on" : "");
       ck.setAttribute("aria-label","check item");
@@ -621,12 +806,18 @@
       });
       row.appendChild(ck);
     }
-
-    var txt = document.createElement("input");
-    txt.type = "text"; txt.className = "blk-text" + (block.done ? " done" : "");
-    txt.value = block.text; txt.spellcheck = false;
-    txt.placeholder = block.type === "todo" ? "to-do" : "write...";
-    row.appendChild(txt);
+    if(t === "callout"){
+      var icon = document.createElement("span");
+      icon.className = "blk-icon"; icon.textContent = "!"; icon.setAttribute("aria-hidden","true");
+      row.appendChild(icon);
+    }
+    if(hasText(t)){
+      txt = document.createElement("input");
+      txt.type = "text"; txt.className = "blk-text" + (block.done ? " done" : "");
+      txt.value = block.text; txt.spellcheck = false;
+      txt.placeholder = PLACEHOLDER[t] || "";
+      row.appendChild(txt);
+    }
 
     var bdel = document.createElement("button");
     bdel.type = "button"; bdel.className = "bdel"; bdel.textContent = "×";
@@ -635,41 +826,84 @@
 
     if(afterRow) insertAfter(row, afterRow); else opts.listEl.appendChild(row);
 
-    txt.addEventListener("input", function(){
-      block.text = txt.value; opts.save();
-      opts.onChange && opts.onChange();
-    });
-    txt.addEventListener("keydown", function(e){
+    function changed(){ opts.save(); opts.onChange && opts.onChange(); }
+    function addTextAfter(r){
       var blocks = opts.getBlocks();
-      if(e.key === "Enter"){
-        e.preventDefault();
-        var idx = blocks.indexOf(block);
-        var nb = mkBlock(block.type, "", false);
-        blocks.splice(idx+1, 0, nb); opts.save();
-        addBlockRow(opts, nb, row, true);
-        opts.onChange && opts.onChange();
-      }else if(e.key === "Backspace" && txt.value === "" &&
-               txt.selectionStart === 0 && txt.selectionEnd === 0){
-        if(blocks.length > 1){
-          e.preventDefault();
-          var k = blocks.indexOf(block);
-          blocks.splice(k, 1); opts.save();
-          var prev = row.previousElementSibling;
-          row.parentNode.removeChild(row);
-          if(prev){ var pt = prev.querySelector(".blk-text"); pt && focusEnd(pt); }
-          opts.onChange && opts.onChange();
-        }
+      var nb = mkBlock("text", "", false);
+      blocks.splice(blocks.indexOf(block) + 1, 0, nb);
+      addBlockRow(opts, nb, r, true);
+    }
+    // turn this line into another type, picked from the slash menu
+    function convertTo(type){
+      block.text = ""; txt.value = "";
+      if(type === "image"){
+        // the line keeps its type until a photo is actually chosen
+        changed();
+        pickPhoto(function(src){
+          if(!row.parentNode) return;              // line was removed meanwhile
+          block.type = "image"; block.src = src; block.done = false;
+          var nr = rerender(opts, block, row, false);
+          addTextAfter(nr); changed();
+        });
+        return;
       }
-    });
+      block.done = false; delete block.src;
+      block.type = type;
+      var nr = rerender(opts, block, row, hasText(type));
+      if(!hasText(type)) addTextAfter(nr);
+      changed();
+    }
+
+    if(txt){
+      txt.addEventListener("input", function(){
+        block.text = txt.value;
+        slashUpdate(txt, convertTo);
+        changed();
+      });
+      txt.addEventListener("blur", function(){ if(slash.input === txt) slashClose(); });
+      txt.addEventListener("keydown", function(e){
+        if(slashKey(txt, e)) return;
+        var blocks = opts.getBlocks();
+        if(e.key === "Enter"){
+          e.preventDefault();
+          // Enter on an empty checklist item leaves the list, like Notion
+          if(t === "todo" && txt.value === ""){
+            block.type = "text"; rerender(opts, block, row, true); changed(); return;
+          }
+          var nb = mkBlock(t === "todo" ? "todo" : "text", "", false);
+          blocks.splice(blocks.indexOf(block) + 1, 0, nb);
+          addBlockRow(opts, nb, row, true);
+          changed();
+        }else if(e.key === "Backspace" && txt.value === "" &&
+                 txt.selectionStart === 0 && txt.selectionEnd === 0){
+          e.preventDefault();
+          // an empty styled line first turns back into plain text
+          if(t !== "text"){
+            block.type = "text"; block.done = false; rerender(opts, block, row, true); changed(); return;
+          }
+          if(blocks.length > 1){
+            blocks.splice(blocks.indexOf(block), 1);
+            var prev = row.previousElementSibling;
+            while(prev && !prev.querySelector(".blk-text")) prev = prev.previousElementSibling;
+            row.parentNode.removeChild(row);
+            focusText(prev);
+            changed();
+          }
+        }
+      });
+    }
     bdel.addEventListener("click", function(){
       var blocks = opts.getBlocks();
-      var k = blocks.indexOf(block);
-      if(blocks.length > 1){ blocks.splice(k,1); row.parentNode.removeChild(row); }
-      else { block.text=""; block.done=false; txt.value=""; txt.classList.remove("done"); }
-      opts.save(); opts.onChange && opts.onChange();
+      if(blocks.length > 1){ blocks.splice(blocks.indexOf(block), 1); row.parentNode.removeChild(row); }
+      else{
+        // the last line never goes away; it just becomes an empty text line
+        block.type = "text"; block.text = ""; block.done = false; delete block.src;
+        rerender(opts, block, row, false);
+      }
+      changed();
     });
 
-    if(focus) focusEnd(txt);
+    if(focus && txt) focusEnd(txt);
     return row;
   }
 

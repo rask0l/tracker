@@ -21,9 +21,16 @@ linked from anywhere.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
   is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
-  block is `{ id, type:'text'|'todo', text, done }`, so a note body is a mix of
-  plain lines and checklist items (iPhone-Notes style: Enter adds a line,
-  Backspace on an empty line removes it). The `+ line` / `+ checklist` /
+  block is `{ id, type, text, done }` with type `text`, `todo`, `h` (heading),
+  `quote`, `callout` (tip box), `divider` or `image` (which adds `src`, a JPEG
+  data URL). iPhone-Notes style: Enter adds a line, Backspace on an empty line
+  removes it, and Backspace on an empty styled line first turns it back into
+  text. Typing `/` at the start of a line opens a Notion-style slash menu
+  (filter by typing, arrows and Enter to pick, Esc to close) that converts the
+  line. Photos are shrunk to 720px JPEGs before saving because everything
+  lives in localStorage (about 5MB); if a save ever fails, a red toast says so
+  instead of losing changes silently. Block rows use `bt-<type>` classes;
+  never `blk-<type>`, since `.blk-text` is the line's input. The `+ line` / `+ checklist` /
   `+ checkbox` button row under each card is hidden until you click the small
   `+` in the card's header (it turns red while open); choosing an option
   closes the row again. `pos` maps a card's pid (`day` or
