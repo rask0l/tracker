@@ -17,14 +17,14 @@ linked from anywhere.
   (the side column is `display:contents` so its cards can be reordered).
 - **State is browser-only.** Everything saves to `localStorage` under key
   `hundred-v1` as
-  `{ days: boolean[100], label, dayNotes, stickies, pos, start, daily, dailyOpen, lastExport }`.
+  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport }`.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
   is the list of added notes, each `{ id, title, pinned, done, blocks }`. A
   block is `{ id, type:'text'|'todo', text, done }`, so a note body is a mix of
   plain lines and checklist items (iPhone-Notes style: Enter adds a line,
   Backspace on an empty line removes it). `pos` maps a card's pid (`day` or
-  `s:<id>` or `daily`) to a dragged `{x,y}`. The repo holds no progress; clearing site
+  `s:<id>`) to a dragged `{x,y}`. The repo holds no progress; clearing site
   data wipes it, so the footer has `export` (downloads the state as
   `100days-<date>.json`) and `import` (loads such a file back, validated by
   the same `normalize()` that `load()` uses, then reloads the page). There is
@@ -36,14 +36,10 @@ linked from anywhere.
   (the Day card's checkbox also ticks that grid day), an editable title, and
   the block body. Added notes also have a pin (pinned notes sort to the top,
   marked with a red left edge) and a delete.
-- `daily` is the daily template, a block list edited in its own collapsible
-  card (`dailyOpen` remembers whether it is open). A day with nothing written
-  shows a fresh copy of the template in the Day card; that copy is written to
-  `dayNotes` only once you edit or tick something, so later template edits
-  still reach untouched days. Ticking the last checklist item of a day ticks
-  the day itself, but unchecking an item never unticks it. The Day card header
-  shows checklist progress like `2/3`. Template checkboxes are disabled since
-  the template is a pattern, not a record.
+- Ticking the last checklist item in a day's note ticks the day itself, but
+  unchecking an item never unticks it. The Day card header shows checklist
+  progress like `2/3`. (A daily template card that pre-filled every day was
+  tried and removed at the owner's request; don't bring it back unasked.)
 - With a start date set, box `i` is the date `start + i`: today's box is the
   one for today's calendar date, each box shows its date on hover, the Day
   card shows `SAT 21 NOV` under its title, and a status line says `day n of 100`
@@ -56,7 +52,7 @@ linked from anywhere.
   box.
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
   tap never clears the grid; it clears ticks and day notes but keeps the added
-  notes and the daily template. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
+  notes. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
 
 ## Deploy
 

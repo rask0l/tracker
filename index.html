@@ -105,22 +105,15 @@
   }
   .ck:hover{border-color:var(--fg);}
   .ck.on{background:var(--accent); border-color:var(--accent);}
-  .ck:disabled{cursor:default; border-style:dashed;}
-  .ck:disabled:hover{border-color:var(--line);}
   .prog{flex:0 0 auto; color:var(--accent); letter-spacing:.06em;}
-  .nav, .fold{
+  .nav{
     flex:0 0 auto; background:transparent; border:none; color:var(--muted);
     cursor:pointer; font:inherit; font-size:.95rem; line-height:1; padding:0 .15rem;
   }
-  .nav:hover, .fold:hover{color:var(--fg);}
-  .fold{font-size:.75rem; width:1rem;}
-  .panel .ttl{flex:1 1 auto;}
+  .nav:hover{color:var(--fg);}
   .card-hint{margin:-.3rem 0 .4rem; font-size:.62rem; letter-spacing:.1em;
     text-transform:uppercase; color:var(--line);}
   .card-date{color:var(--muted);}
-  .panel.collapsed .blocks, .panel.collapsed .blkbar,
-  .panel.collapsed .card-hint{display:none;}
-  .panel.collapsed h2{margin-bottom:0;}
   .ttl-input{
     flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none;
     font:inherit; font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
@@ -296,6 +289,7 @@
   function normalize(o){
     if(o && Array.isArray(o.days) && o.days.length === N){
       var pos = (o.pos && typeof o.pos === "object") ? o.pos : {};
+      delete pos.daily;   // left over from the removed daily template card
       // notes per day -> block lists
       var dayNotes = {};
       if(o.dayNotes && typeof o.dayNotes === "object"){
@@ -332,8 +326,6 @@
         stickies: stickies,
         pos: pos,
         start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : "",
-        daily: normBlocks(o.daily) || [mkBlock("todo","",false)],
-        dailyOpen: o.dailyOpen !== false,
         lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : ""
       };
     }
@@ -347,7 +339,7 @@
       if(s) return s;
     }catch(e){}
     return { days:new Array(N).fill(false), label:"", dayNotes:{}, start:"",
-             daily:[mkBlock("todo","",false)], dailyOpen:true, lastExport:"",
+             lastExport:"",
              stickies:[ { id:uid(), title:"", pinned:false, done:false,
                           blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
@@ -440,16 +432,10 @@
   function isBlank(blocks){
     return !blocks || !blocks.some(function(b){ return b.text && b.text.trim(); });
   }
-  function templateCopy(){
-    return state.daily.map(function(b){ return mkBlock(b.type, b.text, false); });
-  }
-  // the blocks shown in the Day card. A day with nothing written shows a fresh
-  // copy of the daily template, which only joins state.dayNotes once edited,
-  // so later template edits still reach untouched days.
+  // the blocks shown in the Day card; an empty day joins state.dayNotes
+  // only once something is written in it
   function blocksFor(idx){
     var own = state.dayNotes[idx];
-    if(!isBlank(own)) return own;
-    if(!isBlank(state.daily)) return templateCopy();
     return (own && own.length) ? own : [mkBlock("text","",false)];
   }
   function todoProgress(blocks){
@@ -547,8 +533,6 @@
       ck.type = "button"; ck.className = "ck" + (block.done ? " on" : "");
       ck.setAttribute("aria-label","check item");
       ck.textContent = block.done ? "✓" : "";
-      // template items are a pattern, not something to tick
-      if(opts.locked){ ck.disabled = true; ck.setAttribute("aria-label","checklist item"); }
       ck.addEventListener("click", function(){
         block.done = !block.done;
         ck.classList.toggle("on", block.done);
@@ -674,7 +658,6 @@
     dayOpts = {
       listEl:null,
       getBlocks:function(){ return dayBlocks; },
-      // first edit of a template copy makes it this day's own note
       save:function(){ state.dayNotes[sel] = dayBlocks; save(); },
       onChange:function(){ renderGrid(); refreshDayHead(); },
       onCheck:function(on){
@@ -718,53 +701,6 @@
   function selectDay(i){
     sel = Math.min(Math.max(i, 0), N-1);
     renderGrid(); refreshDay();
-  }
-
-  // ---------- Daily template ----------
-  function buildDailyCard(){
-    var panel = document.createElement("div");
-    panel.className = "panel daily" + (state.dailyOpen ? "" : " collapsed");
-    panel.setAttribute("data-pid","daily");
-
-    var h = document.createElement("h2");
-    var grip = document.createElement("span");
-    grip.className = "grip"; grip.setAttribute("aria-hidden","true"); grip.textContent = "⠿";
-    var fold = document.createElement("button");
-    fold.type = "button"; fold.className = "fold";
-    fold.setAttribute("aria-label","show or hide the daily template");
-    var name = document.createElement("span");
-    name.className = "ttl"; name.textContent = "daily template";
-    h.appendChild(grip); h.appendChild(fold); h.appendChild(name);
-    panel.appendChild(h);
-
-    var hint = document.createElement("p");
-    hint.className = "card-hint";
-    hint.textContent = "every day starts with these";
-    panel.appendChild(hint);
-
-    var opts = {
-      listEl:null, locked:true,
-      getBlocks:function(){ return state.daily; },
-      save:function(){
-        save();
-        // a day still showing an untouched copy should follow the template
-        if(isBlank(state.dayNotes[sel])){ refreshDayBody(); refreshDayHead(); }
-      }
-    };
-    buildBody(panel, opts);
-    state.daily.forEach(function(b){ addBlockRow(opts, b, null, false); });
-
-    function paintFold(){ fold.textContent = state.dailyOpen ? "▾" : "▸"; }
-    paintFold();
-    fold.addEventListener("click", function(){
-      state.dailyOpen = !state.dailyOpen;
-      panel.classList.toggle("collapsed", !state.dailyOpen);
-      paintFold(); save();
-    });
-
-    dayCard.parentNode.insertBefore(panel, dayCard.nextSibling);
-    makeDraggable(panel, "daily", grip);
-    applyPos(panel);
   }
 
   // ---------- Sticky notes ----------
@@ -890,7 +826,6 @@
   sel = defaultSel();
 
   buildDayCard();
-  buildDailyCard();
   reorderStickies();                       // put pinned first on load
   state.stickies.forEach(function(s){ addStickyDom(s, false); });
 
