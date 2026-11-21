@@ -105,6 +105,10 @@
   }
   .ck:hover{border-color:var(--fg);}
   .ck.on{background:var(--accent); border-color:var(--accent);}
+  /* a note's cross-off box is optional: shown on hover or while editing the
+     note, and kept once the note is crossed off */
+  .sck{display:none;}
+  .panel:hover .sck, .panel:focus-within .sck, .sck.on{display:inline-flex;}
   .prog{flex:0 0 auto; color:var(--accent); letter-spacing:.06em;}
   .nav{
     flex:0 0 auto; background:transparent; border:none; color:var(--muted);
@@ -730,7 +734,7 @@
     pin.setAttribute("aria-label","pin note"); pin.textContent = "⚑";
 
     var ck = document.createElement("button");
-    ck.type = "button"; ck.className = "ck" + (sticky.done ? " on" : "");
+    ck.type = "button"; ck.className = "ck sck" + (sticky.done ? " on" : "");
     ck.setAttribute("aria-label","cross off note");
     ck.textContent = sticky.done ? "✓" : "";
 

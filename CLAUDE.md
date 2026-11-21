@@ -34,7 +34,9 @@ linked from anywhere.
 - Note cards (the Day card and every added note) share one look: a `::` grip to
   drag the card anywhere (double-click it to dock), a checkbox to cross it off
   (the Day card's checkbox also ticks that grid day), an editable title, and
-  the block body. Added notes also have a pin (pinned notes sort to the top,
+  the block body. On added notes the cross-off checkbox is optional: it stays
+  hidden until you hover or edit the note, and stays visible once the note is
+  crossed off. Added notes also have a pin (pinned notes sort to the top,
   marked with a red left edge) and a delete.
 - Ticking the last checklist item in a day's note ticks the day itself, but
   unchecking an item never unticks it. The Day card header shows checklist
