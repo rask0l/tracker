@@ -186,13 +186,15 @@
   /* side wallpapers, Notion style: fixed in the empty gutters on wide screens */
   .wall{
     --gw:calc((100vw - 840px) / 2);           /* width of one gutter */
-    --ww:min(340px, calc(var(--gw) - 4rem));  /* image width inside it */
-    position:fixed; top:3rem; width:var(--ww); height:auto;
-    max-height:calc(100vh - 6rem); object-fit:cover;
+    --ww:min(460px, calc(var(--gw) - 4rem));  /* image width inside it */
+    /* full window height; cover crops the sides rather than squashing */
+    position:fixed; top:3rem; width:var(--ww); height:calc(100vh - 6rem);
+    object-fit:cover;
     border:2px solid var(--line); display:none; pointer-events:none;
   }
   .wall-l{left:calc((var(--gw) - var(--ww)) / 2);}
-  .wall-r{right:calc((var(--gw) - var(--ww)) / 2); filter:grayscale(1);}
+  .wall-r{right:calc((var(--gw) - var(--ww)) / 2); filter:grayscale(1);
+    object-position:70% 50%;}
   @media (min-width:1400px){ .wall{display:block;} }
 
   @media (max-width:640px){

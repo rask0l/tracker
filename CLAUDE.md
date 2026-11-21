@@ -56,7 +56,8 @@ linked from anywhere.
 - Two decorative wallpapers sit in the side gutters, Notion style:
   `assets/wall_1.jpg` on the left and `assets/wall_2.jpg` on the right
   (shown black and white with a CSS `grayscale` filter; the file itself is in
-  colour). They are `position:fixed`, sized to fit the gutter (max 340px), and
+  colour). They are `position:fixed`, as wide as the gutter allows (max 460px) and
+  the full window height (`object-fit:cover` crops the sides), and
   only appear at 1400px wide and up so they never crowd the grid.
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
   tap never clears the grid; it clears ticks and day notes but keeps the added
