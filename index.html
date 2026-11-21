@@ -41,6 +41,22 @@
   .bar{height:10px; border:2px solid var(--fg); margin-bottom:2rem; position:relative;}
   .bar > i{display:block; height:100%; background:var(--accent); width:0;
     transition:width .18s ease;}
+  .stats .right{display:flex; gap:1rem; align-items:baseline; flex-wrap:wrap;}
+  .stats .right b{color:var(--fg); font-weight:700;}
+
+  .when{
+    display:flex; justify-content:space-between; align-items:center; gap:1rem;
+    flex-wrap:wrap; margin:-1rem 0 2rem; font-size:.72rem; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  .when label{display:flex; align-items:center; gap:.5rem;}
+  .when input{
+    background:transparent; border:2px solid var(--line); color:var(--fg);
+    font:inherit; font-size:.72rem; padding:.2rem .4rem; outline:none;
+    border-radius:0; color-scheme:dark;
+  }
+  .when input:focus{border-color:var(--accent);}
+  .when b{color:var(--accent); font-weight:700;}
 
   .layout{display:flex; gap:1.5rem; align-items:flex-start;}
   .grid-col{flex:1 1 auto; min-width:0;}
@@ -54,6 +70,8 @@
     cursor:pointer; display:flex; align-items:center; justify-content:center;
     padding:0; transition:background .1s ease,border-color .1s ease,color .1s ease;
   }
+  .cell{touch-action:manipulation; user-select:none; -webkit-user-select:none;
+    -webkit-touch-callout:none;}
   .cell:hover{border-color:var(--fg); color:var(--fg);}
   .cell.done{background:var(--accent); border-color:var(--accent);
     color:var(--accent-ink); font-weight:700;}
@@ -87,6 +105,22 @@
   }
   .ck:hover{border-color:var(--fg);}
   .ck.on{background:var(--accent); border-color:var(--accent);}
+  .ck:disabled{cursor:default; border-style:dashed;}
+  .ck:disabled:hover{border-color:var(--line);}
+  .prog{flex:0 0 auto; color:var(--accent); letter-spacing:.06em;}
+  .nav, .fold{
+    flex:0 0 auto; background:transparent; border:none; color:var(--muted);
+    cursor:pointer; font:inherit; font-size:.95rem; line-height:1; padding:0 .15rem;
+  }
+  .nav:hover, .fold:hover{color:var(--fg);}
+  .fold{font-size:.75rem; width:1rem;}
+  .panel .ttl{flex:1 1 auto;}
+  .card-hint{margin:-.3rem 0 .4rem; font-size:.62rem; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--line);}
+  .card-date{color:var(--muted);}
+  .panel.collapsed .blocks, .panel.collapsed .blkbar,
+  .panel.collapsed .card-hint{display:none;}
+  .panel.collapsed h2{margin-bottom:0;}
   .ttl-input{
     flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none;
     font:inherit; font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
@@ -140,20 +174,27 @@
   footer{margin-top:2.5rem; display:flex; justify-content:space-between;
     align-items:center; gap:1rem; flex-wrap:wrap;
     border-top:2px solid var(--line); padding-top:1.25rem;}
-  .reset{
+  .tools{display:flex; gap:.5rem; flex-wrap:wrap;}
+  .reset, .btn{
     background:transparent; border:2px solid var(--line); color:var(--muted);
     font:inherit; font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
     padding:.45rem .8rem; cursor:pointer;
   }
-  .reset:hover{border-color:var(--accent); color:var(--accent);}
+  .reset:hover, .btn:hover{border-color:var(--accent); color:var(--accent);}
   .reset.armed{border-color:var(--accent); color:var(--accent-ink);
     background:var(--accent); font-weight:700;}
   .hint{font-size:.72rem; letter-spacing:.08em; color:var(--muted);
     text-transform:uppercase;}
+  .backup.stale{color:var(--accent); font-weight:700;}
+  .hint .touch{display:none;}
+  @media (hover:none){ .hint .mouse{display:none;} .hint .touch{display:inline;} }
 
   @media (max-width:640px){
-    .layout{flex-direction:column;}
-    .side{flex:1 1 auto; width:100%;}
+    .layout{flex-direction:column; align-items:stretch;}
+    /* flatten the side column so the Day card can sit above the grid */
+    .side{display:contents;}
+    .side > *{order:1;}
+    .side > #dayCard{order:-1;}
     h1{font-size:1.6rem;}
     .grid{gap:4px;}
     .cell{font-size:.62rem;}
@@ -171,9 +212,17 @@
 
     <div class="stats">
       <span class="count"><b id="done">0</b> / 100</span>
-      <span id="pct">0%</span>
+      <span class="right">
+        <span>streak <b id="streak">0</b></span>
+        <span>best <b id="best">0</b></span>
+        <span id="pct">0%</span>
+      </span>
     </div>
     <div class="bar"><i id="fill"></i></div>
+    <div class="when">
+      <label>start <input type="date" id="start" aria-label="start date"></label>
+      <span id="status"></span>
+    </div>
 
     <div class="layout">
       <div class="grid-col">
@@ -188,8 +237,14 @@
     </div>
 
     <footer>
-      <button class="reset" id="reset" type="button">reset all</button>
-      <span class="hint">tick one box a day</span>
+      <div class="tools">
+        <button class="reset" id="reset" type="button">reset all</button>
+        <button class="btn" id="export" type="button">export</button>
+        <button class="btn" id="import" type="button">import</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <span class="hint backup" id="backup"></span>
+      <span class="hint"><span class="mouse">click a box to open it · double-click to tick · ← → to step</span><span class="touch">tap a box to open it · long-press to tick</span></span>
     </footer>
   </div>
 
@@ -225,53 +280,74 @@
     return out.length ? out : [mkBlock("text","",false)];
   }
 
+  // ---------- dates ----------
+  var DOW = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+  var MON = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  function pad(n){ return (n<10?"0":"") + n; }
+  function parseDate(s){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s||"");
+    return m ? new Date(+m[1], +m[2]-1, +m[3]) : null;
+  }
+  function todayDate(){ var d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function iso(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
+  function fmt(d){ return DOW[d.getDay()] + " " + d.getDate() + " " + MON[d.getMonth()]; }
+
+  // validate any parsed object into a state, or null if it is not one
+  function normalize(o){
+    if(o && Array.isArray(o.days) && o.days.length === N){
+      var pos = (o.pos && typeof o.pos === "object") ? o.pos : {};
+      // notes per day -> block lists
+      var dayNotes = {};
+      if(o.dayNotes && typeof o.dayNotes === "object"){
+        Object.keys(o.dayNotes).forEach(function(k){
+          var nb = normBlocks(o.dayNotes[k]); if(nb) dayNotes[k] = nb;
+        });
+      }else if(o.notes && typeof o.notes === "object"){
+        Object.keys(o.notes).forEach(function(k){
+          var t = o.notes[k];
+          if(t && String(t).trim()) dayNotes[k] = migrateBlocks(t, null);
+        });
+      }
+
+      var stickies;
+      if(Array.isArray(o.stickies)){
+        stickies = o.stickies.map(function(s){
+          var blocks = Array.isArray(s && s.blocks) ? normBlocks(s.blocks)
+                                                    : migrateBlocks(s && s.text, s && s.items);
+          return { id:String(s && s.id || uid()),
+                   title:String(s && s.title || ""),
+                   pinned:!!(s && s.pinned),
+                   done:!!(s && s.done),
+                   blocks:blocks };
+        });
+      }else{
+        stickies = [ { id:uid(), title:"", pinned:false, done:false,
+                       blocks:(o.scratch ? migrateBlocks(o.scratch,null) : [mkBlock("text","",false)]) } ];
+      }
+
+      return {
+        days: o.days.map(Boolean),
+        label: o.label || "",
+        dayNotes: dayNotes,
+        stickies: stickies,
+        pos: pos,
+        start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : "",
+        daily: normBlocks(o.daily) || [mkBlock("todo","",false)],
+        dailyOpen: o.dailyOpen !== false,
+        lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : ""
+      };
+    }
+    return null;
+  }
+
   function load(){
     try{
       var raw = localStorage.getItem(KEY);
-      if(raw){
-        var o = JSON.parse(raw);
-        if(o && Array.isArray(o.days) && o.days.length === N){
-          var pos = (o.pos && typeof o.pos === "object") ? o.pos : {};
-          // notes per day -> block lists
-          var dayNotes = {};
-          if(o.dayNotes && typeof o.dayNotes === "object"){
-            Object.keys(o.dayNotes).forEach(function(k){
-              var nb = normBlocks(o.dayNotes[k]); if(nb) dayNotes[k] = nb;
-            });
-          }else if(o.notes && typeof o.notes === "object"){
-            Object.keys(o.notes).forEach(function(k){
-              var t = o.notes[k];
-              if(t && String(t).trim()) dayNotes[k] = migrateBlocks(t, null);
-            });
-          }
-
-          var stickies;
-          if(Array.isArray(o.stickies)){
-            stickies = o.stickies.map(function(s){
-              var blocks = Array.isArray(s && s.blocks) ? normBlocks(s.blocks)
-                                                        : migrateBlocks(s && s.text, s && s.items);
-              return { id:String(s && s.id || uid()),
-                       title:String(s && s.title || ""),
-                       pinned:!!(s && s.pinned),
-                       done:!!(s && s.done),
-                       blocks:blocks };
-            });
-          }else{
-            stickies = [ { id:uid(), title:"", pinned:false, done:false,
-                           blocks:(o.scratch ? migrateBlocks(o.scratch,null) : [mkBlock("text","",false)]) } ];
-          }
-
-          return {
-            days: o.days.map(Boolean),
-            label: o.label || "",
-            dayNotes: dayNotes,
-            stickies: stickies,
-            pos: pos
-          };
-        }
-      }
+      var s = raw ? normalize(JSON.parse(raw)) : null;
+      if(s) return s;
     }catch(e){}
-    return { days:new Array(N).fill(false), label:"", dayNotes:{},
+    return { days:new Array(N).fill(false), label:"", dayNotes:{}, start:"",
+             daily:[mkBlock("todo","",false)], dailyOpen:true, lastExport:"",
              stickies:[ { id:uid(), title:"", pinned:false, done:false,
                           blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
@@ -291,18 +367,97 @@
   var cells = [];
   var sel = 0;
 
+  var streakEl = document.getElementById("streak");
+  var bestEl   = document.getElementById("best");
+  var startEl  = document.getElementById("start");
+  var statusEl = document.getElementById("status");
+  var backupEl = document.getElementById("backup");
+
   function currentIndex(){
     for(var i=0;i<N;i++){ if(!state.days[i]) return i; }
     return -1;
+  }
+  // index of today's box by calendar (may be <0 or >=N), or null with no start date
+  function todayIndex(){
+    var s = parseDate(state.start);
+    return s ? Math.round((todayDate() - s) / 86400000) : null;
+  }
+  function dateOf(i){
+    var s = parseDate(state.start);
+    return s ? new Date(s.getFullYear(), s.getMonth(), s.getDate() + i) : null;
+  }
+  // the box marked "today": by calendar when dated, else the first unticked
+  function todayCell(){
+    var t = todayIndex();
+    if(t === null) return currentIndex();
+    return (t >= 0 && t < N) ? t : -1;
+  }
+  function defaultSel(){
+    var t = todayIndex();
+    if(t !== null) return Math.min(Math.max(t, 0), N-1);
+    var c = currentIndex();
+    return c === -1 ? N-1 : c;
+  }
+  function streaks(){
+    var best = 0, run = 0, i;
+    for(i=0;i<N;i++){ run = state.days[i] ? run+1 : 0; if(run > best) best = run; }
+    var end, t = todayIndex();
+    if(t === null){
+      // undated: the run ending at the last ticked box
+      end = -1;
+      for(i=N-1;i>=0;i--){ if(state.days[i]){ end = i; break; } }
+    }else{
+      if(t < 0) return { cur:0, best:best };
+      end = Math.min(t, N-1);
+      // today not ticked yet does not break the streak
+      if(t < N && !state.days[end]) end--;
+    }
+    var cur = 0;
+    for(i=end;i>=0 && state.days[i];i--) cur++;
+    return { cur:cur, best:best };
+  }
+  function renderStatus(){
+    var t = todayIndex();
+    if(t === null){ statusEl.textContent = "no start date"; return; }
+    if(t < 0){ statusEl.textContent = "starts in " + (-t) + (t === -1 ? " day" : " days"); return; }
+    var upto = Math.min(t, N), missed = 0;
+    for(var i=0;i<upto;i++) if(!state.days[i]) missed++;
+    var head = t < N ? "day " + (t+1) + " of " + N : "ended " + fmt(dateOf(N-1));
+    statusEl.innerHTML = "";
+    statusEl.appendChild(document.createTextNode(head + " · "));
+    if(missed){
+      var b = document.createElement("b");
+      b.textContent = missed + " missed";
+      statusEl.appendChild(b);
+    }else{
+      statusEl.appendChild(document.createTextNode(t < N ? "on track" : "perfect run"));
+    }
   }
   function dayHasContent(idx){
     var a = state.dayNotes[idx];
     return !!(a && a.some(function(b){ return b.text && b.text.trim(); }));
   }
-  function getDayBlocks(idx){
-    if(!state.dayNotes[idx] || !state.dayNotes[idx].length)
-      state.dayNotes[idx] = [mkBlock("text","",false)];
-    return state.dayNotes[idx];
+  function isBlank(blocks){
+    return !blocks || !blocks.some(function(b){ return b.text && b.text.trim(); });
+  }
+  function templateCopy(){
+    return state.daily.map(function(b){ return mkBlock(b.type, b.text, false); });
+  }
+  // the blocks shown in the Day card. A day with nothing written shows a fresh
+  // copy of the daily template, which only joins state.dayNotes once edited,
+  // so later template edits still reach untouched days.
+  function blocksFor(idx){
+    var own = state.dayNotes[idx];
+    if(!isBlank(own)) return own;
+    if(!isBlank(state.daily)) return templateCopy();
+    return (own && own.length) ? own : [mkBlock("text","",false)];
+  }
+  function todoProgress(blocks){
+    var total = 0, done = 0;
+    blocks.forEach(function(b){
+      if(b.type === "todo" && b.text && b.text.trim()){ total++; if(b.done) done++; }
+    });
+    return { total:total, done:done };
   }
 
   function renderGrid(){
@@ -313,7 +468,11 @@
     pctEl.textContent = pct + "%";
     fill.style.width = pct + "%";
 
-    var cur = currentIndex();
+    var st = streaks();
+    streakEl.textContent = st.cur;
+    bestEl.textContent = st.best;
+
+    var cur = todayCell();
     for(var j=0;j<N;j++){
       var cls = "cell";
       if(state.days[j]) cls += " done";
@@ -321,7 +480,11 @@
       if(j===sel) cls += " sel";
       if(dayHasContent(j)) cls += " note";
       cells[j].className = cls;
+      var d = dateOf(j);
+      cells[j].title = d ? fmt(d) : "";
     }
+    renderStatus();
+    if(backupEl) renderBackup();
   }
 
   function focusEnd(inp){ inp.focus(); var l=inp.value.length; try{ inp.setSelectionRange(l,l); }catch(e){} }
@@ -384,12 +547,15 @@
       ck.type = "button"; ck.className = "ck" + (block.done ? " on" : "");
       ck.setAttribute("aria-label","check item");
       ck.textContent = block.done ? "✓" : "";
+      // template items are a pattern, not something to tick
+      if(opts.locked){ ck.disabled = true; ck.setAttribute("aria-label","checklist item"); }
       ck.addEventListener("click", function(){
         block.done = !block.done;
         ck.classList.toggle("on", block.done);
         ck.textContent = block.done ? "✓" : "";
         txt.classList.toggle("done", block.done);
         opts.save();
+        opts.onCheck && opts.onCheck(block.done);
       });
       row.appendChild(ck);
     }
@@ -474,7 +640,14 @@
   }
 
   // ---------- Day card ----------
-  var dayCk, dayTitle, dayList, dayOpts;
+  var dayCk, dayTitle, dayDate, dayProg, dayList, dayOpts, dayBlocks;
+  function navBtn(text, label, step){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "nav"; b.textContent = text;
+    b.setAttribute("aria-label", label);
+    b.addEventListener("click", function(){ selectDay(sel + step); });
+    return b;
+  }
   function buildDayCard(){
     var panel = document.createElement("div");
     panel.className = "panel"; panel.setAttribute("data-pid","day");
@@ -488,11 +661,31 @@
     dayTitle = document.createElement("input");
     dayTitle.type = "text"; dayTitle.className = "ttl-input"; dayTitle.readOnly = true;
     dayTitle.setAttribute("aria-label","day");
-    h.appendChild(grip); h.appendChild(dayCk); h.appendChild(dayTitle);
+    dayProg = document.createElement("span");
+    dayProg.className = "prog";
+    h.appendChild(grip); h.appendChild(dayCk); h.appendChild(dayTitle); h.appendChild(dayProg);
+    h.appendChild(navBtn("‹", "previous day", -1));
+    h.appendChild(navBtn("›", "next day", 1));
     panel.appendChild(h);
+    dayDate = document.createElement("p");
+    dayDate.className = "card-hint card-date";
+    panel.appendChild(dayDate);
 
-    dayOpts = { listEl:null, getBlocks:function(){ return getDayBlocks(sel); },
-                save:save, onChange:renderGrid };
+    dayOpts = {
+      listEl:null,
+      getBlocks:function(){ return dayBlocks; },
+      // first edit of a template copy makes it this day's own note
+      save:function(){ state.dayNotes[sel] = dayBlocks; save(); },
+      onChange:function(){ renderGrid(); refreshDayHead(); },
+      onCheck:function(on){
+        // finishing every item ticks the day; unchecking never unticks it
+        var p = todoProgress(dayBlocks);
+        if(on && p.total && p.done === p.total && !state.days[sel]){
+          state.days[sel] = true; save();
+        }
+        renderGrid(); refreshDayHead();
+      }
+    };
     dayList = buildBody(panel, dayOpts);
 
     dayCk.addEventListener("click", function(){
@@ -505,17 +698,74 @@
     applyPos(panel);
   }
   function refreshDayHead(){
+    var d = dateOf(sel);
     dayTitle.value = "DAY " + (sel+1);
+    dayDate.textContent = d ? fmt(d) : "";
+    dayDate.hidden = !d;
     var on = state.days[sel];
     dayCk.classList.toggle("on", on);
     dayCk.textContent = on ? "✓" : "";
     dayTitle.classList.toggle("done", on);
+    var p = todoProgress(dayBlocks || []);
+    dayProg.textContent = p.total ? p.done + "/" + p.total : "";
   }
   function refreshDayBody(){
+    dayBlocks = blocksFor(sel);
     dayList.innerHTML = "";
-    getDayBlocks(sel).forEach(function(b){ addBlockRow(dayOpts, b, null, false); });
+    dayBlocks.forEach(function(b){ addBlockRow(dayOpts, b, null, false); });
   }
-  function refreshDay(){ refreshDayHead(); refreshDayBody(); }
+  function refreshDay(){ refreshDayBody(); refreshDayHead(); }
+  function selectDay(i){
+    sel = Math.min(Math.max(i, 0), N-1);
+    renderGrid(); refreshDay();
+  }
+
+  // ---------- Daily template ----------
+  function buildDailyCard(){
+    var panel = document.createElement("div");
+    panel.className = "panel daily" + (state.dailyOpen ? "" : " collapsed");
+    panel.setAttribute("data-pid","daily");
+
+    var h = document.createElement("h2");
+    var grip = document.createElement("span");
+    grip.className = "grip"; grip.setAttribute("aria-hidden","true"); grip.textContent = "⠿";
+    var fold = document.createElement("button");
+    fold.type = "button"; fold.className = "fold";
+    fold.setAttribute("aria-label","show or hide the daily template");
+    var name = document.createElement("span");
+    name.className = "ttl"; name.textContent = "daily template";
+    h.appendChild(grip); h.appendChild(fold); h.appendChild(name);
+    panel.appendChild(h);
+
+    var hint = document.createElement("p");
+    hint.className = "card-hint";
+    hint.textContent = "every day starts with these";
+    panel.appendChild(hint);
+
+    var opts = {
+      listEl:null, locked:true,
+      getBlocks:function(){ return state.daily; },
+      save:function(){
+        save();
+        // a day still showing an untouched copy should follow the template
+        if(isBlank(state.dayNotes[sel])){ refreshDayBody(); refreshDayHead(); }
+      }
+    };
+    buildBody(panel, opts);
+    state.daily.forEach(function(b){ addBlockRow(opts, b, null, false); });
+
+    function paintFold(){ fold.textContent = state.dailyOpen ? "▾" : "▸"; }
+    paintFold();
+    fold.addEventListener("click", function(){
+      state.dailyOpen = !state.dailyOpen;
+      panel.classList.toggle("collapsed", !state.dailyOpen);
+      paintFold(); save();
+    });
+
+    dayCard.parentNode.insertBefore(panel, dayCard.nextSibling);
+    makeDraggable(panel, "daily", grip);
+    applyPos(panel);
+  }
 
   // ---------- Sticky notes ----------
   function reorderStickies(){
@@ -594,24 +844,53 @@
   }
 
   // ---------- Grid ----------
+  function tickDay(idx){
+    state.days[idx] = !state.days[idx];
+    save(); renderGrid(); refreshDayHead();
+  }
   for(var i=0;i<N;i++){
     (function(idx){
       var b = document.createElement("button");
       b.type = "button"; b.className = "cell"; b.textContent = idx+1;
       b.setAttribute("aria-label","day "+(idx+1));
-      b.addEventListener("click", function(){
-        state.days[idx] = !state.days[idx];
-        sel = idx;
-        save(); renderGrid(); refreshDay();
+      // click opens the day; double-click (or long-press on touch) ticks it
+      b.addEventListener("click", function(){ if(idx !== sel) selectDay(idx); });
+      b.addEventListener("dblclick", function(){ tickDay(idx); });
+      var lp = null;
+      function cancelLp(){ clearTimeout(lp); lp = null; }
+      b.addEventListener("pointerdown", function(e){
+        if(e.pointerType !== "touch") return;
+        cancelLp();
+        lp = setTimeout(function(){
+          lp = null;
+          if(idx !== sel) selectDay(idx);
+          tickDay(idx);
+          if(navigator.vibrate) navigator.vibrate(15);
+        }, 450);
       });
+      b.addEventListener("pointerup", cancelLp);
+      b.addEventListener("pointercancel", cancelLp);   // fires when the touch turns into a scroll
+      b.addEventListener("pointerleave", cancelLp);
+      b.addEventListener("contextmenu", function(e){ e.preventDefault(); });
       grid.appendChild(b); cells.push(b);
     })(i);
   }
 
-  var start = currentIndex();
-  sel = start === -1 ? N-1 : start;
+  // left/right step through days, unless you are typing
+  document.addEventListener("keydown", function(e){
+    if(e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    var t = e.target;
+    if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    e.preventDefault();
+    selectDay(sel + (e.key === "ArrowLeft" ? -1 : 1));
+    if(t && t.classList && t.classList.contains("cell")) cells[sel].focus();
+  });
+
+  sel = defaultSel();
 
   buildDayCard();
+  buildDailyCard();
   reorderStickies();                       // put pinned first on load
   state.stickies.forEach(function(s){ addStickyDom(s, false); });
 
@@ -634,11 +913,72 @@
     clearTimeout(armTimer); disarm();
     state.days = new Array(N).fill(false);
     state.dayNotes = {};
+    // a dated run restarts today
+    if(state.start){ state.start = iso(todayDate()); startEl.value = state.start; }
     sel = 0; save(); renderGrid(); refreshDay();
   });
   function disarm(){ armed=false; reset.classList.remove("armed"); reset.textContent="reset all"; }
 
+  // ---------- start date ----------
+  startEl.value = state.start;
+  startEl.addEventListener("change", function(){
+    state.start = parseDate(startEl.value) ? startEl.value : "";
+    save(); renderGrid(); refreshDayHead();
+  });
+
+  // ---------- backup ----------
+  function flash(btn, text){
+    var orig = btn.textContent;
+    btn.textContent = text;
+    setTimeout(function(){ btn.textContent = orig; }, 2000);
+  }
+  var exportBtn  = document.getElementById("export");
+  var importBtn  = document.getElementById("import");
+  var importFile = document.getElementById("importFile");
+  function hasData(){
+    return state.days.some(Boolean) ||
+           Object.keys(state.dayNotes).some(function(k){ return !isBlank(state.dayNotes[k]); });
+  }
+  function renderBackup(){
+    var last = parseDate(state.lastExport);
+    var age = last ? Math.round((todayDate() - last) / 86400000) : null;
+    backupEl.textContent = age === null ? "never backed up"
+                         : age === 0 ? "backed up today"
+                         : "last backup " + age + (age === 1 ? " day ago" : " days ago");
+    // nag only once there is something worth losing
+    backupEl.classList.toggle("stale", hasData() && (age === null || age > 7));
+  }
+  exportBtn.addEventListener("click", function(){
+    state.lastExport = iso(todayDate()); save();
+    var blob = new Blob([JSON.stringify(state, null, 2)], { type:"application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "100days-" + iso(todayDate()) + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+    renderBackup();
+  });
+  importBtn.addEventListener("click", function(){ importFile.click(); });
+  importFile.addEventListener("change", function(){
+    var f = importFile.files[0];
+    if(!f) return;
+    var r = new FileReader();
+    r.onload = function(){
+      var s = null;
+      try{ s = normalize(JSON.parse(r.result)); }catch(e){}
+      importFile.value = "";
+      if(!s){ flash(importBtn, "not a backup"); return; }
+      state = s; save();
+      location.reload();   // rebuild every card from the imported state
+    };
+    r.readAsText(f);
+  });
+
   window.addEventListener("resize", applyPositions);
+  // the calendar day may roll over while the tab sits open
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden){ renderGrid(); refreshDayHead(); }
+  });
 
   renderGrid(); refreshDay();
 })();
