@@ -251,6 +251,42 @@
   .wall:not(.moved) [data-act=dock], .wall.editing [data-act=dock]{display:none;}
   @media (min-width:1400px){ .wall{display:block;} }
 
+  /* free-floating page items, added from the + in the corner */
+  #pageItems{position:absolute; top:0; left:0; right:0; height:0; z-index:5;}
+  .pitem{position:absolute; min-width:120px;}
+  .pitem:hover, .pitem.active, .pitem:focus-within{outline:2px dashed var(--line); outline-offset:4px;}
+  .pi-text{display:block; width:100%; background:transparent; border:none; outline:none;
+    resize:none; overflow:hidden; color:var(--fg); font:inherit; font-size:.85rem;
+    line-height:1.55; padding:0;}
+  .pi-text::placeholder{color:var(--line);}
+  .pi-h .pi-text{font-size:1.5rem; font-weight:700; letter-spacing:.04em; line-height:1.25;}
+  .pi-quote{background:#161616; border:2px solid var(--line); border-left:4px solid var(--fg);
+    padding:.85rem 1rem;}
+  .pi-quote .pi-text{font-style:italic;}
+  .pi-callout{display:flex; gap:.6rem; align-items:flex-start; background:#161616;
+    border:2px solid var(--line); padding:.75rem .9rem;}
+  .pi-icon{flex:0 0 auto; color:var(--accent); font-weight:700; line-height:1.55;}
+  .pi-image img{display:block; width:100%; height:auto; border:2px solid var(--line);
+    user-select:none;}
+  .pi-ctl{position:absolute; top:-.2rem; right:-.2rem; display:flex; gap:.15rem;
+    background:var(--bg); border:2px solid var(--fg); opacity:0; transition:opacity .1s;}
+  .pitem:hover .pi-ctl, .pitem.active .pi-ctl, .pitem:focus-within .pi-ctl{opacity:1;}
+  .pi-grip, .pi-del{background:transparent; border:none; color:var(--fg); font:inherit;
+    font-size:.8rem; line-height:1; padding:.25rem .35rem;}
+  .pi-grip{cursor:move; touch-action:none;}
+  .pi-del{cursor:pointer;}
+  .pi-del:hover{color:var(--accent);}
+  .pi-size{position:absolute; right:-6px; bottom:-6px; width:12px; height:12px;
+    background:var(--fg); border:2px solid var(--bg); cursor:ew-resize; touch-action:none;
+    opacity:0;}
+  .pitem:hover .pi-size, .pitem.active .pi-size{opacity:1;}
+  .addpage{position:fixed; right:1rem; bottom:1rem; z-index:60; width:2.4rem; height:2.4rem;
+    background:var(--bg); border:2px solid var(--fg); color:var(--fg); font:inherit;
+    font-size:1.2rem; line-height:1; cursor:pointer;}
+  .addpage:hover, .addpage.on{background:var(--accent); border-color:var(--accent);
+    color:var(--accent-ink);}
+  .page-menu{position:fixed; right:1rem; bottom:3.9rem;}
+
   @media (max-width:640px){
     .layout{flex-direction:column; align-items:stretch;}
     /* flatten the side column so the Day card can sit above the grid */
@@ -275,6 +311,8 @@
     <span class="wall-h" data-dir="nw"></span><span class="wall-h" data-dir="ne"></span><span class="wall-h" data-dir="sw"></span><span class="wall-h" data-dir="se"></span>
     <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="dock">dock</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
   </div>
+  <div id="pageItems"></div>
+  <button class="addpage" id="addPage" type="button" title="add to page" aria-label="add to page">+</button>
   <div class="wrap">
     <header>
       <h1>100 <span class="n">DAYS</span></h1>
@@ -391,6 +429,21 @@
     return { l:normWall(o.l, WALL_DEFAULT.l), r:normWall(o.r, WALL_DEFAULT.r) };
   }
 
+  // free-floating page items; anything malformed is dropped
+  var ITEM_TYPES = ["text","h","quote","callout","image"];
+  function normItems(arr){
+    if(!Array.isArray(arr)) return [];
+    return arr.filter(function(it){
+      return it && ITEM_TYPES.indexOf(it.type) >= 0 && isFinite(it.x) && isFinite(it.y) &&
+             isFinite(it.w) && (it.type !== "image" || okSrc(it.src));
+    }).map(function(it){
+      var o = { id:String(it.id || uid()), type:it.type, text:String(it.text || ""),
+                x:+it.x, y:Math.max(0, +it.y), w:Math.min(Math.max(+it.w, 120), 1200) };
+      if(it.type === "image") o.src = it.src;
+      return o;
+    });
+  }
+
   // validate any parsed object into a state, or null if it is not one
   function normalize(o){
     if(o && Array.isArray(o.days) && o.days.length === N){
@@ -434,7 +487,8 @@
         pos: pos,
         start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : "",
         lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : "",
-        walls: normWalls(o.walls)
+        walls: normWalls(o.walls),
+        items: normItems(o.items)
       };
     }
     return null;
@@ -447,7 +501,7 @@
       if(s) return s;
     }catch(e){}
     return { days:new Array(N).fill(false), label:"", dayNotes:{}, start:"",
-             lastExport:"", walls:normWalls(null),
+             lastExport:"", walls:normWalls(null), items:[],
              stickies:[ { id:uid(), title:"", pinned:false, done:false,
                           blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
@@ -1371,6 +1425,141 @@
   document.addEventListener("keydown", function(e){
     if(e.key === "Escape") walls.forEach(function(wl){ wl.stop(); });
   });
+
+  // ---------- page items: free-floating text, quotes, tip boxes, photos ----------
+  // Each item is { id, type, text, src?, x, y, w }. x is px from the page's
+  // centre line (so items stay put relative to the centred layout at any window
+  // width), y is px from the top of the page, w is the width.
+  var PAGE_TYPES = [
+    { type:"text",    label:"text",    hint:"plain text box",   w:300 },
+    { type:"h",       label:"heading", hint:"big bold title",   w:420 },
+    { type:"quote",   label:"quote",   hint:"quote box",        w:420 },
+    { type:"callout", label:"tip box", hint:"highlighted note", w:340 },
+    { type:"image",   label:"photo",   hint:"from your device", w:300 }
+  ];
+  var PAGE_PH = { text:"write something", h:"heading", quote:"a quote that keeps you going", callout:"tip" };
+  var pageBox = document.getElementById("pageItems");
+
+  function growText(ta){ ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; }
+
+  function placeItem(el, it){
+    el.style.left = "calc(50% + " + it.x + "px)";
+    el.style.top = it.y + "px";
+    el.style.width = it.w + "px";
+  }
+
+  function buildPageItem(it, focus){
+    var el = document.createElement("div");
+    el.className = "pitem pi-" + it.type;
+    placeItem(el, it);
+
+    var ctl = document.createElement("div");
+    ctl.className = "pi-ctl";
+    var grip = document.createElement("span");
+    grip.className = "pi-grip"; grip.textContent = "⠿"; grip.title = "drag to move";
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "pi-del"; del.textContent = "×";
+    del.setAttribute("aria-label","remove from page");
+    ctl.appendChild(grip); ctl.appendChild(del);
+
+    var ta = null;
+    if(it.type === "image"){
+      var im = document.createElement("img");
+      im.src = it.src; im.alt = ""; im.draggable = false;
+      el.appendChild(im);
+    }else{
+      if(it.type === "callout"){
+        var icon = document.createElement("span");
+        icon.className = "pi-icon"; icon.textContent = "!"; icon.setAttribute("aria-hidden","true");
+        el.appendChild(icon);
+      }
+      ta = document.createElement("textarea");
+      ta.className = "pi-text"; ta.rows = 1; ta.spellcheck = false;
+      ta.value = it.text; ta.placeholder = PAGE_PH[it.type] || "";
+      el.appendChild(ta);
+      ta.addEventListener("input", function(){ it.text = ta.value; growText(ta); save(); });
+    }
+
+    var size = document.createElement("span");
+    size.className = "pi-size"; size.title = "drag to resize";
+    el.appendChild(ctl); el.appendChild(size);
+    pageBox.appendChild(el);
+    if(ta) growText(ta);
+
+    del.addEventListener("click", function(){
+      state.items = state.items.filter(function(x){ return x.id !== it.id; });
+      el.parentNode.removeChild(el); save();
+    });
+
+    // grip moves, corner handle resizes (width; height follows the content)
+    function gesture(handle, onMove){
+      var g = null;
+      handle.addEventListener("pointerdown", function(e){
+        if(e.button !== 0) return;
+        g = { sx:e.clientX, sy:e.clientY, x:it.x, y:it.y, w:it.w };
+        handle.setPointerCapture(e.pointerId); el.classList.add("active");
+        e.preventDefault();
+      });
+      handle.addEventListener("pointermove", function(e){
+        if(!g) return;
+        onMove(g, e.clientX - g.sx, e.clientY - g.sy);
+        placeItem(el, it); if(ta) growText(ta);
+      });
+      function end(e){
+        if(!g) return; g = null;
+        try{ handle.releasePointerCapture(e.pointerId); }catch(_){}
+        el.classList.remove("active"); save();
+      }
+      handle.addEventListener("pointerup", end);
+      handle.addEventListener("pointercancel", end);
+    }
+    gesture(grip, function(g, dx, dy){ it.x = g.x + dx; it.y = Math.max(0, g.y + dy); });
+    gesture(size, function(g, dx){ it.w = Math.min(Math.max(g.w + dx, 120), 1200); });
+
+    if(focus && ta) ta.focus();
+    return el;
+  }
+
+  function addPageItem(type){
+    var spec = PAGE_TYPES.filter(function(p){ return p.type === type; })[0];
+    var it = { id:uid(), type:type, text:"", w:spec.w,
+               x:-Math.round(spec.w / 2),
+               y:Math.round(window.scrollY + window.innerHeight / 3) };
+    function commit(){ state.items.push(it); save(); buildPageItem(it, true); }
+    if(type === "image") pickPhoto(function(src){ it.src = src; commit(); });
+    else commit();
+  }
+
+  // the + in the corner and its little menu
+  var addPage = document.getElementById("addPage");
+  var pageMenu = null;
+  function closePageMenu(){
+    if(pageMenu && pageMenu.parentNode) pageMenu.parentNode.removeChild(pageMenu);
+    pageMenu = null; addPage.classList.remove("on");
+  }
+  addPage.addEventListener("click", function(e){
+    e.stopPropagation();
+    if(pageMenu){ closePageMenu(); return; }
+    pageMenu = document.createElement("div");
+    pageMenu.className = "slash page-menu";
+    PAGE_TYPES.forEach(function(p){
+      var row = document.createElement("div");
+      row.className = "slash-item";
+      var name = document.createElement("span"); name.textContent = p.label;
+      var hint = document.createElement("small"); hint.textContent = p.hint;
+      row.appendChild(name); row.appendChild(hint);
+      row.addEventListener("click", function(){ closePageMenu(); addPageItem(p.type); });
+      pageMenu.appendChild(row);
+    });
+    document.body.appendChild(pageMenu);
+    addPage.classList.add("on");
+  });
+  document.addEventListener("click", function(e){
+    if(pageMenu && !pageMenu.contains(e.target)) closePageMenu();
+  });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closePageMenu(); });
+
+  state.items.forEach(function(it){ buildPageItem(it, false); });
 
   window.addEventListener("resize", applyPositions);
   window.addEventListener("resize", function(){ walls.forEach(function(wl){ wl.applyFrame(); }); });

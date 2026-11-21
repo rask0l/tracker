@@ -17,7 +17,7 @@ linked from anywhere.
   (the side column is `display:contents` so its cards can be reordered).
 - **State is browser-only.** Everything saves to `localStorage` under key
   `hundred-v1` as
-  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, walls }`.
+  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, walls, items }`.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
   is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
@@ -80,9 +80,16 @@ linked from anywhere.
   `frame` is a viewport-px `{x,y,w,h}`, absent while docked).
   `layoutWall()` sizes and offsets the image; `applyFrame()` places the frame,
   clamped to the window.
+- Free-floating page items: the `+` fixed in the bottom-right corner adds a
+  text box, heading, quote box, tip box or photo straight onto the page (not
+  inside a card). Each lives in `items` as `{ id, type, text, src?, x, y, w }`
+  where `x` is px from the page's centre line (so items stay aligned with the
+  centred layout at any width), `y` is px from the top of the page and `w` the
+  width. They scroll with the page; hovering shows a grip to drag, a delete,
+  and a corner handle to resize. Text boxes are auto-growing textareas.
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
   tap never clears the grid; it clears ticks and day notes but keeps the added
-  notes. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
+  notes, wallpapers and page items. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
 
 ## Deploy
 
