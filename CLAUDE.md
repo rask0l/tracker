@@ -23,7 +23,9 @@ linked from anywhere.
   is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
   block is `{ id, type:'text'|'todo', text, done }`, so a note body is a mix of
   plain lines and checklist items (iPhone-Notes style: Enter adds a line,
-  Backspace on an empty line removes it). `pos` maps a card's pid (`day` or
+  Backspace on an empty line removes it). The `+ line` / `+ checklist` /
+  `+ checkbox` button row under each card is hidden until the card is hovered
+  or has focus. `pos` maps a card's pid (`day` or
   `s:<id>`) to a dragged `{x,y}`. The repo holds no progress; clearing site
   data wipes it, so the footer has `export` (downloads the state as
   `100days-<date>.json`) and `import` (loads such a file back, validated by

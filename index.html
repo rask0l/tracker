@@ -150,7 +150,9 @@
   }
   .blk:hover .bdel{opacity:.6;}
   .bdel:hover{opacity:1; color:var(--accent);}
-  .blkbar{display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.5rem;}
+  /* the add-line buttons stay out of sight until a card is hovered or being edited */
+  .blkbar{display:none; flex-wrap:wrap; gap:.4rem; margin-top:.5rem;}
+  .panel:hover .blkbar, .panel:focus-within .blkbar{display:flex;}
   .blkbar button{
     background:transparent; border:2px dashed var(--line); color:var(--muted);
     font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
