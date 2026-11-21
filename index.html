@@ -150,9 +150,13 @@
   }
   .blk:hover .bdel{opacity:.6;}
   .bdel:hover{opacity:1; color:var(--accent);}
-  /* the add-line buttons stay out of sight until a card is hovered or being edited */
+  /* the add-line buttons stay hidden until the card's small + is clicked */
   .blkbar{display:none; flex-wrap:wrap; gap:.4rem; margin-top:.5rem;}
-  .panel:hover .blkbar, .panel:focus-within .blkbar{display:flex;}
+  .blkbar.open{display:flex;}
+  .more{flex:0 0 auto; background:transparent; border:none; color:var(--muted);
+    cursor:pointer; font:inherit; font-size:.95rem; line-height:1; padding:0 .15rem;}
+  .more:hover{color:var(--fg);}
+  .more.on{color:var(--accent);}
   .blkbar button{
     background:transparent; border:2px dashed var(--line); color:var(--muted);
     font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
@@ -684,12 +688,23 @@
 
     panel.appendChild(list); panel.appendChild(bar);
 
+    // a small + in the header opens and closes the button row
+    var more = document.createElement("button");
+    more.type = "button"; more.className = "more"; more.textContent = "+";
+    more.setAttribute("aria-label","add options");
+    var head = panel.querySelector("h2"), del = head.querySelector(".del");
+    if(del) head.insertBefore(more, del); else head.appendChild(more);
+    function setOpen(on){ bar.classList.toggle("open", on); more.classList.toggle("on", on); }
+    more.addEventListener("click", function(){ setOpen(!bar.classList.contains("open")); });
+    opts.closeBar = function(){ setOpen(false); };
+
     function append(type){
       var blocks = opts.getBlocks();
       var nb = mkBlock(type, "", false);
       blocks.push(nb); opts.save();
       addBlockRow(opts, nb, null, true);
       opts.onChange && opts.onChange();
+      opts.closeBar();
     }
     addText.addEventListener("click", function(){ append("text"); });
     addCheck.addEventListener("click", function(){ append("todo"); });
@@ -841,7 +856,7 @@
         sticky.done = false;
         ck.classList.remove("on"); ck.textContent = ""; title.classList.remove("done");
       }
-      paintBox(); save();
+      paintBox(); save(); opts.closeBar();
     });
 
     stickyBox.appendChild(panel);
