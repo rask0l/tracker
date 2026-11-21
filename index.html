@@ -105,10 +105,7 @@
   }
   .ck:hover{border-color:var(--fg);}
   .ck.on{background:var(--accent); border-color:var(--accent);}
-  /* a note's cross-off box is optional: shown on hover or while editing the
-     note, and kept once the note is crossed off */
-  .sck{display:none;}
-  .panel:hover .sck, .panel:focus-within .sck, .sck.on{display:inline-flex;}
+  .ck[hidden]{display:none;}
   .prog{flex:0 0 auto; color:var(--accent); letter-spacing:.06em;}
   .nav{
     flex:0 0 auto; background:transparent; border:none; color:var(--muted);
@@ -153,7 +150,7 @@
   }
   .blk:hover .bdel{opacity:.6;}
   .bdel:hover{opacity:1; color:var(--accent);}
-  .blkbar{display:flex; gap:.4rem; margin-top:.5rem;}
+  .blkbar{display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.5rem;}
   .blkbar button{
     background:transparent; border:2px dashed var(--line); color:var(--muted);
     font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
@@ -316,6 +313,7 @@
                    title:String(s && s.title || ""),
                    pinned:!!(s && s.pinned),
                    done:!!(s && s.done),
+                   check:!!(s && (s.check || s.done)),
                    blocks:blocks };
         });
       }else{
@@ -734,7 +732,8 @@
     pin.setAttribute("aria-label","pin note"); pin.textContent = "⚑";
 
     var ck = document.createElement("button");
-    ck.type = "button"; ck.className = "ck sck" + (sticky.done ? " on" : "");
+    ck.type = "button"; ck.className = "ck" + (sticky.done ? " on" : "");
+    ck.hidden = !sticky.check;
     ck.setAttribute("aria-label","cross off note");
     ck.textContent = sticky.done ? "✓" : "";
 
@@ -753,6 +752,25 @@
 
     var opts = { listEl:null, getBlocks:function(){ return sticky.blocks; }, save:save };
     buildBody(panel, opts);
+
+    // the cross-off box is opt-in per note
+    var boxBtn = document.createElement("button");
+    boxBtn.type = "button";
+    function paintBox(){
+      ck.hidden = !sticky.check;
+      boxBtn.textContent = sticky.check ? "- checkbox" : "+ checkbox";
+    }
+    paintBox();
+    panel.querySelector(".blkbar").appendChild(boxBtn);
+    boxBtn.addEventListener("click", function(){
+      sticky.check = !sticky.check;
+      // removing the box also clears a cross-off, so nothing stays struck through unseen
+      if(!sticky.check && sticky.done){
+        sticky.done = false;
+        ck.classList.remove("on"); ck.textContent = ""; title.classList.remove("done");
+      }
+      paintBox(); save();
+    });
 
     stickyBox.appendChild(panel);
 
@@ -834,7 +852,7 @@
   state.stickies.forEach(function(s){ addStickyDom(s, false); });
 
   addBtn.addEventListener("click", function(){
-    var s = { id:uid(), title:"", pinned:false, done:false, blocks:[mkBlock("text","",false)] };
+    var s = { id:uid(), title:"", pinned:false, done:false, check:false, blocks:[mkBlock("text","",false)] };
     state.stickies.push(s); reorderStickies();
     addStickyDom(s, true);
   });

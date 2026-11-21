@@ -20,7 +20,7 @@ linked from anywhere.
   `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport }`.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
-  is the list of added notes, each `{ id, title, pinned, done, blocks }`. A
+  is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
   block is `{ id, type:'text'|'todo', text, done }`, so a note body is a mix of
   plain lines and checklist items (iPhone-Notes style: Enter adds a line,
   Backspace on an empty line removes it). `pos` maps a card's pid (`day` or
@@ -34,9 +34,10 @@ linked from anywhere.
 - Note cards (the Day card and every added note) share one look: a `::` grip to
   drag the card anywhere (double-click it to dock), a checkbox to cross it off
   (the Day card's checkbox also ticks that grid day), an editable title, and
-  the block body. On added notes the cross-off checkbox is optional: it stays
-  hidden until you hover or edit the note, and stays visible once the note is
-  crossed off. Added notes also have a pin (pinned notes sort to the top,
+  the block body. On added notes the cross-off checkbox is opt-in per note
+  (`check`, off for new notes): a `+ checkbox` / `- checkbox` button in the
+  note's button bar adds or removes it, and removing it also clears the
+  cross-off. Added notes also have a pin (pinned notes sort to the top,
   marked with a red left edge) and a delete.
 - Ticking the last checklist item in a day's note ticks the day itself, but
   unchecking an item never unticks it. The Day card header shows checklist
