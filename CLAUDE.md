@@ -62,8 +62,10 @@ linked from anywhere.
   has a Notion-style `reposition` button on hover: in that mode you drag to pan
   and scroll to zoom (1x to 4x over a cover fit), `reset` restores the default
   crop, and `done` or Esc leaves the mode. Outside that mode, dragging a
-  frame moves it, its four corner handles resize it (min 120px), and a
-  double-click docks it back in the gutter. Each wall saves to `walls` as
+  frame moves it, its four corner handles resize it (min 120px), and a `dock`
+  button (shown on hover once the frame has moved) puts it back in the
+  gutter. Docking is deliberately not on double-click: two quick drags count
+  as a double-click and snapped frames back by accident. Each wall saves to `walls` as
   `{ zoom, x, y, frame? }` under `l` and `r` (x/y are 0..1 pan fractions;
   `frame` is a viewport-px `{x,y,w,h}`, absent while docked).
   `layoutWall()` sizes and offsets the image; `applyFrame()` places the frame,

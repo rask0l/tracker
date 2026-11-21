@@ -221,6 +221,7 @@
   .wall-btn:hover{border-color:var(--accent); color:var(--accent);}
   .wall-hint{border-color:var(--line); color:var(--muted);}
   .wall:not(.editing) .wall-hint, .wall:not(.editing) [data-act=reset]{display:none;}
+  .wall:not(.moved) [data-act=dock], .wall.editing [data-act=dock]{display:none;}
   @media (min-width:1400px){ .wall{display:block;} }
 
   @media (max-width:640px){
@@ -240,12 +241,12 @@
   <div class="wall wall-l" data-wall="l">
     <img src="assets/wall_1.jpg" alt="" draggable="false">
     <span class="wall-h" data-dir="nw"></span><span class="wall-h" data-dir="ne"></span><span class="wall-h" data-dir="sw"></span><span class="wall-h" data-dir="se"></span>
-    <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
+    <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="dock">dock</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
   </div>
   <div class="wall wall-r" data-wall="r">
     <img src="assets/wall_2.jpg" alt="" draggable="false">
     <span class="wall-h" data-dir="nw"></span><span class="wall-h" data-dir="ne"></span><span class="wall-h" data-dir="sw"></span><span class="wall-h" data-dir="se"></span>
-    <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
+    <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="dock">dock</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
   </div>
   <div class="wrap">
     <header>
@@ -1047,7 +1048,9 @@
         st.left = Math.min(Math.max(f.x, 0), window.innerWidth  - w) + "px";
         st.top  = Math.min(Math.max(f.y, 0), window.innerHeight - h) + "px";
         st.right = "auto";
+        frame.classList.add("moved");
       }else{
+        frame.classList.remove("moved");
         st.width = st.height = st.left = st.top = st.right = "";
       }
       layoutWall(wl);
@@ -1100,9 +1103,9 @@
     }
     frame.addEventListener("pointerup", endDrag);
     frame.addEventListener("pointercancel", endDrag);
-    // double-click docks the frame back into its gutter, like a note card
-    frame.addEventListener("dblclick", function(e){
-      if(wl.editing || e.target.closest(".wall-bar")) return;
+    // docking is an explicit button, never a double-click: two quick drags
+    // read as a double-click and used to snap the frame back by accident
+    frame.querySelector("[data-act=dock]").addEventListener("click", function(){
       delete state.walls[wl.key].frame;
       applyFrame(); save();
     });
