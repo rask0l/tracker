@@ -53,6 +53,11 @@ linked from anywhere.
   not break it; undated, it ends at the last ticked box) and `best` is the
   longest run anywhere. A day with any note text shows a small red dot on its
   box.
+- Two decorative wallpapers sit in the side gutters, Notion style:
+  `assets/wall_1.jpg` on the left and `assets/wall_2.jpg` on the right
+  (shown black and white with a CSS `grayscale` filter; the file itself is in
+  colour). They are `position:fixed`, sized to fit the gutter (max 340px), and
+  only appear at 1400px wide and up so they never crowd the grid.
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
   tap never clears the grid; it clears ticks and day notes but keeps the added
   notes. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.

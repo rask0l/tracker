@@ -183,6 +183,18 @@
   .hint .touch{display:none;}
   @media (hover:none){ .hint .mouse{display:none;} .hint .touch{display:inline;} }
 
+  /* side wallpapers, Notion style: fixed in the empty gutters on wide screens */
+  .wall{
+    --gw:calc((100vw - 840px) / 2);           /* width of one gutter */
+    --ww:min(340px, calc(var(--gw) - 4rem));  /* image width inside it */
+    position:fixed; top:3rem; width:var(--ww); height:auto;
+    max-height:calc(100vh - 6rem); object-fit:cover;
+    border:2px solid var(--line); display:none; pointer-events:none;
+  }
+  .wall-l{left:calc((var(--gw) - var(--ww)) / 2);}
+  .wall-r{right:calc((var(--gw) - var(--ww)) / 2); filter:grayscale(1);}
+  @media (min-width:1400px){ .wall{display:block;} }
+
   @media (max-width:640px){
     .layout{flex-direction:column; align-items:stretch;}
     /* flatten the side column so the Day card can sit above the grid */
@@ -197,6 +209,8 @@
 </style>
 </head>
 <body>
+  <img class="wall wall-l" src="assets/wall_1.jpg" alt="" aria-hidden="true">
+  <img class="wall wall-r" src="assets/wall_2.jpg" alt="" aria-hidden="true">
   <div class="wrap">
     <header>
       <h1>100 <span class="n">DAYS</span></h1>
