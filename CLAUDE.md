@@ -17,7 +17,7 @@ linked from anywhere.
   (the side column is `display:contents` so its cards can be reordered).
 - **State is browser-only.** Everything saves to `localStorage` under key
   `hundred-v1` as
-  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport }`.
+  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, walls }`.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
   is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
@@ -58,7 +58,12 @@ linked from anywhere.
   (shown black and white with a CSS `grayscale` filter; the file itself is in
   colour). They are `position:fixed`, as wide as the gutter allows (max 460px) and
   the full window height (`object-fit:cover` crops the sides), and
-  only appear at 1400px wide and up so they never crowd the grid.
+  only appear at 1400px wide and up so they never crowd the grid. Each frame
+  has a Notion-style `reposition` button on hover: in that mode you drag to pan
+  and scroll to zoom (1x to 4x over a cover fit), `reset` restores the default
+  crop, and `done` or Esc leaves the mode. The crop saves to `walls` as
+  `{ l:{zoom,x,y}, r:{zoom,x,y} }` (x/y are 0..1 pan fractions);
+  `layoutWall()` turns that into the image's size and offset.
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
   tap never clears the grid; it clears ticks and day notes but keeps the added
   notes. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.

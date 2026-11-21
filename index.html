@@ -183,18 +183,34 @@
   .hint .touch{display:none;}
   @media (hover:none){ .hint .mouse{display:none;} .hint .touch{display:inline;} }
 
-  /* side wallpapers, Notion style: fixed in the empty gutters on wide screens */
+  /* side wallpapers, Notion style: fixed in the empty gutters on wide screens.
+     The frame crops; the image inside is sized and offset by JS so it can be
+     dragged and zoomed (see layoutWall). */
   .wall{
     --gw:calc((100vw - 840px) / 2);           /* width of one gutter */
-    --ww:min(460px, calc(var(--gw) - 4rem));  /* image width inside it */
-    /* full window height; cover crops the sides rather than squashing */
+    --ww:min(460px, calc(var(--gw) - 4rem));  /* frame width inside it */
     position:fixed; top:3rem; width:var(--ww); height:calc(100vh - 6rem);
-    object-fit:cover;
-    border:2px solid var(--line); display:none; pointer-events:none;
+    border:2px solid var(--line); display:none; overflow:hidden; z-index:1;
   }
   .wall-l{left:calc((var(--gw) - var(--ww)) / 2);}
-  .wall-r{right:calc((var(--gw) - var(--ww)) / 2); filter:grayscale(1);
-    object-position:70% 50%;}
+  .wall-r{right:calc((var(--gw) - var(--ww)) / 2);}
+  .wall img{position:absolute; max-width:none; user-select:none;
+    -webkit-user-drag:none; pointer-events:none;}
+  .wall-r img{filter:grayscale(1);}
+  .wall.editing{border-color:var(--accent); cursor:grab; touch-action:none;}
+  .wall.editing.dragging{cursor:grabbing;}
+  .wall-bar{position:absolute; right:.5rem; bottom:.5rem; display:flex; gap:.4rem;
+    align-items:center; opacity:0; transition:opacity .12s;}
+  .wall:hover .wall-bar, .wall.editing .wall-bar{opacity:1;}
+  .wall-btn, .wall-hint{
+    background:var(--bg); border:2px solid var(--fg); color:var(--fg);
+    font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
+    padding:.3rem .55rem;
+  }
+  .wall-btn{cursor:pointer;}
+  .wall-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .wall-hint{border-color:var(--line); color:var(--muted);}
+  .wall:not(.editing) .wall-hint, .wall:not(.editing) [data-act=reset]{display:none;}
   @media (min-width:1400px){ .wall{display:block;} }
 
   @media (max-width:640px){
@@ -211,8 +227,14 @@
 </style>
 </head>
 <body>
-  <img class="wall wall-l" src="assets/wall_1.jpg" alt="" aria-hidden="true">
-  <img class="wall wall-r" src="assets/wall_2.jpg" alt="" aria-hidden="true">
+  <div class="wall wall-l" data-wall="l">
+    <img src="assets/wall_1.jpg" alt="" draggable="false">
+    <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
+  </div>
+  <div class="wall wall-r" data-wall="r">
+    <img src="assets/wall_2.jpg" alt="" draggable="false">
+    <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
+  </div>
   <div class="wrap">
     <header>
       <h1>100 <span class="n">DAYS</span></h1>
@@ -302,6 +324,18 @@
   function iso(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
   function fmt(d){ return DOW[d.getDay()] + " " + d.getDate() + " " + MON[d.getMonth()]; }
 
+  // wallpaper crop: zoom 1..4 over a cover fit, x/y pan 0..1 (0.5 = centred)
+  var WALL_DEFAULT = { l:{ zoom:1, x:0.5, y:0.5 }, r:{ zoom:1, x:0.7, y:0.5 } };
+  function normWall(w, d){
+    w = w || {};
+    function c(v, lo, hi, def){ v = +v; return isFinite(v) ? Math.min(Math.max(v, lo), hi) : def; }
+    return { zoom:c(w.zoom, 1, 4, d.zoom), x:c(w.x, 0, 1, d.x), y:c(w.y, 0, 1, d.y) };
+  }
+  function normWalls(o){
+    o = (o && typeof o === "object") ? o : {};
+    return { l:normWall(o.l, WALL_DEFAULT.l), r:normWall(o.r, WALL_DEFAULT.r) };
+  }
+
   // validate any parsed object into a state, or null if it is not one
   function normalize(o){
     if(o && Array.isArray(o.days) && o.days.length === N){
@@ -344,7 +378,8 @@
         stickies: stickies,
         pos: pos,
         start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : "",
-        lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : ""
+        lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : "",
+        walls: normWalls(o.walls)
       };
     }
     return null;
@@ -357,7 +392,7 @@
       if(s) return s;
     }catch(e){}
     return { days:new Array(N).fill(false), label:"", dayNotes:{}, start:"",
-             lastExport:"",
+             lastExport:"", walls:normWalls(null),
              stickies:[ { id:uid(), title:"", pinned:false, done:false,
                           blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
@@ -947,7 +982,82 @@
     r.readAsText(f);
   });
 
+  // ---------- wallpapers: Notion-style reposition ----------
+  var walls = [];
+  function layoutWall(wl){
+    var W = wl.frame.clientWidth, H = wl.frame.clientHeight;
+    var nw = wl.img.naturalWidth, nh = wl.img.naturalHeight;
+    if(!W || !H || !nw || !nh) return;        // hidden on narrow screens, or not loaded
+    var c = state.walls[wl.key];
+    var sc = Math.max(W / nw, H / nh) * c.zoom;
+    wl.dw = nw * sc; wl.dh = nh * sc; wl.W = W; wl.H = H;
+    wl.img.style.width  = wl.dw + "px";
+    wl.img.style.height = wl.dh + "px";
+    wl.img.style.left = (-(wl.dw - W) * c.x) + "px";
+    wl.img.style.top  = (-(wl.dh - H) * c.y) + "px";
+  }
+  function layoutWalls(){ walls.forEach(layoutWall); }
+  Array.prototype.forEach.call(document.querySelectorAll(".wall"), function(frame){
+    var wl = { frame:frame, key:frame.getAttribute("data-wall"),
+               img:frame.querySelector("img"), editing:false };
+    var editBtn = frame.querySelector("[data-act=edit]");
+    var resetBtn = frame.querySelector("[data-act=reset]");
+    walls.push(wl);
+    if(wl.img.complete) layoutWall(wl);
+    wl.img.addEventListener("load", function(){ layoutWall(wl); });
+
+    function setEditing(on){
+      wl.editing = on;
+      frame.classList.toggle("editing", on);
+      editBtn.textContent = on ? "done" : "reposition";
+      if(!on) save();
+    }
+    wl.stop = function(){ if(wl.editing) setEditing(false); };
+    editBtn.addEventListener("click", function(){ setEditing(!wl.editing); });
+    resetBtn.addEventListener("click", function(){
+      state.walls[wl.key] = normWall(null, WALL_DEFAULT[wl.key]);
+      layoutWall(wl); save();
+    });
+
+    var drag = null;
+    frame.addEventListener("pointerdown", function(e){
+      if(!wl.editing || e.target.closest(".wall-bar")) return;
+      var c = state.walls[wl.key];
+      drag = { sx:e.clientX, sy:e.clientY, x:c.x, y:c.y };
+      frame.setPointerCapture(e.pointerId); frame.classList.add("dragging");
+      e.preventDefault();
+    });
+    frame.addEventListener("pointermove", function(e){
+      if(!drag) return;
+      var c = state.walls[wl.key];
+      // moving the pointer right drags the picture right, so the pan goes left
+      var ox = wl.dw - wl.W, oy = wl.dh - wl.H;
+      if(ox > 0) c.x = Math.min(Math.max(drag.x - (e.clientX - drag.sx) / ox, 0), 1);
+      if(oy > 0) c.y = Math.min(Math.max(drag.y - (e.clientY - drag.sy) / oy, 0), 1);
+      layoutWall(wl);
+    });
+    function endDrag(e){
+      if(!drag) return; drag = null;
+      try{ frame.releasePointerCapture(e.pointerId); }catch(_){}
+      frame.classList.remove("dragging");
+      save();
+    }
+    frame.addEventListener("pointerup", endDrag);
+    frame.addEventListener("pointercancel", endDrag);
+    frame.addEventListener("wheel", function(e){
+      if(!wl.editing) return;
+      e.preventDefault();
+      var c = state.walls[wl.key];
+      c.zoom = Math.min(Math.max(c.zoom * Math.exp(-e.deltaY * 0.0015), 1), 4);
+      layoutWall(wl); save();
+    }, { passive:false });
+  });
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape") walls.forEach(function(wl){ wl.stop(); });
+  });
+
   window.addEventListener("resize", applyPositions);
+  window.addEventListener("resize", layoutWalls);
   // the calendar day may roll over while the tab sits open
   document.addEventListener("visibilitychange", function(){
     if(!document.hidden){ renderGrid(); refreshDayHead(); }
