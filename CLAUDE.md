@@ -61,9 +61,13 @@ linked from anywhere.
   only appear at 1400px wide and up so they never crowd the grid. Each frame
   has a Notion-style `reposition` button on hover: in that mode you drag to pan
   and scroll to zoom (1x to 4x over a cover fit), `reset` restores the default
-  crop, and `done` or Esc leaves the mode. The crop saves to `walls` as
-  `{ l:{zoom,x,y}, r:{zoom,x,y} }` (x/y are 0..1 pan fractions);
-  `layoutWall()` turns that into the image's size and offset.
+  crop, and `done` or Esc leaves the mode. Outside that mode, dragging a
+  frame moves it, its four corner handles resize it (min 120px), and a
+  double-click docks it back in the gutter. Each wall saves to `walls` as
+  `{ zoom, x, y, frame? }` under `l` and `r` (x/y are 0..1 pan fractions;
+  `frame` is a viewport-px `{x,y,w,h}`, absent while docked).
+  `layoutWall()` sizes and offsets the image; `applyFrame()` places the frame,
+  clamped to the window.
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
   tap never clears the grid; it clears ticks and day notes but keeps the added
   notes. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
