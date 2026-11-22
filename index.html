@@ -280,6 +280,12 @@
   .cover.bw img{filter:grayscale(1);}
   .cover.moving{cursor:grab; touch-action:none;}
   .cover.moving.dragging{cursor:grabbing;}
+  .cover-size{position:absolute; left:0; right:0; bottom:0; height:12px; z-index:3;
+    cursor:ns-resize; touch-action:none;}
+  .cover-size::after{content:""; position:absolute; left:50%; bottom:3px; width:56px; height:4px;
+    margin-left:-28px; background:var(--fg); opacity:0; transition:opacity .12s;}
+  .cover:hover .cover-size::after, .cover.sizing .cover-size::after{opacity:1;}
+  .cover.moving .cover-size{display:none;}
   .cover-bar{position:absolute; right:1rem; bottom:1rem; display:flex; gap:.4rem;
     align-items:center; opacity:0; transition:opacity .12s;}
   .cover:hover .cover-bar, .cover.moving .cover-bar{opacity:1;}
@@ -467,6 +473,7 @@
   <div class="main" id="main">
   <div class="cover" id="cover" hidden>
     <img id="coverImg" alt="" draggable="false">
+    <div class="cover-size" id="coverSize" title="drag to change the cover height (double-click resets)"></div>
     <div class="cover-bar"><span class="cover-hint">drag to reposition</span><button class="cover-btn" type="button" data-act="change">change</button><button class="cover-btn" type="button" data-act="move">reposition</button><button class="cover-btn" type="button" data-act="bw">b&amp;w</button><button class="cover-btn" type="button" data-act="remove">remove</button></div>
   </div>
   <div class="page">
@@ -609,8 +616,14 @@
 
   function normCover(c){
     return (c && okSrc(c.src))
-      ? { src:c.src, y:isFinite(c.y) ? Math.min(Math.max(+c.y, 0), 100) : 50, bw:!!c.bw }
+      ? normCoverH({ src:c.src, y:isFinite(c.y) ? Math.min(Math.max(+c.y, 0), 100) : 50, bw:!!c.bw }, c.h)
       : null;
+  }
+  // h: the banner height you dragged it to, in px (absent = the default height)
+  var COVER_MIN = 120, COVER_MAX = 900;
+  function normCoverH(o, h){
+    if(isFinite(h) && +h >= COVER_MIN) o.h = Math.min(Math.round(+h), COVER_MAX);
+    return o;
   }
   // an icon is { emoji } or { src } (a small JPEG), or null
   function normIcon(i){
@@ -961,14 +974,31 @@
       r.onload = function(){
         var im = new Image();
         im.onload = function(){
-          var max = maxPx || 720, sc = Math.min(1, max / Math.max(im.width, im.height));
+          var max = maxPx || 720, big = max >= 1800;
+          var sc = Math.min(1, max / Math.max(im.width, im.height));
+          // a JPEG/WebP that is already small enough is kept exactly as uploaded:
+          // re-encoding it would only add compression artefacts
+          if(sc === 1 && /^image\/(jpeg|webp)$/.test(f.type) && f.size <= (big ? 900 : 250) * 1024){
+            cb(r.result); return;
+          }
+          var src = im, w = im.width, h = im.height;
+          var tw = Math.max(1, Math.round(w * sc)), th = Math.max(1, Math.round(h * sc));
+          // halve in steps first: one big drawImage jump makes a blurry, aliased result
+          while(w / 2 >= tw * 1.5){
+            var step = document.createElement("canvas");
+            step.width = Math.round(w / 2); step.height = Math.round(h / 2);
+            var sg = step.getContext("2d");
+            sg.imageSmoothingEnabled = true; sg.imageSmoothingQuality = "high";
+            sg.drawImage(src, 0, 0, step.width, step.height);
+            src = step; w = step.width; h = step.height;
+          }
           var c = document.createElement("canvas");
-          c.width = Math.max(1, Math.round(im.width * sc));
-          c.height = Math.max(1, Math.round(im.height * sc));
+          c.width = tw; c.height = th;
           var g = c.getContext("2d");
+          g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
           g.fillStyle = "#0f0f0f"; g.fillRect(0, 0, c.width, c.height);  // transparent PNGs
-          g.drawImage(im, 0, 0, c.width, c.height);
-          cb(c.toDataURL("image/jpeg", 0.72));
+          g.drawImage(src, 0, 0, c.width, c.height);
+          cb(c.toDataURL("image/jpeg", big ? 0.86 : 0.8));
         };
         im.onerror = function(){
           toast("couldn't read that photo");
@@ -1817,6 +1847,7 @@
     if(!c){ setCoverMoving(false); return; }
     if(coverImg.getAttribute("src") !== c.src) coverImg.src = c.src;
     coverImg.style.objectPosition = "50% " + c.y + "%";
+    coverEl.style.height = c.h ? Math.min(c.h, Math.round(window.innerHeight * 0.9)) + "px" : "";
     coverEl.classList.toggle("bw", !!c.bw);
     coverBtn("bw").classList.toggle("on", !!c.bw);
   }
@@ -1828,9 +1859,11 @@
   }
   function chooseCover(){
     pickPhoto(function(src){
-      cur().cover = { src:src, y:50, bw:!!(cur().cover && cur().cover.bw) };
+      var old = cur().cover;
+      cur().cover = { src:src, y:50, bw:!!(old && old.bw) };
+      if(old && old.h) cur().cover.h = old.h;          // keep the height you chose
       save(); renderCover();
-    }, 1800);
+    }, 2400);
   }
   addCover.addEventListener("click", chooseCover);
   coverBtn("change").addEventListener("click", chooseCover);
@@ -1881,6 +1914,30 @@
   coverEl.addEventListener("pointerup", endCoverDrag);
   coverEl.addEventListener("pointercancel", endCoverDrag);
   document.addEventListener("keydown", function(e){ if(e.key === "Escape" && coverMoving) setCoverMoving(false); });
+  // drag the bottom edge to make the banner taller or shorter, so less of
+  // the photo is cropped away
+  var coverSize = document.getElementById("coverSize"), sizeDrag = null;
+  coverSize.addEventListener("pointerdown", function(e){
+    if(e.button !== 0) return;
+    sizeDrag = { sy:e.clientY, h:coverEl.offsetHeight };
+    coverSize.setPointerCapture(e.pointerId); coverEl.classList.add("sizing");
+    e.preventDefault(); e.stopPropagation();
+  });
+  coverSize.addEventListener("pointermove", function(e){
+    if(!sizeDrag) return;
+    var h = Math.min(Math.max(sizeDrag.h + (e.clientY - sizeDrag.sy), COVER_MIN), COVER_MAX);
+    cur().cover.h = Math.round(h);
+    coverEl.style.height = h + "px";
+  });
+  function endSize(e){
+    if(!sizeDrag) return; sizeDrag = null;
+    try{ coverSize.releasePointerCapture(e.pointerId); }catch(_){}
+    coverEl.classList.remove("sizing"); save();
+  }
+  coverSize.addEventListener("pointerup", endSize);
+  coverSize.addEventListener("pointercancel", endSize);
+  // double-clicking the edge goes back to the default height
+  coverSize.addEventListener("dblclick", function(){ delete cur().cover.h; renderCover(); save(); });
 
   // ---------- page items: free-floating text, quotes, tip boxes, photos ----------
   // Each item is { id, type, text, src?, x, y, w }. x is px from the page's

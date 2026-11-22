@@ -111,9 +111,15 @@ linked from anywhere.
   `visibility:hidden`, not removed, so `done` stays exactly where
   `reposition` was; when they collapsed, `remove` slid under the pointer and a
   double-click on `done` deleted the cover. It saves as
-  `cover: { src, y, bw }` (y is the vertical crop in %) or `null`. Covers are
-  stored as JPEGs up to 1800px wide (`pickPhoto(cb, maxPx)`); other photos use
-  the 720px default. Everything below the cover sits in `.page`
+  `cover: { src, y, bw, h? }` (y is the vertical crop in %, h a dragged
+  banner height in px, 120 to 900) or `null`. Dragging the cover's bottom
+  edge sets `h` so less of the photo is cropped; double-clicking the edge
+  resets it. Covers are stored up to 2400px (`pickPhoto(cb, maxPx)`); other
+  photos use the 720px default. `pickPhoto` keeps an already-small JPEG/WebP
+  exactly as uploaded (no re-encoding), otherwise halves the image in steps
+  with high-quality smoothing before the final resize and saves a JPEG
+  (quality 0.86 for covers, 0.8 otherwise). localStorage gives the page
+  about 5M characters, so a handful of large covers can fill it. Everything below the cover sits in `.page`
   (`position:relative`), so page items keep their place when a cover is added.
 - Free-floating page items: the `+` fixed in the bottom-right corner adds a
   text box, heading, quote box, tip box, checklist, countdown or photo
