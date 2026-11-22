@@ -2044,9 +2044,27 @@ function app(BOOT){
     sync.known[h] = 1;
     try{ localStorage.setItem(SYNC_KEY + "-known", JSON.stringify(Object.keys(sync.known).slice(-5000))); }catch(e){}
   }
+  // hard limits so a bug can never run up a Cloudflare bill: one sync per
+  // 10s, and at most 1000 a day per device (failed tries and retries count).
+  // 1000 syncs x 2 writes x 30 days is 6% of R2's free million writes.
+  var SYNC_GAP = 10000, SYNC_DAILY = 1000, lastPushAt = 0;
+  function syncCount(bump){
+    var day = iso(todayDate()), c;
+    try{ c = JSON.parse(localStorage.getItem(SYNC_KEY + "-count") || "null"); }catch(e){ c = null; }
+    if(!c || c.day !== day) c = { day:day, n:0 };
+    if(bump){ c.n++; try{ localStorage.setItem(SYNC_KEY + "-count", JSON.stringify(c)); }catch(e){} }
+    return c.n;
+  }
   function push(){
     if(!sync.cfg || storageLocked) return Promise.resolve();
     if(sync.busy){ sync.again = true; return Promise.resolve(); }
+    var wait = lastPushAt + SYNC_GAP - Date.now();
+    if(wait > 0){ clearTimeout(sync.timer); sync.timer = setTimeout(push, wait); return Promise.resolve(); }
+    if(syncCount(false) >= SYNC_DAILY){
+      sync.err = "daily sync limit reached; changes are saved here and sync resumes tomorrow";
+      paintSync(); return Promise.resolve();
+    }
+    syncCount(true); lastPushAt = Date.now();
     sync.busy = true; clearTimeout(sync.retry); paintSync();
     var at = state.savedAt || Date.now();
     return dehydrate(JSON.stringify(state)).then(function(d){
@@ -2125,7 +2143,7 @@ function app(BOOT){
     syncBtn.classList.toggle("on", on);
     if(!on) return;
     syncStatusEl.classList.toggle("stale", !!sync.err);
-    syncStatusEl.textContent = sync.err ? "sync: " + sync.err + " · retrying"
+    syncStatusEl.textContent = sync.err ? "sync: " + sync.err + (/limit/.test(sync.err) ? "" : " · retrying")
       : (sync.busy || sync.timer && !sync.lastOk) ? "syncing..."
       : sync.lastOk ? "synced " + ago(sync.lastOk) : "sync on";
   }

@@ -78,7 +78,10 @@ linked from anywhere.
   `history/`. On open (`syncCheck`) the newer copy wins by `savedAt`: a newer
   cloud copy replaces the local one after saving a `before-sync-<time>` copy
   in IndexedDB, then reloads; a newer local copy uploads. Each change uploads
-  about 2.5s later (`schedulePush`), failures retry every 30s, and the
+  about 2.5s after editing pauses (`schedulePush`), failures retry every
+  30s, and hard limits keep it inside R2's free tier even if a bug loops: at
+  most one sync per 10s and 1000 per day per device (`SYNC_GAP`,
+  `SYNC_DAILY`, counted in localStorage `hundred-sync-count`), and the
   sidebar shows `synced N ago` instead of the backup reminder. `save()` skips
   writes when nothing changed, so loading the page never counts as an edit.
   `sync/` is excluded from the Jekyll build; local `.dev.vars` is git-ignored.
