@@ -1,8 +1,9 @@
 # tracker
 
-A single-page **100-day tick-box tracker**. It replaced an older multi-page
-progress dashboard (study/gym/notes/blog); that history was intentionally
-wiped. Everything here is for the owner only. The site is `noindex` and is not
+A single-page, Notion-style **day tracker**: tick-box grids of any length
+plus document pages. It started as one 100-day tracker and replaced an older
+multi-page progress dashboard (study/gym/notes/blog); that history was
+intentionally wiped. Everything here is for the owner only. The site is `noindex` and is not
 linked from anywhere.
 
 ## What it is
@@ -23,7 +24,7 @@ linked from anywhere.
   (the side column is `display:contents` so its cards can be reordered).
 - **State is browser-only.** Everything saves to `localStorage` under key
   `hundred-v1` as
-  `{ n, title, days, label, dayNotes, stickies, pos, start, lastExport, items, cover, icon, pages, sidebarHidden }`.
+  `{ n, title, days, label, dayNotes, stickies, start, lastExport, items, cover, icon, pages, sidebarHidden }`.
   The root holds the home tracker's own fields (`normTracker()` validates
   the per-tracker part for home and tracker pages alike); `T` is the tracker
   on screen and all tracker code reads `T.days`, `T.n` and so on, never
@@ -38,28 +39,27 @@ linked from anywhere.
   removes it, and Backspace on an empty styled line first turns it back into
   text. Typing `/` at the start of a line opens a Notion-style slash menu
   (filter by typing, arrows and Enter to pick, Esc to close) that converts the
-  line. Photos are shrunk to 720px JPEGs before saving because everything
-  lives in localStorage (about 5MB); if a save ever fails, a red toast says so
+  line, and typing `[]` at the start of a plain line makes it a checklist
+  item. There are no add-line buttons: Enter, `/` and `[]` cover it. Photos
+  are shrunk to 720px JPEGs before saving because everything lives in
+  localStorage (about 5MB); if a save ever fails, a red toast says so
   instead of losing changes silently. Block rows use `bt-<type>` classes;
-  never `blk-<type>`, since `.blk-text` is the line's input. The `+ line` / `+ checklist` /
-  `+ checkbox` button row under each card is hidden until you click the small
-  `+` in the card's header (it turns red while open); choosing an option
-  closes the row again. `pos` maps a card's pid (`day` or
-  `s:<id>`) to a dragged `{x,y}`. The repo holds no progress; clearing site
-  data wipes it, so the footer has `export` (downloads the state as
-  `100days-<date>.json`) and `import` (loads such a file back, validated by
-  the same `normalize()` that `load()` uses, then reloads the page). There is
-  deliberately no database: the JSON file is the backup. `lastExport` is the
-  date of the last export; the footer shows `last backup N days ago` and turns
-  it red once there is data and no export in over 7 days.
-- Note cards (the Day card and every added note) share one look: a `::` grip to
-  drag the card anywhere (double-click it to dock), a checkbox to cross it off
-  (the Day card's checkbox also ticks that grid day), an editable title, and
-  the block body. On added notes the cross-off checkbox is opt-in per note
-  (`check`, off for new notes): a `+ checkbox` / `- checkbox` button in the
-  note's button bar adds or removes it, and removing it also clears the
-  cross-off. Added notes also have a pin (pinned notes sort to the top,
-  marked with a red left edge) and a delete.
+  never `blk-<type>`, since `.blk-text` is the line's input. The repo holds
+  no progress; clearing site data wipes it, so the bottom of the sidebar has
+  `export` (downloads the whole state as `100days-<date>.json`) and `import`
+  (loads such a file back, validated by the same `normalize()` that `load()`
+  uses, then reloads the page). There is deliberately no database: the JSON
+  file is the backup. `lastExport` is the date of the last export; under the
+  buttons the sidebar shows `last backup N days ago` and turns it red once
+  there is data and no export in over 7 days.
+- Note cards (the Day card and every added note) sit in the tracker's side
+  column and share one look: a checkbox to cross it off (the Day card's
+  checkbox also ticks that grid day), a title, and the block body. They do
+  not drag or float; the old grip and saved `pos` were removed once floating
+  checklist page items existed. On added notes the cross-off checkbox is
+  opt-in per note (`check`, off for new notes), switched from the note's `⋯`
+  menu; removing it also clears the cross-off. Added notes also have a pin
+  (pinned notes sort to the top, marked with a red left edge) and a delete.
 - Ticking the last checklist item in a day's note ticks the day itself, but
   unchecking an item never unticks it. The Day card header shows checklist
   progress like `2/3`. (A daily template card that pre-filled every day was
@@ -68,7 +68,8 @@ linked from anywhere.
   one for today's calendar date, each box shows its date on hover, the Day
   card shows `SAT 21 NOV` under its title, and a status line says `day n of 100`
   plus how many past days were missed. Without a start date, the first
-  unticked box is "today". Either way "today" gets an inset border.
+  unticked box is "today" and the status line stays empty. Either way
+  "today" gets an inset border.
 - The progress bar and `N / 100` count derive from how many boxes are ticked.
   `streak` is the run of ticked boxes ending at today (an unticked today does
   not break it; undated, it ends at the last ticked box) and `best` is the

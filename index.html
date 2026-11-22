@@ -94,11 +94,6 @@
   /* ---- note card ---- */
   .panel{border:2px solid var(--line); padding:.85rem; background:var(--bg);}
   .panel.pinned{border-left:5px solid var(--accent);}
-  .panel.float{position:fixed; z-index:50; width:250px;
-    box-shadow:6px 6px 0 var(--line); border-color:var(--fg);}
-  .grip{flex:0 0 auto; color:var(--line); cursor:move; font-size:.85rem;
-    letter-spacing:-1px; touch-action:none;}
-  .grip:hover{color:var(--muted);}
   .panel h2{
     margin:0 0 .55rem; font-size:.72rem; letter-spacing:.14em;
     text-transform:uppercase; color:var(--muted); font-weight:700;
@@ -178,19 +173,11 @@
     max-width:calc(100vw - 2rem); background:var(--accent); color:var(--accent-ink);
     padding:.55rem .9rem; font-size:.72rem; font-weight:700; letter-spacing:.08em;
     text-transform:uppercase;}
-  /* the add-line buttons stay hidden until the card's small + is clicked */
-  .blkbar{display:none; flex-wrap:wrap; gap:.4rem; margin-top:.5rem;}
-  .blkbar.open{display:flex;}
-  .more{flex:0 0 auto; background:transparent; border:none; color:var(--muted);
-    cursor:pointer; font:inherit; font-size:.95rem; line-height:1; padding:0 .15rem;}
-  .more:hover{color:var(--fg);}
-  .more.on{color:var(--accent);}
-  .blkbar button{
-    background:transparent; border:2px dashed var(--line); color:var(--muted);
-    font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
-    padding:.3rem .5rem; cursor:pointer;
-  }
-  .blkbar button:hover{border-color:var(--accent); color:var(--accent);}
+  /* a note's ⋯ menu: per-note options (for now, the cross-off checkbox) */
+  .nmore{flex:0 0 auto; background:transparent; border:none; color:var(--muted);
+    cursor:pointer; font:inherit; font-size:.85rem; line-height:1; padding:0 .15rem;}
+  .nmore:hover, .nmore.on{color:var(--fg);}
+  .nmenu{position:fixed; z-index:95;}
 
   .addnote{
     background:transparent; border:2px dashed var(--line); color:var(--muted);
@@ -334,6 +321,10 @@
     color:var(--muted); font:inherit; font-size:.68rem; letter-spacing:.1em;
     text-transform:uppercase; padding:.55rem; cursor:pointer;}
   .sb-new:hover{border-color:var(--accent); color:var(--accent);}
+  .sb-foot{margin-top:.7rem; padding-top:.7rem; border-top:2px solid var(--line);}
+  .sb-tools{display:flex; gap:.4rem;}
+  .sb-tools .btn{flex:1 1 0; padding:.35rem .4rem; font-size:.62rem;}
+  .sb-foot .backup{display:block; margin-top:.5rem; font-size:.6rem;}
   .main{position:relative; margin-left:240px; min-height:100vh;}
   body.sb-hidden .sidebar{display:none;}
   body.sb-hidden .main{margin-left:0;}
@@ -454,6 +445,14 @@
     <div class="sb-head"><span>pages</span><button class="sb-close" id="sbClose" type="button" title="hide sidebar" aria-label="hide sidebar">&laquo;</button></div>
     <nav class="sb-list" id="sbList"></nav>
     <button class="sb-new" id="sbNew" type="button">+ new page</button>
+    <div class="sb-foot">
+      <div class="sb-tools">
+        <button class="btn" id="export" type="button" title="download a backup of everything">export</button>
+        <button class="btn" id="import" type="button" title="load a backup file">import</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <span class="hint backup" id="backup"></span>
+    </div>
   </aside>
   <button class="sb-open" id="sbOpen" type="button" title="show sidebar" aria-label="show sidebar">&#9776;</button>
   <div class="main" id="main">
@@ -506,11 +505,7 @@
     <footer>
       <div class="tools">
         <button class="reset" id="reset" type="button">reset all</button>
-        <button class="btn" id="export" type="button">export</button>
-        <button class="btn" id="import" type="button">import</button>
-        <input type="file" id="importFile" accept=".json,application/json" hidden>
       </div>
-      <span class="hint backup" id="backup"></span>
       <span class="hint"><span class="mouse">click a box to open it · double-click to tick · ← → to step</span><span class="touch">tap a box to open it · long-press to tick</span></span>
     </footer>
     </div>
@@ -637,8 +632,6 @@
     var n = normLen(o.n, defLen);
     var days = Array.isArray(o.days) ? o.days.map(Boolean) : [];
     while(days.length < n) days.push(false);   // longer arrays are kept: shrinking hides, never deletes
-    var pos = (o.pos && typeof o.pos === "object") ? o.pos : {};
-    delete pos.daily;   // left over from the removed daily template card
     // notes per day -> block lists
     var dayNotes = {};
     if(o.dayNotes && typeof o.dayNotes === "object"){
@@ -674,7 +667,6 @@
       label: String(o.label || ""),
       dayNotes: dayNotes,
       stickies: stickies,
-      pos: pos,
       start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : ""
     };
   }
@@ -792,7 +784,7 @@
   }
   function renderStatus(){
     var t = todayIndex();
-    if(t === null){ statusEl.textContent = "no start date"; return; }
+    if(t === null){ statusEl.textContent = ""; return; }
     if(t < 0){ statusEl.textContent = "starts in " + (-t) + (t === -1 ? " day" : " days"); return; }
     var upto = Math.min(t, T.n), missed = 0;
     for(var i=0;i<upto;i++) if(!T.days[i]) missed++;
@@ -859,51 +851,6 @@
   function focusEnd(inp){ inp.focus(); var l=inp.value.length; try{ inp.setSelectionRange(l,l); }catch(e){} }
   function insertAfter(node, ref){ ref.parentNode.insertBefore(node, ref.nextSibling); }
 
-  function clampPos(p){
-    return { x: Math.min(Math.max(p.x, 0), window.innerWidth  - 60),
-             y: Math.min(Math.max(p.y, 0), window.innerHeight - 40) };
-  }
-  function applyPositions(){
-    Array.prototype.forEach.call(document.querySelectorAll(".panel[data-pid]"), function(panel){
-      var p = T.pos[panel.getAttribute("data-pid")];
-      if(p){ var c = clampPos(p); panel.classList.add("float");
-             panel.style.left = c.x+"px"; panel.style.top = c.y+"px"; }
-      else { panel.classList.remove("float");
-             panel.style.left = panel.style.top = panel.style.width = ""; }
-    });
-  }
-  function applyPos(panel){
-    var p = T.pos[panel.getAttribute("data-pid")];
-    if(p){ var c = clampPos(p); panel.classList.add("float");
-           panel.style.left = c.x+"px"; panel.style.top = c.y+"px"; }
-  }
-  function makeDraggable(panel, pid, handle){
-    var dragging=false, sx=0, sy=0, ox=0, oy=0;
-    handle.addEventListener("pointerdown", function(e){
-      dragging=true;
-      var r=panel.getBoundingClientRect();
-      panel.classList.add("float");
-      panel.style.width=r.width+"px"; panel.style.left=r.left+"px"; panel.style.top=r.top+"px";
-      sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top;
-      handle.setPointerCapture(e.pointerId); e.preventDefault();
-    });
-    handle.addEventListener("pointermove", function(e){
-      if(!dragging) return;
-      panel.style.left=(ox+(e.clientX-sx))+"px";
-      panel.style.top =(oy+(e.clientY-sy))+"px";
-    });
-    function end(e){
-      if(!dragging) return; dragging=false;
-      try{ handle.releasePointerCapture(e.pointerId); }catch(_){}
-      T.pos[pid]={ x:parseFloat(panel.style.left), y:parseFloat(panel.style.top) };
-      panel.style.width=""; save();
-    }
-    handle.addEventListener("pointerup", end);
-    handle.addEventListener("pointercancel", end);
-    handle.addEventListener("dblclick", function(){
-      delete T.pos[pid]; save(); applyPositions();
-    });
-  }
 
   // ---------- slash menu: "/" at the start of a line picks a block type ----------
   var SLASH = [
@@ -1117,6 +1064,7 @@
     if(txt){
       txt.addEventListener("input", function(){
         block.text = txt.value;
+        if(t === "text" && /^\[\]\s?$/.test(txt.value)){ convertTo("todo"); return; }
         slashUpdate(txt, convertTo);
         changed();
       });
@@ -1172,37 +1120,8 @@
     list.className = "blocks";
     opts.listEl = list;
 
-    var bar = document.createElement("div");
-    bar.className = "blkbar";
-    var addText = document.createElement("button");
-    addText.type = "button"; addText.textContent = "+ line";
-    var addCheck = document.createElement("button");
-    addCheck.type = "button"; addCheck.textContent = "+ checklist";
-    bar.appendChild(addText); bar.appendChild(addCheck);
-
-    panel.appendChild(list); panel.appendChild(bar);
-
-    // a small + in the header opens and closes the button row
-    var more = document.createElement("button");
-    more.type = "button"; more.className = "more"; more.textContent = "+";
-    more.setAttribute("aria-label","add options");
-    var head = panel.querySelector("h2"), del = head.querySelector(".del");
-    if(del) head.insertBefore(more, del); else head.appendChild(more);
-    function setOpen(on){ bar.classList.toggle("open", on); more.classList.toggle("on", on); }
-    more.addEventListener("click", function(){ setOpen(!bar.classList.contains("open")); });
-    opts.closeBar = function(){ setOpen(false); };
-
-    function append(type){
-      var blocks = opts.getBlocks();
-      var nb = mkBlock(type, "", false);
-      blocks.push(nb); opts.save();
-      addBlockRow(opts, nb, null, true);
-      opts.onChange && opts.onChange();
-      opts.closeBar();
-    }
-    addText.addEventListener("click", function(){ append("text"); });
-    addCheck.addEventListener("click", function(){ append("todo"); });
-
+    // new lines come from Enter, "/" picks a type, "[]" makes a checklist item
+    panel.appendChild(list);
     return list;
   }
 
@@ -1220,8 +1139,6 @@
     panel.className = "panel"; panel.setAttribute("data-pid","day");
 
     var h = document.createElement("h2");
-    var grip = document.createElement("span");
-    grip.className = "grip"; grip.setAttribute("aria-hidden","true"); grip.textContent = "⠿";
     dayCk = document.createElement("button");
     dayCk.type = "button"; dayCk.className = "ck";
     dayCk.setAttribute("aria-label","mark this day done");
@@ -1230,7 +1147,7 @@
     dayTitle.setAttribute("aria-label","day");
     dayProg = document.createElement("span");
     dayProg.className = "prog";
-    h.appendChild(grip); h.appendChild(dayCk); h.appendChild(dayTitle); h.appendChild(dayProg);
+    h.appendChild(dayCk); h.appendChild(dayTitle); h.appendChild(dayProg);
     h.appendChild(navBtn("‹", "previous day", -1));
     h.appendChild(navBtn("›", "next day", 1));
     panel.appendChild(h);
@@ -1260,8 +1177,6 @@
     });
 
     dayCard.appendChild(panel);
-    makeDraggable(panel, "day", grip);
-    applyPos(panel);
   }
   function refreshDayHead(){
     var d = dateOf(sel);
@@ -1287,6 +1202,14 @@
   }
 
   // ---------- Sticky notes ----------
+  var noteMenu = null;
+  function closeNoteMenu(){
+    if(noteMenu){ noteMenu.owner.classList.remove("on"); if(noteMenu.parentNode) noteMenu.parentNode.removeChild(noteMenu); }
+    noteMenu = null;
+  }
+  document.addEventListener("click", function(e){ if(noteMenu && !noteMenu.contains(e.target)) closeNoteMenu(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeNoteMenu(); });
+  window.addEventListener("scroll", closeNoteMenu);
   function reorderStickies(){
     var pinned = T.stickies.filter(function(s){ return s.pinned; });
     var rest   = T.stickies.filter(function(s){ return !s.pinned; });
@@ -1304,9 +1227,6 @@
     nodeById[sticky.id] = panel;
 
     var h = document.createElement("h2");
-
-    var grip = document.createElement("span");
-    grip.className = "grip"; grip.setAttribute("aria-hidden","true"); grip.textContent = "⠿";
 
     var pin = document.createElement("button");
     pin.type = "button"; pin.className = "pin" + (sticky.pinned ? " on" : "");
@@ -1328,29 +1248,45 @@
     del.type = "button"; del.className = "del"; del.textContent = "×";
     del.setAttribute("aria-label","delete note");
 
-    h.appendChild(grip); h.appendChild(pin); h.appendChild(ck); h.appendChild(title); h.appendChild(del);
+    h.appendChild(pin); h.appendChild(ck); h.appendChild(title); h.appendChild(del);
     panel.appendChild(h);
 
     var opts = { listEl:null, getBlocks:function(){ return sticky.blocks; }, save:save };
     buildBody(panel, opts);
 
-    // the cross-off box is opt-in per note
-    var boxBtn = document.createElement("button");
-    boxBtn.type = "button";
-    function paintBox(){
-      ck.hidden = !sticky.check;
-      boxBtn.textContent = sticky.check ? "- checkbox" : "+ checkbox";
-    }
-    paintBox();
-    panel.querySelector(".blkbar").appendChild(boxBtn);
-    boxBtn.addEventListener("click", function(){
-      sticky.check = !sticky.check;
-      // removing the box also clears a cross-off, so nothing stays struck through unseen
-      if(!sticky.check && sticky.done){
-        sticky.done = false;
-        ck.classList.remove("on"); ck.textContent = ""; title.classList.remove("done");
-      }
-      paintBox(); save(); opts.closeBar();
+    // the cross-off box is opt-in per note, switched from the note's ⋯ menu
+    ck.hidden = !sticky.check;
+    var nmore = document.createElement("button");
+    nmore.type = "button"; nmore.className = "nmore"; nmore.textContent = "⋯";
+    nmore.setAttribute("aria-label","note options");
+    h.insertBefore(nmore, del);
+    nmore.addEventListener("click", function(e){
+      e.stopPropagation();
+      var open = noteMenu && noteMenu.owner === nmore;
+      closeNoteMenu();
+      if(open) return;
+      var m = noteMenu = document.createElement("div");
+      m.className = "slash nmenu"; m.owner = nmore; nmore.classList.add("on");
+      var it = document.createElement("div");
+      it.className = "slash-item";
+      it.innerHTML = "<span></span><small></small>";
+      it.firstChild.textContent = sticky.check ? "remove checkbox" : "add checkbox";
+      it.lastChild.textContent = "cross the note off";
+      it.addEventListener("click", function(){
+        sticky.check = !sticky.check;
+        // removing the box also clears a cross-off, so nothing stays struck through unseen
+        if(!sticky.check && sticky.done){
+          sticky.done = false;
+          ck.classList.remove("on"); ck.textContent = ""; title.classList.remove("done");
+        }
+        ck.hidden = !sticky.check;
+        save(); closeNoteMenu();
+      });
+      m.appendChild(it);
+      document.body.appendChild(m);
+      var r = nmore.getBoundingClientRect();
+      m.style.left = Math.max(8, Math.min(r.right - m.offsetWidth, window.innerWidth - m.offsetWidth - 8)) + "px";
+      m.style.top = (r.bottom + 6) + "px";
     });
 
     stickyBox.appendChild(panel);
@@ -1377,8 +1313,6 @@
     });
 
     sticky.blocks.forEach(function(b){ addBlockRow(opts, b, null, false); });
-    makeDraggable(panel, "s:" + sticky.id, grip);
-    applyPos(panel);
     if(focus) title.focus();
   }
 
@@ -1450,7 +1384,7 @@
     label.value = T.label;
     startEl.value = T.start;
     lenEl.value = T.n;
-    renderGrid(); refreshDay(); applyPositions();
+    renderGrid(); refreshDay(); closeNoteMenu();
   }
 
   buildDayCard();
@@ -2218,7 +2152,6 @@
   loadTracker(state);
   renderPage();
 
-  window.addEventListener("resize", applyPositions);
   // the calendar day may roll over while the tab sits open
   document.addEventListener("visibilitychange", function(){
     if(!document.hidden){
