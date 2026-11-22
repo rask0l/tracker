@@ -263,6 +263,10 @@
   .addpage:hover, .addpage.on{background:var(--accent); border-color:var(--accent);
     color:var(--accent-ink);}
   .page-menu{position:fixed; right:1rem; bottom:3.9rem;}
+  .page-menu.at-pointer{right:auto; bottom:auto;}
+  .pm-query{padding:.3rem .65rem .4rem; font-size:.72rem; color:var(--accent);
+    border-bottom:2px solid var(--line); margin-bottom:.2rem; letter-spacing:.06em;}
+  .pm-none{color:var(--muted); cursor:default;}
 
   /* page cover, Notion style: a full-width banner above everything */
   .cover{position:relative; height:clamp(180px, 30vh, 340px); overflow:hidden;
@@ -2098,11 +2102,13 @@
     return el;
   }
 
-  function addPageItem(type){
+  // at: optional { x, y } in page coordinates (x from the centre line) for the
+  // item's top-left corner; without it the item lands mid-screen
+  function addPageItem(type, at){
     var spec = PAGE_TYPES.filter(function(p){ return p.type === type; })[0];
     var it = { id:uid(), type:type, text:"", w:spec.w,
-               x:-Math.round(spec.w / 2),
-               y:Math.round(window.scrollY + window.innerHeight / 3) };
+               x:at ? Math.round(at.x) : -Math.round(spec.w / 2),
+               y:at ? Math.max(0, Math.round(at.y)) : Math.round(window.scrollY + window.innerHeight / 3) };
     if(type === "note") it.blocks = [mkBlock("todo","",false)];
     if(type === "countdown") it.date = "";
     function commit(){ cur().items.push(it); save(); buildPageItem(it, true); }
@@ -2110,29 +2116,101 @@
     else commit();
   }
 
-  // the + in the corner and its little menu
+  // the page menu: opened by the + in the corner, or by typing "/" anywhere
+  // that isn't a text field (then it opens at the pointer, filters as you
+  // type, and the new item lands where the pointer was)
   var addPage = document.getElementById("addPage");
-  var pageMenu = null;
+  var pageMenu = null, pmItems = [], pmIdx = 0, pmQuery = "", pmAt = null, pmQ = null;
+  var lastPointer = null;
+  document.addEventListener("mousemove", function(e){ lastPointer = { x:e.clientX, y:e.clientY }; });
   function closePageMenu(){
     if(pageMenu && pageMenu.parentNode) pageMenu.parentNode.removeChild(pageMenu);
-    pageMenu = null; addPage.classList.remove("on");
+    pageMenu = null; pmAt = null; addPage.classList.remove("on");
+  }
+  function pmMatches(){
+    var q = pmQuery.toLowerCase();
+    if(!q) return PAGE_TYPES.slice();
+    var starts = PAGE_TYPES.filter(function(t){ return t.label.indexOf(q) === 0; });
+    var has = PAGE_TYPES.filter(function(t){ return t.label.indexOf(q) > 0; });
+    return starts.concat(has);
+  }
+  function pmChoose(t){
+    var at = pmAt;
+    closePageMenu();
+    if(t) addPageItem(t.type, at);
+  }
+  function pmRender(){
+    pmItems = pmMatches();
+    if(pmIdx >= pmItems.length) pmIdx = Math.max(0, pmItems.length - 1);
+    pageMenu.innerHTML = "";
+    if(pmQ){
+      pmQ.textContent = "/" + pmQuery;
+      pageMenu.appendChild(pmQ);
+    }
+    if(!pmItems.length){
+      var none = document.createElement("div");
+      none.className = "slash-item pm-none"; none.textContent = "no match";
+      pageMenu.appendChild(none);
+    }
+    pmItems.forEach(function(t, k){
+      var row = document.createElement("div");
+      row.className = "slash-item" + (pmQ && k === pmIdx ? " on" : "");
+      var name = document.createElement("span"); name.textContent = t.label;
+      var hint = document.createElement("small"); hint.textContent = t.hint;
+      row.appendChild(name); row.appendChild(hint);
+      row.addEventListener("mousedown", function(e){ e.preventDefault(); });
+      row.addEventListener("click", function(e){ e.stopPropagation(); pmChoose(t); });
+      pageMenu.appendChild(row);
+    });
+  }
+  function openPageMenu(viaSlash){
+    closePageMenu();
+    pageMenu = document.createElement("div");
+    pageMenu.className = "slash page-menu";
+    pmQuery = ""; pmIdx = 0;
+    pmQ = null;
+    if(viaSlash){
+      pmQ = document.createElement("div"); pmQ.className = "pm-query";
+      var pt = lastPointer || { x:window.innerWidth / 2, y:window.innerHeight / 3 };
+      var r = document.querySelector(".page").getBoundingClientRect();
+      pmAt = { x:pt.x - (r.left + r.width / 2), y:pt.y - r.top };
+      pageMenu.classList.add("at-pointer");
+    }
+    pmRender();
+    document.body.appendChild(pageMenu);
+    if(viaSlash){
+      var w = pageMenu.offsetWidth, h = pageMenu.offsetHeight;
+      pageMenu.style.left = Math.max(8, Math.min(pt.x, window.innerWidth - w - 8)) + "px";
+      pageMenu.style.top = Math.max(8, Math.min(pt.y + 8, window.innerHeight - h - 8)) + "px";
+    }else addPage.classList.add("on");
   }
   addPage.addEventListener("click", function(e){
     e.stopPropagation();
     if(pageMenu){ closePageMenu(); return; }
-    pageMenu = document.createElement("div");
-    pageMenu.className = "slash page-menu";
-    PAGE_TYPES.forEach(function(p){
-      var row = document.createElement("div");
-      row.className = "slash-item";
-      var name = document.createElement("span"); name.textContent = p.label;
-      var hint = document.createElement("small"); hint.textContent = p.hint;
-      row.appendChild(name); row.appendChild(hint);
-      row.addEventListener("click", function(){ closePageMenu(); addPageItem(p.type); });
-      pageMenu.appendChild(row);
-    });
-    document.body.appendChild(pageMenu);
-    addPage.classList.add("on");
+    openPageMenu(false);
+  });
+  function isTyping(t){
+    return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+  }
+  document.addEventListener("keydown", function(e){
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    // "/" outside any text field opens the menu at the pointer
+    if(!pageMenu && e.key === "/" && !isTyping(e.target) && !iconPop && !newPop){
+      e.preventDefault(); openPageMenu(true); return;
+    }
+    if(!pageMenu || !pmQ) return;
+    if(e.key === "ArrowDown" || e.key === "ArrowUp"){
+      e.preventDefault();
+      var n = pmItems.length || 1;
+      pmIdx = (pmIdx + (e.key === "ArrowDown" ? 1 : n - 1)) % n; pmRender();
+    }else if(e.key === "Enter" || e.key === "Tab"){
+      e.preventDefault(); pmChoose(pmItems[pmIdx]);
+    }else if(e.key === "Backspace"){
+      e.preventDefault();
+      if(!pmQuery) closePageMenu(); else { pmQuery = pmQuery.slice(0, -1); pmRender(); }
+    }else if(e.key.length === 1 && /[a-z ]/i.test(e.key)){
+      e.preventDefault(); pmQuery += e.key.toLowerCase(); pmIdx = 0; pmRender();
+    }
   });
   document.addEventListener("click", function(e){
     if(pageMenu && !pageMenu.contains(e.target)) closePageMenu();

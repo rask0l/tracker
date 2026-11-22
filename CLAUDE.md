@@ -111,7 +111,11 @@ linked from anywhere.
   (`position:relative`), so page items keep their place when a cover is added.
 - Free-floating page items: the `+` fixed in the bottom-right corner adds a
   text box, heading, quote box, tip box, checklist, countdown or photo
-  straight onto the page (not inside a card). A checklist (`type:"note"`)
+  straight onto the page (not inside a card). Typing `/` anywhere that isn't
+  a text field opens the same menu at the pointer: typing filters it, arrows
+  and Enter pick, Backspace on an empty filter or Esc closes, and the new
+  item's top-left lands where the pointer was. `/` inside a text line is
+  still the block slash menu. A checklist (`type:"note"`)
   has a title in `text` and a body in `blocks` using the note editor (slash
   menu included), shows `done/total`, and gets a red border when every item
   is ticked. A countdown keeps its label in `text` and a `date`; it shows
