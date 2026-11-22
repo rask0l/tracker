@@ -9,9 +9,13 @@ linked from anywhere.
 
 - `index.html` is the entire site: a self-contained static page with inline
   CSS and JS, no framework, no Jekyll layout. It works like a small Notion: a
-  left sidebar lists pages, the first being the tracker (home), and
-  `+ new page` adds document pages. The tracker is a 10x10 grid of 100
-  buttons plus a side column of note cards. Clicking a box opens that day in the Day card;
+  left sidebar lists pages, the first being the home tracker, and
+  `+ new page` adds either a document page or a day tracker of any length
+  (presets 7 to 365, or a custom number up to 1000). A tracker is a grid of
+  `n` day buttons (10 wide up to 100 days, 14 up to 196, then 20) plus a side
+  column of note cards, under an editable title (`title`, shown in the
+  sidebar) and a subtitle (`label`). A `days` field next to `start` changes
+  the length; shrinking only hides days (the `days` array keeps them). Clicking a box opens that day in the Day card;
   double-clicking a box (or the Day card's checkbox) ticks it. Left/right
   arrow keys, or the `‹ ›` buttons on the Day card, step between days (the
   keys are ignored while typing in an input). On touch screens a long-press
@@ -19,7 +23,12 @@ linked from anywhere.
   (the side column is `display:contents` so its cards can be reordered).
 - **State is browser-only.** Everything saves to `localStorage` under key
   `hundred-v1` as
-  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, items, cover, icon, pages, sidebarHidden }`.
+  `{ n, title, days, label, dayNotes, stickies, pos, start, lastExport, items, cover, icon, pages, sidebarHidden }`.
+  The root holds the home tracker's own fields (`normTracker()` validates
+  the per-tracker part for home and tracker pages alike); `T` is the tracker
+  on screen and all tracker code reads `T.days`, `T.n` and so on, never
+  `state.days`. `loadTracker(t)` rebuilds the grid, note cards and fields
+  when a different tracker is shown.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
   is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
@@ -65,17 +74,21 @@ linked from anywhere.
   not break it; undated, it ends at the last ticked box) and `best` is the
   longest run anywhere. A day with any note text shows a small red dot on its
   box.
-- Pages: the tracker keeps its own `cover`, `icon` and `items` on the state
-  itself; every other page is `{ id, title, icon, cover, blocks, items }` in
-  `pages`, with `blocks` using the same block editor and slash menu as notes.
+- Pages: the home tracker keeps its own `cover`, `icon` and `items` on the
+  state itself. Every other page in `pages` has `{ id, kind, icon, cover,
+  items }` plus either document fields (`kind:"doc"`, `title`, `blocks`,
+  using the same block editor and slash menu as notes) or the tracker fields
+  above (`kind:"tracker"`). Pages saved before trackers existed have no
+  `kind` and load as documents.
   The open page lives in the URL hash (`#p/<id>`, none for home) so back and
   forward work; `cur()` returns the open page (the state object for home) and
-  `renderPage()` swaps `#homeView` / `#docView` and redraws cover, icon, page
+  `renderPage()` shows `#homeView` (any tracker) or `#docView`, calls
+  `loadTracker()` when the tracker changes, and redraws cover, icon, page
   items and sidebar. Clicking the empty space under a document continues it.
   Deleting a page from the sidebar takes two clicks. The sidebar collapses
   with `«` (remembered as `sidebarHidden`); under 900px it is an overlay
-  opened with the fixed `☰` button. Arrow-key day stepping only runs on the
-  tracker page.
+  opened with the fixed `☰` button. Arrow-key day stepping only runs on
+  tracker pages.
 - Icons: every page can have an icon, `{ emoji }` or `{ src }` (a picture
   shrunk to 256px), picked from a popover (emoji grid, type/paste an emoji,
   upload, remove). Like Notion, the 110px icon overlaps the bottom edge of the
@@ -113,8 +126,8 @@ linked from anywhere.
   page once had two fixed side wallpapers; they were removed once photos could
   be added as page items.)
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
-  tap never clears the grid; it clears ticks and day notes but keeps the added
-  notes and page items. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
+  tap never clears the grid; it clears the open tracker's ticks and day notes
+  but keeps its note cards and page items. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
 
 ## Deploy
 

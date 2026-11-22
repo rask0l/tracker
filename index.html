@@ -23,8 +23,9 @@
   .wrap{max-width:840px; margin:0 auto; padding:3rem 1rem 5rem;}
 
   header{border-bottom:2px solid var(--fg); padding-bottom:1rem; margin-bottom:2rem;}
-  h1{font-size:2rem; letter-spacing:.08em; margin:0; font-weight:700;}
-  h1 .n{color:var(--accent);}
+  .tk-title{display:block; width:100%; margin:0; padding:0; background:transparent; border:none;
+    outline:none; color:var(--fg); font:inherit; font-size:2rem; font-weight:700; letter-spacing:.08em;}
+  .tk-title::placeholder{color:var(--line);}
   .sub{
     display:block; width:100%; margin-top:.6rem; padding:.35rem 0;
     background:transparent; border:none; border-bottom:2px solid var(--line);
@@ -58,6 +59,10 @@
     border-radius:0; color-scheme:dark;
   }
   .when input:focus{border-color:var(--accent);}
+  .when-l{display:flex; gap:1rem; flex-wrap:wrap;}
+  .when input[type=number]{width:4.8rem;}
+  .grid.dense{gap:4px;}
+  .grid.dense .cell{font-size:.6rem;}
   .when b{color:var(--accent); font-weight:700;}
 
   .layout{display:flex; gap:1.5rem; align-items:flex-start;}
@@ -341,6 +346,25 @@
     body.sb-shown .sidebar{display:flex; box-shadow:6px 0 0 var(--line);}
   }
 
+  .new-pop{position:fixed; z-index:90; width:228px; padding:.5rem;
+    background:var(--bg); border:2px solid var(--fg); box-shadow:6px 6px 0 var(--line);}
+  .np-doc{display:block; width:100%; text-align:left; background:transparent;
+    border:2px solid var(--line); color:var(--fg); font:inherit; padding:.45rem .55rem; cursor:pointer;}
+  .np-doc:hover{border-color:var(--accent);}
+  .np-doc b{display:block; font-size:.75rem; letter-spacing:.06em;}
+  .np-doc small{color:var(--muted); font-size:.6rem; letter-spacing:.06em;}
+  .np-head{margin:.6rem 0 .35rem; font-size:.62rem; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted);}
+  .np-presets{display:grid; grid-template-columns:repeat(4, 1fr); gap:4px;}
+  .np-presets button, .np-custom button{background:transparent; border:2px solid var(--line);
+    color:var(--fg); font:inherit; font-size:.72rem; padding:.35rem 0; cursor:pointer;}
+  .np-presets button:hover, .np-custom button:hover{border-color:var(--accent); color:var(--accent);}
+  .np-custom{display:flex; gap:4px; margin-top:4px;}
+  .np-custom input{flex:1 1 auto; min-width:0; background:transparent; border:2px solid var(--line);
+    color:var(--fg); font:inherit; font-size:.72rem; padding:.3rem .4rem; outline:none; color-scheme:dark;}
+  .np-custom input:focus{border-color:var(--accent);}
+  .np-custom button{padding:.35rem .6rem; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;}
+
   /* ---- page head: icon over the cover's edge, actions, title ---- */
   .top{position:relative;}
   .main.has-cover .wrap{padding-top:1.4rem;}
@@ -389,7 +413,7 @@
     .side{display:contents;}
     .side > *{order:1;}
     .side > #dayCard{order:-1;}
-    h1{font-size:1.6rem;}
+    .tk-title{font-size:1.6rem;}
     .grid{gap:4px;}
     .cell{font-size:.62rem;}
     .bdel{opacity:.5;}
@@ -417,7 +441,7 @@
       <div class="icon" id="pageIcon" role="button" tabindex="0" aria-label="change icon" hidden></div>
       <div class="head-actions"><button id="addIcon" type="button">+ add icon</button><button id="addCover" type="button">+ add cover</button></div>
     <header id="homeHead">
-      <h1>100 <span class="n">DAYS</span></h1>
+      <input class="tk-title" id="tkTitle" maxlength="60" spellcheck="false" placeholder="untitled" aria-label="tracker title">
       <input class="sub" id="label" maxlength="48" spellcheck="false"
              placeholder="name your challenge" aria-label="challenge name">
     </header>
@@ -426,7 +450,7 @@
 
     <div id="homeView">
     <div class="stats">
-      <span class="count"><b id="done">0</b> / 100</span>
+      <span class="count"><b id="done">0</b> / <span id="total">100</span></span>
       <span class="right">
         <span>streak <b id="streak">0</b></span>
         <span>best <b id="best">0</b></span>
@@ -435,7 +459,7 @@
     </div>
     <div class="bar"><i id="fill"></i></div>
     <div class="when">
-      <label>start <input type="date" id="start" aria-label="start date"></label>
+      <span class="when-l"><label>start <input type="date" id="start" aria-label="start date"></label><label>days <input type="number" id="tkLen" min="1" max="1000" aria-label="number of days"></label></span>
       <span id="status"></span>
     </div>
 
@@ -474,7 +498,6 @@
 (function(){
   "use strict";
   var KEY = "hundred-v1";
-  var N = 100;
   function uid(){ return "n" + Math.random().toString(36).slice(2,9); }
 
   // block types; divider and image carry no text, an image keeps its picture in src
@@ -556,67 +579,88 @@
     if(i && okSrc(i.src)) return { src:i.src };
     return null;
   }
+  // pages are documents ({ kind:"doc", blocks }) or day trackers ({ kind:"tracker", n, days, ... })
   function normPages(arr){
     if(!Array.isArray(arr)) return [];
     return arr.filter(function(p){ return p && typeof p === "object"; }).map(function(p){
-      return { id:String(p.id || uid()), title:String(p.title || ""),
-               icon:normIcon(p.icon), cover:normCover(p.cover),
-               blocks:normBlocks(p.blocks) || [mkBlock("text","",false)],
-               items:normItems(p.items) };
+      var o;
+      if(p.kind === "tracker"){
+        var n = normLen(p.n, 30);
+        o = normTracker(p, n, n + " DAYS");
+        o.kind = "tracker";
+      }else{
+        o = { kind:"doc", title:String(p.title || ""),
+              blocks:normBlocks(p.blocks) || [mkBlock("text","",false)] };
+      }
+      o.id = String(p.id || uid());
+      o.icon = normIcon(p.icon); o.cover = normCover(p.cover); o.items = normItems(p.items);
+      return o;
     });
+  }
+
+  // the per-tracker part: grid length, ticks, day notes, note cards, start date
+  var N_MAX = 1000;
+  function normLen(n, def){ n = Math.round(+n); return (n >= 1 && n <= N_MAX) ? n : def; }
+  function normTracker(o, defLen, defTitle){
+    var n = normLen(o.n, defLen);
+    var days = Array.isArray(o.days) ? o.days.map(Boolean) : [];
+    while(days.length < n) days.push(false);   // longer arrays are kept: shrinking hides, never deletes
+    var pos = (o.pos && typeof o.pos === "object") ? o.pos : {};
+    delete pos.daily;   // left over from the removed daily template card
+    // notes per day -> block lists
+    var dayNotes = {};
+    if(o.dayNotes && typeof o.dayNotes === "object"){
+      Object.keys(o.dayNotes).forEach(function(k){
+        var nb = normBlocks(o.dayNotes[k]); if(nb) dayNotes[k] = nb;
+      });
+    }else if(o.notes && typeof o.notes === "object"){
+      Object.keys(o.notes).forEach(function(k){
+        var t = o.notes[k];
+        if(t && String(t).trim()) dayNotes[k] = migrateBlocks(t, null);
+      });
+    }
+    var stickies;
+    if(Array.isArray(o.stickies)){
+      stickies = o.stickies.map(function(s){
+        var blocks = Array.isArray(s && s.blocks) ? normBlocks(s.blocks)
+                                                  : migrateBlocks(s && s.text, s && s.items);
+        return { id:String(s && s.id || uid()),
+                 title:String(s && s.title || ""),
+                 pinned:!!(s && s.pinned),
+                 done:!!(s && s.done),
+                 check:!!(s && (s.check || s.done)),
+                 blocks:blocks };
+      });
+    }else if(o.scratch){
+      stickies = [ { id:uid(), title:"", pinned:false, done:false, check:false,
+                     blocks:migrateBlocks(o.scratch,null) } ];
+    }else stickies = [];
+    return {
+      n: n,
+      title: typeof o.title === "string" ? o.title : defTitle,
+      days: days,
+      label: String(o.label || ""),
+      dayNotes: dayNotes,
+      stickies: stickies,
+      pos: pos,
+      start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : ""
+    };
+  }
+  function newTracker(n){
+    return normTracker({ n:n, stickies:[] }, n, n + " DAYS");
   }
 
   // validate any parsed object into a state, or null if it is not one
   function normalize(o){
-    if(o && Array.isArray(o.days) && o.days.length === N){
-      var pos = (o.pos && typeof o.pos === "object") ? o.pos : {};
-      delete pos.daily;   // left over from the removed daily template card
-      // notes per day -> block lists
-      var dayNotes = {};
-      if(o.dayNotes && typeof o.dayNotes === "object"){
-        Object.keys(o.dayNotes).forEach(function(k){
-          var nb = normBlocks(o.dayNotes[k]); if(nb) dayNotes[k] = nb;
-        });
-      }else if(o.notes && typeof o.notes === "object"){
-        Object.keys(o.notes).forEach(function(k){
-          var t = o.notes[k];
-          if(t && String(t).trim()) dayNotes[k] = migrateBlocks(t, null);
-        });
-      }
-
-      var stickies;
-      if(Array.isArray(o.stickies)){
-        stickies = o.stickies.map(function(s){
-          var blocks = Array.isArray(s && s.blocks) ? normBlocks(s.blocks)
-                                                    : migrateBlocks(s && s.text, s && s.items);
-          return { id:String(s && s.id || uid()),
-                   title:String(s && s.title || ""),
-                   pinned:!!(s && s.pinned),
-                   done:!!(s && s.done),
-                   check:!!(s && (s.check || s.done)),
-                   blocks:blocks };
-        });
-      }else{
-        stickies = [ { id:uid(), title:"", pinned:false, done:false,
-                       blocks:(o.scratch ? migrateBlocks(o.scratch,null) : [mkBlock("text","",false)]) } ];
-      }
-
-      return {
-        days: o.days.map(Boolean),
-        label: o.label || "",
-        dayNotes: dayNotes,
-        stickies: stickies,
-        pos: pos,
-        start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : "",
-        lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : "",
-        items: normItems(o.items),
-        cover: normCover(o.cover),
-        icon: normIcon(o.icon),
-        pages: normPages(o.pages),
-        sidebarHidden: !!o.sidebarHidden
-      };
-    }
-    return null;
+    if(!o || !Array.isArray(o.days)) return null;
+    var st = normTracker(o, 100, "100 DAYS");
+    st.lastExport = (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : "";
+    st.items = normItems(o.items);
+    st.cover = normCover(o.cover);
+    st.icon = normIcon(o.icon);
+    st.pages = normPages(o.pages);
+    st.sidebarHidden = !!o.sidebarHidden;
+    return st;
   }
 
   function load(){
@@ -625,10 +669,12 @@
       var s = raw ? normalize(JSON.parse(raw)) : null;
       if(s) return s;
     }catch(e){}
-    return { days:new Array(N).fill(false), label:"", dayNotes:{}, start:"",
-             lastExport:"", items:[], cover:null, icon:null, pages:[], sidebarHidden:false,
-             stickies:[ { id:uid(), title:"", pinned:false, done:false,
-                          blocks:[mkBlock("text","",false)] } ], pos:{} };
+    var st = newTracker(100);
+    st.stickies = [ { id:uid(), title:"", pinned:false, done:false, check:false,
+                      blocks:[mkBlock("text","",false)] } ];
+    st.lastExport = ""; st.items = []; st.cover = null; st.icon = null;
+    st.pages = []; st.sidebarHidden = false;
+    return st;
   }
   // a failed save (usually storage full from photos) must never be silent
   var saveFailed = false;
@@ -648,8 +694,10 @@
   }
 
   var state = load();
+  var T = state;        // the tracker on screen: the home state or a tracker page
   var grid   = document.getElementById("grid");
   var doneEl = document.getElementById("done");
+  var totalEl = document.getElementById("total");
   var pctEl  = document.getElementById("pct");
   var fill   = document.getElementById("fill");
   var label  = document.getElementById("label");
@@ -668,55 +716,55 @@
   var backupEl = document.getElementById("backup");
 
   function currentIndex(){
-    for(var i=0;i<N;i++){ if(!state.days[i]) return i; }
+    for(var i=0;i<T.n;i++){ if(!T.days[i]) return i; }
     return -1;
   }
-  // index of today's box by calendar (may be <0 or >=N), or null with no start date
+  // index of today's box by calendar (may be <0 or >=T.n), or null with no start date
   function todayIndex(){
-    var s = parseDate(state.start);
+    var s = parseDate(T.start);
     return s ? Math.round((todayDate() - s) / 86400000) : null;
   }
   function dateOf(i){
-    var s = parseDate(state.start);
+    var s = parseDate(T.start);
     return s ? new Date(s.getFullYear(), s.getMonth(), s.getDate() + i) : null;
   }
   // the box marked "today": by calendar when dated, else the first unticked
   function todayCell(){
     var t = todayIndex();
     if(t === null) return currentIndex();
-    return (t >= 0 && t < N) ? t : -1;
+    return (t >= 0 && t < T.n) ? t : -1;
   }
   function defaultSel(){
     var t = todayIndex();
-    if(t !== null) return Math.min(Math.max(t, 0), N-1);
+    if(t !== null) return Math.min(Math.max(t, 0), T.n-1);
     var c = currentIndex();
-    return c === -1 ? N-1 : c;
+    return c === -1 ? T.n-1 : c;
   }
   function streaks(){
     var best = 0, run = 0, i;
-    for(i=0;i<N;i++){ run = state.days[i] ? run+1 : 0; if(run > best) best = run; }
+    for(i=0;i<T.n;i++){ run = T.days[i] ? run+1 : 0; if(run > best) best = run; }
     var end, t = todayIndex();
     if(t === null){
       // undated: the run ending at the last ticked box
       end = -1;
-      for(i=N-1;i>=0;i--){ if(state.days[i]){ end = i; break; } }
+      for(i=T.n-1;i>=0;i--){ if(T.days[i]){ end = i; break; } }
     }else{
       if(t < 0) return { cur:0, best:best };
-      end = Math.min(t, N-1);
+      end = Math.min(t, T.n-1);
       // today not ticked yet does not break the streak
-      if(t < N && !state.days[end]) end--;
+      if(t < T.n && !T.days[end]) end--;
     }
     var cur = 0;
-    for(i=end;i>=0 && state.days[i];i--) cur++;
+    for(i=end;i>=0 && T.days[i];i--) cur++;
     return { cur:cur, best:best };
   }
   function renderStatus(){
     var t = todayIndex();
     if(t === null){ statusEl.textContent = "no start date"; return; }
     if(t < 0){ statusEl.textContent = "starts in " + (-t) + (t === -1 ? " day" : " days"); return; }
-    var upto = Math.min(t, N), missed = 0;
-    for(var i=0;i<upto;i++) if(!state.days[i]) missed++;
-    var head = t < N ? "day " + (t+1) + " of " + N : "ended " + fmt(dateOf(N-1));
+    var upto = Math.min(t, T.n), missed = 0;
+    for(var i=0;i<upto;i++) if(!T.days[i]) missed++;
+    var head = t < T.n ? "day " + (t+1) + " of " + T.n : "ended " + fmt(dateOf(T.n-1));
     statusEl.innerHTML = "";
     statusEl.appendChild(document.createTextNode(head + " · "));
     if(missed){
@@ -724,20 +772,20 @@
       b.textContent = missed + " missed";
       statusEl.appendChild(b);
     }else{
-      statusEl.appendChild(document.createTextNode(t < N ? "on track" : "perfect run"));
+      statusEl.appendChild(document.createTextNode(t < T.n ? "on track" : "perfect run"));
     }
   }
   function dayHasContent(idx){
-    var a = state.dayNotes[idx];
+    var a = T.dayNotes[idx];
     return !!(a && a.some(blockHasContent));
   }
   function isBlank(blocks){
     return !blocks || !blocks.some(blockHasContent);
   }
-  // the blocks shown in the Day card; an empty day joins state.dayNotes
+  // the blocks shown in the Day card; an empty day joins T.dayNotes
   // only once something is written in it
   function blocksFor(idx){
-    var own = state.dayNotes[idx];
+    var own = T.dayNotes[idx];
     return (own && own.length) ? own : [mkBlock("text","",false)];
   }
   function todoProgress(blocks){
@@ -750,9 +798,10 @@
 
   function renderGrid(){
     var done = 0;
-    for(var i=0;i<N;i++) if(state.days[i]) done++;
+    for(var i=0;i<T.n;i++) if(T.days[i]) done++;
     doneEl.textContent = done;
-    var pct = Math.round(done/N*100);
+    totalEl.textContent = T.n;
+    var pct = Math.round(done/T.n*100);
     pctEl.textContent = pct + "%";
     fill.style.width = pct + "%";
 
@@ -761,9 +810,9 @@
     bestEl.textContent = st.best;
 
     var cur = todayCell();
-    for(var j=0;j<N;j++){
+    for(var j=0;j<T.n;j++){
       var cls = "cell";
-      if(state.days[j]) cls += " done";
+      if(T.days[j]) cls += " done";
       if(j===cur) cls += " today";
       if(j===sel) cls += " sel";
       if(dayHasContent(j)) cls += " note";
@@ -784,7 +833,7 @@
   }
   function applyPositions(){
     Array.prototype.forEach.call(document.querySelectorAll(".panel[data-pid]"), function(panel){
-      var p = state.pos[panel.getAttribute("data-pid")];
+      var p = T.pos[panel.getAttribute("data-pid")];
       if(p){ var c = clampPos(p); panel.classList.add("float");
              panel.style.left = c.x+"px"; panel.style.top = c.y+"px"; }
       else { panel.classList.remove("float");
@@ -792,7 +841,7 @@
     });
   }
   function applyPos(panel){
-    var p = state.pos[panel.getAttribute("data-pid")];
+    var p = T.pos[panel.getAttribute("data-pid")];
     if(p){ var c = clampPos(p); panel.classList.add("float");
            panel.style.left = c.x+"px"; panel.style.top = c.y+"px"; }
   }
@@ -814,13 +863,13 @@
     function end(e){
       if(!dragging) return; dragging=false;
       try{ handle.releasePointerCapture(e.pointerId); }catch(_){}
-      state.pos[pid]={ x:parseFloat(panel.style.left), y:parseFloat(panel.style.top) };
+      T.pos[pid]={ x:parseFloat(panel.style.left), y:parseFloat(panel.style.top) };
       panel.style.width=""; save();
     }
     handle.addEventListener("pointerup", end);
     handle.addEventListener("pointercancel", end);
     handle.addEventListener("dblclick", function(){
-      delete state.pos[pid]; save(); applyPositions();
+      delete T.pos[pid]; save(); applyPositions();
     });
   }
 
@@ -1160,13 +1209,13 @@
     dayOpts = {
       listEl:null,
       getBlocks:function(){ return dayBlocks; },
-      save:function(){ state.dayNotes[sel] = dayBlocks; save(); },
+      save:function(){ T.dayNotes[sel] = dayBlocks; save(); },
       onChange:function(){ renderGrid(); refreshDayHead(); },
       onCheck:function(on){
         // finishing every item ticks the day; unchecking never unticks it
         var p = todoProgress(dayBlocks);
-        if(on && p.total && p.done === p.total && !state.days[sel]){
-          state.days[sel] = true; save();
+        if(on && p.total && p.done === p.total && !T.days[sel]){
+          T.days[sel] = true; save();
         }
         renderGrid(); refreshDayHead();
       }
@@ -1174,7 +1223,7 @@
     dayList = buildBody(panel, dayOpts);
 
     dayCk.addEventListener("click", function(){
-      state.days[sel] = !state.days[sel];
+      T.days[sel] = !T.days[sel];
       save(); renderGrid(); refreshDayHead();
     });
 
@@ -1187,7 +1236,7 @@
     dayTitle.value = "DAY " + (sel+1);
     dayDate.textContent = d ? fmt(d) : "";
     dayDate.hidden = !d;
-    var on = state.days[sel];
+    var on = T.days[sel];
     dayCk.classList.toggle("on", on);
     dayCk.textContent = on ? "✓" : "";
     dayTitle.classList.toggle("done", on);
@@ -1201,16 +1250,16 @@
   }
   function refreshDay(){ refreshDayBody(); refreshDayHead(); }
   function selectDay(i){
-    sel = Math.min(Math.max(i, 0), N-1);
+    sel = Math.min(Math.max(i, 0), T.n-1);
     renderGrid(); refreshDay();
   }
 
   // ---------- Sticky notes ----------
   function reorderStickies(){
-    var pinned = state.stickies.filter(function(s){ return s.pinned; });
-    var rest   = state.stickies.filter(function(s){ return !s.pinned; });
-    state.stickies = pinned.concat(rest);
-    state.stickies.forEach(function(s){
+    var pinned = T.stickies.filter(function(s){ return s.pinned; });
+    var rest   = T.stickies.filter(function(s){ return !s.pinned; });
+    T.stickies = pinned.concat(rest);
+    T.stickies.forEach(function(s){
       var n = nodeById[s.id]; if(n) stickyBox.appendChild(n);
     });
     save();
@@ -1289,7 +1338,7 @@
     });
     title.addEventListener("input", function(){ sticky.title = title.value; save(); });
     del.addEventListener("click", function(){
-      state.stickies = state.stickies.filter(function(s){ return s.id !== sticky.id; });
+      T.stickies = T.stickies.filter(function(s){ return s.id !== sticky.id; });
       delete nodeById[sticky.id];
       panel.parentNode && panel.parentNode.removeChild(panel);
       save();
@@ -1303,10 +1352,18 @@
 
   // ---------- Grid ----------
   function tickDay(idx){
-    state.days[idx] = !state.days[idx];
+    T.days[idx] = !T.days[idx];
     save(); renderGrid(); refreshDayHead();
   }
-  for(var i=0;i<N;i++){
+  // the grid is rebuilt whenever a different tracker (or length) is shown
+  function buildGrid(){
+    grid.innerHTML = ""; cells = [];
+    var cols = T.n <= 100 ? 10 : T.n <= 196 ? 14 : 20;
+    grid.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+    grid.classList.toggle("dense", cols > 10);
+    for(var i=0;i<T.n;i++) makeCell(i);
+  }
+  function makeCell(i){
     (function(idx){
       var b = document.createElement("button");
       b.type = "button"; b.className = "cell"; b.textContent = idx+1;
@@ -1346,20 +1403,33 @@
     if(t && t.classList && t.classList.contains("cell")) cells[sel].focus();
   });
 
-  sel = defaultSel();
+  function renderStickies(){
+    stickyBox.innerHTML = ""; nodeById = {};
+    reorderStickies();                     // pinned first
+    T.stickies.forEach(function(s){ addStickyDom(s, false); });
+  }
+  // show a tracker: the home state or a tracker page
+  function loadTracker(t){
+    T = t;
+    buildGrid();
+    sel = defaultSel();
+    renderStickies();
+    tkTitle.value = T.title;
+    label.value = T.label;
+    startEl.value = T.start;
+    lenEl.value = T.n;
+    renderGrid(); refreshDay(); applyPositions();
+  }
 
   buildDayCard();
-  reorderStickies();                       // put pinned first on load
-  state.stickies.forEach(function(s){ addStickyDom(s, false); });
 
   addBtn.addEventListener("click", function(){
     var s = { id:uid(), title:"", pinned:false, done:false, check:false, blocks:[mkBlock("text","",false)] };
-    state.stickies.push(s); reorderStickies();
+    T.stickies.push(s); reorderStickies();
     addStickyDom(s, true);
   });
 
-  label.value = state.label;
-  label.addEventListener("input", function(){ state.label = label.value; save(); renderSidebar(); });
+  label.addEventListener("input", function(){ T.label = label.value; save(); renderSidebar(); });
 
   var armed = false, armTimer = null;
   reset.addEventListener("click", function(){
@@ -1369,18 +1439,35 @@
       armTimer = setTimeout(disarm, 3000); return;
     }
     clearTimeout(armTimer); disarm();
-    state.days = new Array(N).fill(false);
-    state.dayNotes = {};
+    T.days = new Array(T.n).fill(false);
+    T.dayNotes = {};
     // a dated run restarts today
-    if(state.start){ state.start = iso(todayDate()); startEl.value = state.start; }
+    if(T.start){ T.start = iso(todayDate()); startEl.value = T.start; }
     sel = 0; save(); renderGrid(); refreshDay();
   });
   function disarm(){ armed=false; reset.classList.remove("armed"); reset.textContent="reset all"; }
 
+  // ---------- title and length ----------
+  var tkTitle = document.getElementById("tkTitle");
+  var lenEl = document.getElementById("tkLen");
+  tkTitle.addEventListener("input", function(){
+    T.title = tkTitle.value; save(); renderSidebar();
+    document.title = T.title || "untitled";
+  });
+  tkTitle.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); tkTitle.blur(); } });
+  lenEl.addEventListener("change", function(){
+    var n = normLen(lenEl.value, T.n);
+    lenEl.value = n;
+    if(n === T.n) return;
+    T.n = n;
+    while(T.days.length < n) T.days.push(false);   // shrinking only hides days, it never deletes them
+    if(sel >= n) sel = n - 1;
+    save(); buildGrid(); renderGrid(); refreshDay();
+  });
+
   // ---------- start date ----------
-  startEl.value = state.start;
   startEl.addEventListener("change", function(){
-    state.start = parseDate(startEl.value) ? startEl.value : "";
+    T.start = parseDate(startEl.value) ? startEl.value : "";
     save(); renderGrid(); refreshDayHead();
   });
 
@@ -1394,8 +1481,11 @@
   var importBtn  = document.getElementById("import");
   var importFile = document.getElementById("importFile");
   function hasData(){
-    return state.days.some(Boolean) ||
-           Object.keys(state.dayNotes).some(function(k){ return !isBlank(state.dayNotes[k]); });
+    return [state].concat(state.pages.filter(function(p){ return p.kind === "tracker"; }))
+      .some(function(t){
+        return t.days.some(Boolean) ||
+               Object.keys(t.dayNotes).some(function(k){ return !isBlank(t.dayNotes[k]); });
+      });
   }
   function renderBackup(){
     var last = parseDate(state.lastExport);
@@ -1454,6 +1544,7 @@
     return (m && pageById(decodeURIComponent(m[1]))) || state;
   }
   function isHome(p){ return p === state; }
+  function isTracker(p){ return p === state || p.kind === "tracker"; }
   function go(id){
     var want = id === "home" ? "" : "#p/" + encodeURIComponent(id);
     var have = location.hash === "#" ? "" : location.hash;
@@ -1561,8 +1652,8 @@
       row.setAttribute("role","link"); row.tabIndex = 0;
       var ico = document.createElement("span");
       ico.className = "sb-ico";
-      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = home ? "#" : "·";
-      var name = (home ? (state.label || "100 days") : p.title) || "";
+      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : "·";
+      var name = p.title || "";
       var t = document.createElement("span");
       t.className = "sb-title" + (name ? "" : " empty");
       t.textContent = name || "untitled";
@@ -1594,13 +1685,65 @@
       sbList.appendChild(row);
     });
   }
-  document.getElementById("sbNew").addEventListener("click", function(){
-    var p = { id:uid(), title:"", icon:null, cover:null, blocks:[mkBlock("text","",false)], items:[] };
+  var sbNew = document.getElementById("sbNew"), newPop = null;
+  function closeNewPop(){ if(newPop && newPop.parentNode) newPop.parentNode.removeChild(newPop); newPop = null; }
+  function addNewPage(p){
+    closeNewPop();
     state.pages.push(p); save();
     go(p.id);
     if(isNarrow()) document.body.classList.remove("sb-shown");
-    docTitle.focus();
+    (p.kind === "tracker" ? tkTitle : docTitle).focus();
+  }
+  function newDoc(){
+    addNewPage({ kind:"doc", id:uid(), title:"", icon:null, cover:null,
+                 blocks:[mkBlock("text","",false)], items:[] });
+  }
+  function newTrackerPage(n){
+    var t = newTracker(n);
+    t.kind = "tracker"; t.id = uid(); t.icon = null; t.cover = null; t.items = [];
+    addNewPage(t);
+  }
+  sbNew.addEventListener("click", function(e){
+    e.stopPropagation();
+    if(newPop){ closeNewPop(); return; }
+    var pop = newPop = document.createElement("div");
+    pop.className = "new-pop";
+    var doc = document.createElement("button");
+    doc.type = "button"; doc.className = "np-doc";
+    doc.innerHTML = "<b>document</b><small>notes, headings, quotes, photos</small>";
+    doc.addEventListener("click", newDoc);
+    pop.appendChild(doc);
+    var head = document.createElement("div");
+    head.className = "np-head"; head.textContent = "day tracker";
+    pop.appendChild(head);
+    var presets = document.createElement("div");
+    presets.className = "np-presets";
+    [7, 21, 30, 66, 75, 100, 365].forEach(function(n){
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = n;
+      b.title = n + " days";
+      b.addEventListener("click", function(){ newTrackerPage(n); });
+      presets.appendChild(b);
+    });
+    pop.appendChild(presets);
+    var row = document.createElement("div");
+    row.className = "np-custom";
+    var inp = document.createElement("input");
+    inp.type = "number"; inp.min = 1; inp.max = N_MAX; inp.placeholder = "days";
+    var go_ = document.createElement("button");
+    go_.type = "button"; go_.textContent = "create";
+    function custom(){ var n = normLen(inp.value, 0); if(n) newTrackerPage(n); else inp.focus(); }
+    go_.addEventListener("click", custom);
+    inp.addEventListener("keydown", function(e){ if(e.key === "Enter") custom(); });
+    row.appendChild(inp); row.appendChild(go_);
+    pop.appendChild(row);
+    document.body.appendChild(pop);
+    var r = sbNew.getBoundingClientRect();
+    pop.style.left = r.left + "px";
+    pop.style.bottom = (window.innerHeight - r.top + 6) + "px";
   });
+  document.addEventListener("click", function(e){ if(newPop && !newPop.contains(e.target)) closeNewPop(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeNewPop(); });
   // collapse: remembered on desktop; on narrow screens it is an overlay
   function isNarrow(){ return window.matchMedia("(max-width:900px)").matches; }
   function paintSidebarHidden(){ document.body.classList.toggle("sb-hidden", !!state.sidebarHidden); }
@@ -1624,7 +1767,7 @@
     p.blocks.forEach(function(b){ addBlockRow(docOpts, b, null, false); });
   }
   docTitle.addEventListener("input", function(){
-    var p = cur(); if(isHome(p)) return;
+    var p = cur(); if(isTracker(p)) return;
     p.title = docTitle.value; save(); renderSidebar();
     document.title = p.title || "untitled";
   });
@@ -1633,7 +1776,7 @@
   });
   // clicking the empty space under a page continues it, like Notion
   docTail.addEventListener("click", function(){
-    var p = cur(); if(isHome(p)) return;
+    var p = cur(); if(isTracker(p)) return;
     var last = p.blocks[p.blocks.length - 1];
     var rows = docBody.querySelectorAll(".blk");
     if(last && last.type === "text" && !last.text && rows.length){
@@ -1645,13 +1788,14 @@
   });
 
   function renderPage(){
-    var p = cur(), home = isHome(p);
-    slashClose(); closeIconPop(); closePageMenu();
-    homeView.hidden = !home; homeHead.hidden = !home;
-    docView.hidden = home; docTitle.hidden = home;
-    if(!home){ docTitle.value = p.title; buildDoc(p); }
+    var p = cur(), tk = isTracker(p);
+    slashClose(); closeIconPop(); closePageMenu(); closeNewPop();
+    homeView.hidden = !tk; homeHead.hidden = !tk;
+    docView.hidden = tk; docTitle.hidden = tk;
+    if(tk){ if(T !== p) loadTracker(p); }
+    else{ docTitle.value = p.title; buildDoc(p); }
     renderCover(); renderIcon(); renderItems(); renderSidebar();
-    document.title = home ? "100 days" : (p.title || "untitled");
+    document.title = p.title || "untitled";
     window.scrollTo(0, 0);
   }
 
@@ -1983,6 +2127,8 @@
     cur().items.forEach(function(it){ buildPageItem(it, false); });
   }
 
+  // first paint: build the home tracker once, then show whichever page the URL names
+  loadTracker(state);
   renderPage();
 
   window.addEventListener("resize", applyPositions);
