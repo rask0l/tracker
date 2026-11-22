@@ -17,7 +17,7 @@ linked from anywhere.
   (the side column is `display:contents` so its cards can be reordered).
 - **State is browser-only.** Everything saves to `localStorage` under key
   `hundred-v1` as
-  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, items }`.
+  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, items, cover }`.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
   is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
@@ -63,13 +63,23 @@ linked from anywhere.
   not break it; undated, it ends at the last ticked box) and `best` is the
   longest run anywhere. A day with any note text shows a small red dot on its
   box.
+- Page cover, Notion style: `+ add cover` appears when hovering the header and
+  puts a full-width banner (`clamp(180px, 30vh, 340px)` tall) above the page.
+  Hovering the cover shows `change`, `reposition` (drag the picture up or
+  down, then `done` or Esc), `b&w` and `remove`. It saves as
+  `cover: { src, y, bw }` (y is the vertical crop in %) or `null`. Covers are
+  stored as JPEGs up to 1800px wide (`pickPhoto(cb, maxPx)`); other photos use
+  the 720px default. Everything below the cover sits in `.page`
+  (`position:relative`), so page items keep their place when a cover is added.
 - Free-floating page items: the `+` fixed in the bottom-right corner adds a
   text box, heading, quote box, tip box or photo straight onto the page (not
   inside a card). Each lives in `items` as `{ id, type, text, src?, x, y, w }`
   where `x` is px from the page's centre line (so items stay aligned with the
   centred layout at any width), `y` is px from the top of the page and `w` the
   width. They scroll with the page; hovering shows a grip to drag, a delete,
-  and a corner handle to resize. Text boxes are auto-growing textareas. (The
+  and a corner handle to resize. Text boxes are auto-growing textareas.
+  Photo items also get a `b&w` toggle (`bw: true`), a CSS grayscale filter,
+  so the saved photo keeps its colour. (The
   page once had two fixed side wallpapers; they were removed once photos could
   be added as page items.)
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray

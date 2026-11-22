@@ -235,6 +235,10 @@
     font-size:.8rem; line-height:1; padding:.25rem .35rem;}
   .pi-grip{cursor:move; touch-action:none;}
   .pi-del{cursor:pointer;}
+  .pi-bw{background:transparent; border:none; color:var(--fg); font:inherit; font-size:.6rem;
+    letter-spacing:.08em; text-transform:uppercase; padding:.25rem .35rem; cursor:pointer;}
+  .pi-bw:hover{color:var(--accent);}
+  .pi-bw.on{background:var(--accent); color:var(--accent-ink);}
   .pi-del:hover{color:var(--accent);}
   .pi-size{position:absolute; right:-6px; bottom:-6px; width:12px; height:12px;
     background:var(--fg); border:2px solid var(--bg); cursor:ew-resize; touch-action:none;
@@ -246,6 +250,38 @@
   .addpage:hover, .addpage.on{background:var(--accent); border-color:var(--accent);
     color:var(--accent-ink);}
   .page-menu{position:fixed; right:1rem; bottom:3.9rem;}
+
+  /* page cover, Notion style: a full-width banner above everything */
+  .cover{position:relative; height:clamp(180px, 30vh, 340px); overflow:hidden;
+    border-bottom:2px solid var(--fg);}
+  .cover img{display:block; width:100%; height:100%; object-fit:cover;
+    user-select:none; -webkit-user-drag:none;}
+  .cover.bw img{filter:grayscale(1);}
+  .cover.moving{cursor:grab; touch-action:none;}
+  .cover.moving.dragging{cursor:grabbing;}
+  .cover-bar{position:absolute; right:1rem; bottom:1rem; display:flex; gap:.4rem;
+    align-items:center; opacity:0; transition:opacity .12s;}
+  .cover:hover .cover-bar, .cover.moving .cover-bar{opacity:1;}
+  .cover-btn, .cover-hint{background:var(--bg); border:2px solid var(--fg); color:var(--fg);
+    font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
+    padding:.3rem .55rem;}
+  .cover-btn{cursor:pointer;}
+  .cover-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .cover-btn.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .cover-hint{border-color:var(--line); color:var(--muted);}
+  .cover:not(.moving) .cover-hint{display:none;}
+  .cover.moving .cover-btn:not([data-act=move]){display:none;}
+  @media (hover:none){ .cover-bar{opacity:1;} }
+  .page{position:relative;}
+  header{position:relative;}
+  .addcover{position:absolute; left:0; top:-1.7rem; background:transparent; border:none;
+    color:var(--muted); font:inherit; font-size:.68rem; letter-spacing:.12em;
+    text-transform:uppercase; padding:.2rem 0; cursor:pointer; opacity:0;
+    transition:opacity .12s;}
+  header:hover .addcover, .addcover:focus-visible{opacity:1;}
+  .addcover:hover{color:var(--accent);}
+  @media (hover:none){ .addcover{opacity:.6;} }
+  .pi-image.bw img{filter:grayscale(1);}
 
   @media (max-width:640px){
     .layout{flex-direction:column; align-items:stretch;}
@@ -261,10 +297,16 @@
 </style>
 </head>
 <body>
+  <div class="cover" id="cover" hidden>
+    <img id="coverImg" alt="" draggable="false">
+    <div class="cover-bar"><span class="cover-hint">drag to reposition</span><button class="cover-btn" type="button" data-act="change">change</button><button class="cover-btn" type="button" data-act="move">reposition</button><button class="cover-btn" type="button" data-act="bw">b&amp;w</button><button class="cover-btn" type="button" data-act="remove">remove</button></div>
+  </div>
+  <div class="page">
   <div id="pageItems"></div>
   <button class="addpage" id="addPage" type="button" title="add to page" aria-label="add to page">+</button>
   <div class="wrap">
     <header>
+      <button class="addcover" id="addCover" type="button">+ add cover</button>
       <h1>100 <span class="n">DAYS</span></h1>
       <input class="sub" id="label" maxlength="48" spellcheck="false"
              placeholder="name your challenge" aria-label="challenge name">
@@ -307,6 +349,7 @@
       <span class="hint backup" id="backup"></span>
       <span class="hint"><span class="mouse">click a box to open it · double-click to tick · ← → to step</span><span class="touch">tap a box to open it · long-press to tick</span></span>
     </footer>
+  </div>
   </div>
 
 <script>
@@ -371,7 +414,7 @@
     }).map(function(it){
       var o = { id:String(it.id || uid()), type:it.type, text:String(it.text || ""),
                 x:+it.x, y:Math.max(0, +it.y), w:Math.min(Math.max(+it.w, 120), 1200) };
-      if(it.type === "image") o.src = it.src;
+      if(it.type === "image"){ o.src = it.src; o.bw = !!it.bw; }
       return o;
     });
   }
@@ -419,7 +462,11 @@
         pos: pos,
         start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : "",
         lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : "",
-        items: normItems(o.items)
+        items: normItems(o.items),
+        cover: (o.cover && okSrc(o.cover.src))
+          ? { src:o.cover.src, y:isFinite(o.cover.y) ? Math.min(Math.max(+o.cover.y, 0), 100) : 50,
+              bw:!!o.cover.bw }
+          : null
       };
     }
     return null;
@@ -432,7 +479,7 @@
       if(s) return s;
     }catch(e){}
     return { days:new Array(N).fill(false), label:"", dayNotes:{}, start:"",
-             lastExport:"", items:[],
+             lastExport:"", items:[], cover:null,
              stickies:[ { id:uid(), title:"", pinned:false, done:false,
                           blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
@@ -718,7 +765,7 @@
   var photoInput = document.createElement("input");
   photoInput.type = "file"; photoInput.accept = "image/*"; photoInput.hidden = true;
   document.body.appendChild(photoInput);
-  function pickPhoto(cb){
+  function pickPhoto(cb, maxPx){
     photoInput.value = "";
     photoInput.onchange = function(){
       var f = photoInput.files[0];
@@ -727,7 +774,7 @@
       r.onload = function(){
         var im = new Image();
         im.onload = function(){
-          var max = 720, sc = Math.min(1, max / Math.max(im.width, im.height));
+          var max = maxPx || 720, sc = Math.min(1, max / Math.max(im.width, im.height));
           var c = document.createElement("canvas");
           c.width = Math.max(1, Math.round(im.width * sc));
           c.height = Math.max(1, Math.round(im.height * sc));
@@ -1237,6 +1284,68 @@
     r.readAsText(f);
   });
 
+  // ---------- page cover, Notion style ----------
+  // state.cover is { src, y, bw } or null; y is the vertical crop 0..100 (%)
+  var coverEl  = document.getElementById("cover");
+  var coverImg = document.getElementById("coverImg");
+  var addCover = document.getElementById("addCover");
+  var coverBtn = function(act){ return coverEl.querySelector("[data-act=" + act + "]"); };
+  var coverMoving = false;
+  function renderCover(){
+    var c = state.cover;
+    coverEl.hidden = !c; addCover.hidden = !!c;
+    if(!c){ setCoverMoving(false); return; }
+    if(coverImg.getAttribute("src") !== c.src) coverImg.src = c.src;
+    coverImg.style.objectPosition = "50% " + c.y + "%";
+    coverEl.classList.toggle("bw", !!c.bw);
+    coverBtn("bw").classList.toggle("on", !!c.bw);
+  }
+  function setCoverMoving(on){
+    coverMoving = on;
+    coverEl.classList.toggle("moving", on);
+    coverBtn("move").textContent = on ? "done" : "reposition";
+    if(!on) save();
+  }
+  function chooseCover(){
+    pickPhoto(function(src){
+      state.cover = { src:src, y:50, bw:!!(state.cover && state.cover.bw) };
+      save(); renderCover();
+    }, 1800);
+  }
+  addCover.addEventListener("click", chooseCover);
+  coverBtn("change").addEventListener("click", chooseCover);
+  coverBtn("remove").addEventListener("click", function(){ state.cover = null; save(); renderCover(); });
+  coverBtn("bw").addEventListener("click", function(){ state.cover.bw = !state.cover.bw; save(); renderCover(); });
+  coverBtn("move").addEventListener("click", function(){ setCoverMoving(!coverMoving); });
+  // reposition: drag the picture up or down inside the banner
+  var coverDrag = null;
+  coverEl.addEventListener("pointerdown", function(e){
+    if(!coverMoving || e.button !== 0 || e.target.closest(".cover-bar")) return;
+    coverDrag = { sy:e.clientY, y:state.cover.y };
+    coverEl.setPointerCapture(e.pointerId); coverEl.classList.add("dragging");
+    e.preventDefault();
+  });
+  coverEl.addEventListener("pointermove", function(e){
+    if(!coverDrag) return;
+    var W = coverEl.clientWidth, H = coverEl.clientHeight;
+    var nw = coverImg.naturalWidth, nh = coverImg.naturalHeight;
+    if(!nw || !nh) return;
+    var over = nh * Math.max(W / nw, H / nh) - H;        // hidden height to pan through
+    if(over <= 0) return;
+    // dragging down shows more of the top, so the crop moves up
+    state.cover.y = Math.min(Math.max(coverDrag.y - (e.clientY - coverDrag.sy) / over * 100, 0), 100);
+    coverImg.style.objectPosition = "50% " + state.cover.y + "%";
+  });
+  function endCoverDrag(e){
+    if(!coverDrag) return; coverDrag = null;
+    try{ coverEl.releasePointerCapture(e.pointerId); }catch(_){}
+    coverEl.classList.remove("dragging"); save();
+  }
+  coverEl.addEventListener("pointerup", endCoverDrag);
+  coverEl.addEventListener("pointercancel", endCoverDrag);
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape" && coverMoving) setCoverMoving(false); });
+  renderCover();
+
   // ---------- page items: free-floating text, quotes, tip boxes, photos ----------
   // Each item is { id, type, text, src?, x, y, w }. x is px from the page's
   // centre line (so items stay put relative to the centred layout at any window
@@ -1271,7 +1380,18 @@
     var del = document.createElement("button");
     del.type = "button"; del.className = "pi-del"; del.textContent = "×";
     del.setAttribute("aria-label","remove from page");
-    ctl.appendChild(grip); ctl.appendChild(del);
+    ctl.appendChild(grip);
+    if(it.type === "image"){
+      // colour stays in the saved photo; b&w is just a display toggle
+      var bw = document.createElement("button");
+      bw.type = "button"; bw.className = "pi-bw"; bw.textContent = "b&w";
+      bw.setAttribute("aria-label","black and white");
+      function paintBw(){ el.classList.toggle("bw", !!it.bw); bw.classList.toggle("on", !!it.bw); }
+      paintBw();
+      bw.addEventListener("click", function(){ it.bw = !it.bw; paintBw(); save(); });
+      ctl.appendChild(bw);
+    }
+    ctl.appendChild(del);
 
     var ta = null;
     if(it.type === "image"){
