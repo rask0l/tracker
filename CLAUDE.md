@@ -94,8 +94,9 @@ linked from anywhere.
   opened with the fixed `☰` button. Arrow-key day stepping only runs on
   tracker pages.
 - Icons: every page can have an icon, `{ emoji }` or `{ src }` (a picture
-  shrunk to 256px), picked from a popover (emoji grid, type/paste an emoji,
-  upload, remove). Like Notion, the 110px icon overlaps the bottom edge of the
+  shrunk to 256px), plus `bw: true` for black and white (a grayscale filter
+  on the page icon and the sidebar; a new icon keeps the setting), picked
+  from a popover (emoji grid, type/paste an emoji, upload, b&w, remove). Like Notion, the 110px icon overlaps the bottom edge of the
   cover and the title sits under it; the sidebar shows it small.
   `+ add icon` / `+ add cover` / `+ add subtitle` sit above the title and
   show on hover. An empty subtitle (tracker `label` or document `label`)

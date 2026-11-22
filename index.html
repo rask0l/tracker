@@ -400,6 +400,8 @@
     color:var(--muted); font:inherit; font-size:.62rem; letter-spacing:.1em;
     text-transform:uppercase; padding:.4rem; cursor:pointer;}
   .icon-row button:hover{border-color:var(--accent); color:var(--accent);}
+  .icon-row button.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .icon.bw, .sb-ico.bw{filter:grayscale(1);}
 
   /* ---- document pages ---- */
   .doc-title{display:block; width:100%; margin:0; padding:0;
@@ -627,9 +629,11 @@
   }
   // an icon is { emoji } or { src } (a small JPEG), or null
   function normIcon(i){
-    if(i && typeof i.emoji === "string" && i.emoji.trim()) return { emoji:i.emoji.trim().slice(0, 16) };
-    if(i && okSrc(i.src)) return { src:i.src };
-    return null;
+    var o = null;
+    if(i && typeof i.emoji === "string" && i.emoji.trim()) o = { emoji:i.emoji.trim().slice(0, 16) };
+    else if(i && okSrc(i.src)) o = { src:i.src };
+    if(o && i.bw) o.bw = true;     // black and white is a display filter only
+    return o;
   }
   // pages are documents ({ kind:"doc", blocks }) or day trackers ({ kind:"tracker", n, days, ... })
   function normPages(arr){
@@ -1567,6 +1571,7 @@
   // ---- icons: an emoji or a small picture ----
   function paintIcon(el, icon){
     el.innerHTML = "";
+    el.classList.toggle("bw", !!(icon && icon.bw));
     if(!icon) return;
     if(icon.src){
       var im = document.createElement("img");
@@ -1589,6 +1594,8 @@
     iconPop = null;
   }
   function setIcon(ic){
+    // a new emoji or picture keeps the black-and-white setting
+    if(ic && cur().icon && cur().icon.bw) ic.bw = true;
     cur().icon = ic; save(); renderIcon(); renderSidebar(); closeIconPop();
   }
   function firstGrapheme(s){
@@ -1629,6 +1636,16 @@
     });
     row.appendChild(up);
     if(cur().icon){
+      var bw = document.createElement("button");
+      bw.type = "button"; bw.textContent = "b&w";
+      bw.className = cur().icon.bw ? "on" : "";
+      bw.addEventListener("click", function(){
+        var ic = cur().icon;
+        if(ic.bw) delete ic.bw; else ic.bw = true;
+        save(); renderIcon(); renderSidebar();
+        bw.classList.toggle("on", !!ic.bw);
+      });
+      row.appendChild(bw);
       var rm = document.createElement("button");
       rm.type = "button"; rm.textContent = "remove";
       rm.addEventListener("click", function(){ setIcon(null); });
