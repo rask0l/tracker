@@ -66,7 +66,11 @@ linked from anywhere.
 - Page cover, Notion style: `+ add cover` appears when hovering the header and
   puts a full-width banner (`clamp(180px, 30vh, 340px)` tall) above the page.
   Hovering the cover shows `change`, `reposition` (drag the picture up or
-  down, then `done` or Esc), `b&w` and `remove`. It saves as
+  down, then `done` or Esc), `b&w` and `remove` (two clicks: arm, then
+  confirm within 3s). In reposition mode the other buttons are
+  `visibility:hidden`, not removed, so `done` stays exactly where
+  `reposition` was; when they collapsed, `remove` slid under the pointer and a
+  double-click on `done` deleted the cover. It saves as
   `cover: { src, y, bw }` (y is the vertical crop in %) or `null`. Covers are
   stored as JPEGs up to 1800px wide (`pickPhoto(cb, maxPx)`); other photos use
   the 720px default. Everything below the cover sits in `.page`

@@ -270,7 +270,9 @@
   .cover-btn.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
   .cover-hint{border-color:var(--line); color:var(--muted);}
   .cover:not(.moving) .cover-hint{display:none;}
-  .cover.moving .cover-btn:not([data-act=move]){display:none;}
+  /* hidden, not removed: "done" must stay exactly where "reposition" was, or
+     the buttons slide and "remove" ends up under the pointer after "done" */
+  .cover.moving .cover-btn:not([data-act=move]){visibility:hidden; pointer-events:none;}
   @media (hover:none){ .cover-bar{opacity:1;} }
   .page{position:relative;}
   header{position:relative;}
@@ -1314,9 +1316,26 @@
   }
   addCover.addEventListener("click", chooseCover);
   coverBtn("change").addEventListener("click", chooseCover);
-  coverBtn("remove").addEventListener("click", function(){ state.cover = null; save(); renderCover(); });
+  // remove takes two clicks (arm, then confirm within 3s), like reset all
+  var rmArmed = null, rmBtn = coverBtn("remove");
+  function disarmRemove(){ clearTimeout(rmArmed); rmArmed = null; rmBtn.textContent = "remove"; rmBtn.classList.remove("on"); }
+  rmBtn.addEventListener("click", function(){
+    if(!rmArmed){
+      rmBtn.textContent = "sure?"; rmBtn.classList.add("on");
+      rmArmed = setTimeout(disarmRemove, 3000); return;
+    }
+    disarmRemove();
+    state.cover = null; save(); renderCover();
+  });
   coverBtn("bw").addEventListener("click", function(){ state.cover.bw = !state.cover.bw; save(); renderCover(); });
-  coverBtn("move").addEventListener("click", function(){ setCoverMoving(!coverMoving); });
+  // a double-click shouldn't flip straight back into reposition mode
+  var lastMoveClick = 0;
+  coverBtn("move").addEventListener("click", function(){
+    var now = Date.now();
+    if(now - lastMoveClick < 400) return;
+    lastMoveClick = now;
+    setCoverMoving(!coverMoving);
+  });
   // reposition: drag the picture up or down inside the banner
   var coverDrag = null;
   coverEl.addEventListener("pointerdown", function(e){
