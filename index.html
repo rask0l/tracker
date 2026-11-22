@@ -228,8 +228,21 @@
   .pi-callout{display:flex; gap:.6rem; align-items:flex-start; background:#161616;
     border:2px solid var(--line); padding:.75rem .9rem;}
   .pi-icon{flex:0 0 auto; color:var(--accent); font-weight:700; line-height:1.55;}
-  .pi-image img{display:block; width:100%; height:auto; border:2px solid var(--line);
-    user-select:none;}
+  /* page photos sit in a frame that crops; layoutPhoto() sizes and offsets the img */
+  .pi-frame{position:relative; overflow:hidden; border:2px solid var(--line);}
+  .pi-frame img{position:absolute; left:0; top:0; max-width:none; display:block;
+    user-select:none; -webkit-user-drag:none; pointer-events:none;}
+  .pi-image.cropping .pi-frame{border-color:var(--accent); cursor:grab; touch-action:none;}
+  .pi-image.cropping.panning .pi-frame{cursor:grabbing;}
+  .pi-image .pi-size{cursor:nwse-resize;}
+  .pi-crop, .pi-fit{background:transparent; border:none; color:var(--fg); font:inherit;
+    font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; padding:.25rem .35rem;
+    cursor:pointer;}
+  .pi-crop:hover, .pi-fit:hover{color:var(--accent);}
+  .pi-crop.on{background:var(--accent); color:var(--accent-ink);}
+  .pi-image:not(.cropping) .pi-fit{display:none;}
+  .pi-image.cropping .pi-ctl{opacity:1;}
+  .pi-image.cropping .pi-size{display:none;}
   .pi-ctl{position:absolute; top:-.2rem; right:-.2rem; display:flex; gap:.15rem;
     background:var(--bg); border:2px solid var(--fg); opacity:0; transition:opacity .1s;}
   .pitem:hover .pi-ctl, .pitem.active .pi-ctl, .pitem:focus-within .pi-ctl{opacity:1;}
@@ -513,7 +526,15 @@
     }).map(function(it){
       var o = { id:String(it.id || uid()), type:it.type, text:String(it.text || ""),
                 x:+it.x, y:Math.max(0, +it.y), w:Math.min(Math.max(+it.w, 120), 1200) };
-      if(it.type === "image"){ o.src = it.src; o.bw = !!it.bw; }
+      if(it.type === "image"){
+        o.src = it.src; o.bw = !!it.bw;
+        // crop: h is the frame height (absent = the photo's own shape),
+        // zoom 1..4 over a cover fit, px/py the pan 0..1 (0.5 = centred)
+        if(isFinite(it.h) && +it.h >= 60) o.h = Math.min(+it.h, 2400);
+        o.zoom = isFinite(it.zoom) ? Math.min(Math.max(+it.zoom, 1), 4) : 1;
+        o.px = isFinite(it.px) ? Math.min(Math.max(+it.px, 0), 1) : 0.5;
+        o.py = isFinite(it.py) ? Math.min(Math.max(+it.py, 0), 1) : 0.5;
+      }
       return o;
     });
   }
@@ -1750,15 +1771,25 @@
       function paintBw(){ el.classList.toggle("bw", !!it.bw); bw.classList.toggle("on", !!it.bw); }
       paintBw();
       bw.addEventListener("click", function(){ it.bw = !it.bw; paintBw(); save(); });
-      ctl.appendChild(bw);
+      // crop: drag the picture inside its frame and scroll to zoom
+      var crop = document.createElement("button");
+      crop.type = "button"; crop.className = "pi-crop"; crop.textContent = "crop";
+      var fit = document.createElement("button");
+      fit.type = "button"; fit.className = "pi-fit"; fit.textContent = "fit";
+      fit.title = "back to the photo's own shape";
+      ctl.appendChild(fit); ctl.appendChild(crop); ctl.appendChild(bw);
     }
     ctl.appendChild(del);
 
     var ta = null;
+    var frame = null, im = null;
     if(it.type === "image"){
-      var im = document.createElement("img");
+      frame = document.createElement("div");
+      frame.className = "pi-frame";
+      im = document.createElement("img");
       im.src = it.src; im.alt = ""; im.draggable = false;
-      el.appendChild(im);
+      frame.appendChild(im);
+      el.appendChild(frame);
     }else{
       if(it.type === "callout"){
         var icon = document.createElement("span");
@@ -1778,6 +1809,73 @@
     pageBox.appendChild(el);
     if(ta) growText(ta);
 
+    // size and offset the photo inside its frame from it.h / zoom / px / py
+    function layoutPhoto(){
+      if(!im) return;
+      var nw = im.naturalWidth, nh = im.naturalHeight;
+      var W = frame.clientWidth;
+      if(!nw || !nh || !W) return;
+      var H = it.h ? it.h - 4 : Math.round(W * nh / nw);    // it.h includes the 2px border
+      frame.style.height = (H + 4) + "px";
+      var sc = Math.max(W / nw, H / nh) * (it.zoom || 1);
+      var dw = nw * sc, dh = nh * sc;
+      im.style.width = dw + "px"; im.style.height = dh + "px";
+      im.style.left = (-(dw - W) * it.px) + "px";
+      im.style.top  = (-(dh - H) * it.py) + "px";
+      return { ox:dw - W, oy:dh - H };
+    }
+    if(im){
+      if(im.complete) layoutPhoto();
+      im.addEventListener("load", layoutPhoto);
+      var cropping = false;
+      function setCropping(on){
+        cropping = on;
+        el.classList.toggle("cropping", on);
+        crop.textContent = on ? "done" : "crop"; crop.classList.toggle("on", on);
+        if(!on) save();
+      }
+      el.stopCrop = function(){ if(cropping) setCropping(false); };
+      var lastCropClick = 0;      // a double-click on done must not re-enter crop mode
+      crop.addEventListener("click", function(){
+        var now = Date.now();
+        if(now - lastCropClick < 400) return;
+        lastCropClick = now;
+        setCropping(!cropping);
+      });
+      fit.addEventListener("click", function(){
+        delete it.h; it.zoom = 1; it.px = 0.5; it.py = 0.5;
+        layoutPhoto(); save();
+      });
+      var pan = null;
+      frame.addEventListener("pointerdown", function(e){
+        if(!cropping || e.button !== 0) return;
+        pan = { sx:e.clientX, sy:e.clientY, px:it.px, py:it.py };
+        frame.setPointerCapture(e.pointerId); el.classList.add("panning");
+        e.preventDefault();
+      });
+      frame.addEventListener("pointermove", function(e){
+        if(!pan) return;
+        var o = layoutPhoto();
+        // moving the pointer right drags the picture right, so the pan goes left
+        if(o.ox > 0) it.px = Math.min(Math.max(pan.px - (e.clientX - pan.sx) / o.ox, 0), 1);
+        if(o.oy > 0) it.py = Math.min(Math.max(pan.py - (e.clientY - pan.sy) / o.oy, 0), 1);
+        layoutPhoto();
+      });
+      function endPan(e){
+        if(!pan) return; pan = null;
+        try{ frame.releasePointerCapture(e.pointerId); }catch(_){}
+        el.classList.remove("panning"); save();
+      }
+      frame.addEventListener("pointerup", endPan);
+      frame.addEventListener("pointercancel", endPan);
+      frame.addEventListener("wheel", function(e){
+        if(!cropping) return;
+        e.preventDefault();
+        it.zoom = Math.min(Math.max((it.zoom || 1) * Math.exp(-e.deltaY * 0.0015), 1), 4);
+        layoutPhoto(); save();
+      }, { passive:false });
+    }
+
     del.addEventListener("click", function(){
       cur().items = cur().items.filter(function(x){ return x.id !== it.id; });
       el.parentNode.removeChild(el); save();
@@ -1788,14 +1886,15 @@
       var g = null;
       handle.addEventListener("pointerdown", function(e){
         if(e.button !== 0) return;
-        g = { sx:e.clientX, sy:e.clientY, x:it.x, y:it.y, w:it.w };
+        g = { sx:e.clientX, sy:e.clientY, x:it.x, y:it.y, w:it.w,
+              h:frame ? frame.offsetHeight : 0 };
         handle.setPointerCapture(e.pointerId); el.classList.add("active");
         e.preventDefault();
       });
       handle.addEventListener("pointermove", function(e){
         if(!g) return;
         onMove(g, e.clientX - g.sx, e.clientY - g.sy);
-        placeItem(el, it); if(ta) growText(ta);
+        placeItem(el, it); if(ta) growText(ta); layoutPhoto();
       });
       function end(e){
         if(!g) return; g = null;
@@ -1806,7 +1905,11 @@
       handle.addEventListener("pointercancel", end);
     }
     gesture(grip, function(g, dx, dy){ it.x = g.x + dx; it.y = Math.max(0, g.y + dy); });
-    gesture(size, function(g, dx){ it.w = Math.min(Math.max(g.w + dx, 120), 1200); });
+    gesture(size, function(g, dx, dy){
+      it.w = Math.min(Math.max(g.w + dx, 120), 1200);
+      // photos: the corner also sets the frame height, cropping instead of squashing
+      if(frame) it.h = Math.min(Math.max(g.h + dy, 60), 2400);
+    });
 
     if(focus && ta) ta.focus();
     return el;
@@ -1849,7 +1952,11 @@
   document.addEventListener("click", function(e){
     if(pageMenu && !pageMenu.contains(e.target)) closePageMenu();
   });
-  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closePageMenu(); });
+  document.addEventListener("keydown", function(e){
+    if(e.key !== "Escape") return;
+    closePageMenu();
+    [].forEach.call(pageBox.querySelectorAll(".pi-image"), function(el){ el.stopCrop && el.stopCrop(); });
+  });
 
   function renderItems(){
     pageBox.innerHTML = "";

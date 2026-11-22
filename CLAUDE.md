@@ -103,7 +103,12 @@ linked from anywhere.
   width. They scroll with the page; hovering shows a grip to drag, a delete,
   and a corner handle to resize. Text boxes are auto-growing textareas.
   Photo items also get a `b&w` toggle (`bw: true`), a CSS grayscale filter,
-  so the saved photo keeps its colour. (The
+  so the saved photo keeps its colour. Photos sit in a cropping `.pi-frame`:
+  the corner handle sets width and frame height (`h`), `crop` enters a mode
+  where dragging pans and scrolling zooms (`zoom` 1..4, `px`/`py` 0..1 pan),
+  `fit` drops `h` and the crop to show the photo's own shape, and `done` or
+  Esc leaves the mode. `layoutPhoto()` turns those into the img's size and
+  offset. Like the cover, a quick second click on `done` is ignored. (The
   page once had two fixed side wallpapers; they were removed once photos could
   be added as page items.)
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
