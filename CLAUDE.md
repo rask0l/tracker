@@ -16,8 +16,9 @@ linked from anywhere.
   `n` day buttons (10 wide up to 100 days, 14 up to 196, then 20) plus a side
   column of note cards, under an editable title (`title`, shown in the
   sidebar) and a subtitle (`label`). A `days` field next to `start` changes
-  the length (it is invisible until you hover that row or edit it); shrinking
-  only hides days (the `days` array keeps them). Clicking a box opens that day in the Day card;
+  the length; both fields are invisible until you hover their row or edit
+  them (class `len-field`). Shrinking only hides days (the `days` array keeps
+  them). Clicking a box opens that day in the Day card;
   double-clicking a box (or the Day card's checkbox) ticks it. Left/right
   arrow keys, or the `‹ ›` buttons on the Day card, step between days (the
   keys are ignored while typing in an input). On touch screens a long-press
