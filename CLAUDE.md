@@ -8,8 +8,10 @@ linked from anywhere.
 ## What it is
 
 - `index.html` is the entire site: a self-contained static page with inline
-  CSS and JS, no framework, no Jekyll layout. A 10x10 grid of 100 buttons plus
-  a side column of note cards. Clicking a box opens that day in the Day card;
+  CSS and JS, no framework, no Jekyll layout. It works like a small Notion: a
+  left sidebar lists pages, the first being the tracker (home), and
+  `+ new page` adds document pages. The tracker is a 10x10 grid of 100
+  buttons plus a side column of note cards. Clicking a box opens that day in the Day card;
   double-clicking a box (or the Day card's checkbox) ticks it. Left/right
   arrow keys, or the `‹ ›` buttons on the Day card, step between days (the
   keys are ignored while typing in an input). On touch screens a long-press
@@ -17,7 +19,7 @@ linked from anywhere.
   (the side column is `display:contents` so its cards can be reordered).
 - **State is browser-only.** Everything saves to `localStorage` under key
   `hundred-v1` as
-  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, items, cover }`.
+  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, items, cover, icon, pages, sidebarHidden }`.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
   is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
@@ -63,8 +65,26 @@ linked from anywhere.
   not break it; undated, it ends at the last ticked box) and `best` is the
   longest run anywhere. A day with any note text shows a small red dot on its
   box.
-- Page cover, Notion style: `+ add cover` appears when hovering the header and
-  puts a full-width banner (`clamp(180px, 30vh, 340px)` tall) above the page.
+- Pages: the tracker keeps its own `cover`, `icon` and `items` on the state
+  itself; every other page is `{ id, title, icon, cover, blocks, items }` in
+  `pages`, with `blocks` using the same block editor and slash menu as notes.
+  The open page lives in the URL hash (`#p/<id>`, none for home) so back and
+  forward work; `cur()` returns the open page (the state object for home) and
+  `renderPage()` swaps `#homeView` / `#docView` and redraws cover, icon, page
+  items and sidebar. Clicking the empty space under a document continues it.
+  Deleting a page from the sidebar takes two clicks. The sidebar collapses
+  with `«` (remembered as `sidebarHidden`); under 900px it is an overlay
+  opened with the fixed `☰` button. Arrow-key day stepping only runs on the
+  tracker page.
+- Icons: every page can have an icon, `{ emoji }` or `{ src }` (a picture
+  shrunk to 256px), picked from a popover (emoji grid, type/paste an emoji,
+  upload, remove). Like Notion, the 110px icon overlaps the bottom edge of the
+  cover and the title sits under it; the sidebar shows it small.
+  `+ add icon` / `+ add cover` sit above the title and show on hover.
+- `[hidden]{display:none !important}` is global on purpose: several elements
+  set `display` in CSS, which would otherwise override the `hidden` attribute.
+- Page cover, Notion style: `+ add cover` puts a full-width banner
+  (`clamp(180px, 30vh, 340px)` tall) above the open page.
   Hovering the cover shows `change`, `reposition` (drag the picture up or
   down, then `done` or Esc), `b&w` and `remove` (two clicks: arm, then
   confirm within 3s). In reposition mode the other buttons are

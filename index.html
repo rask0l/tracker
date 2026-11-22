@@ -12,6 +12,8 @@
     --line:#2d2d2d; --accent:#e5484b; --accent-ink:#0f0f0f;
   }
   *{box-sizing:border-box;}
+  /* the hidden attribute always wins over display rules set below */
+  [hidden]{display:none !important;}
   html{font-size:16px;}
   body{
     margin:0; background:var(--bg); color:var(--fg);
@@ -275,14 +277,91 @@
   .cover.moving .cover-btn:not([data-act=move]){visibility:hidden; pointer-events:none;}
   @media (hover:none){ .cover-bar{opacity:1;} }
   .page{position:relative;}
-  header{position:relative;}
-  .addcover{position:absolute; left:0; top:-1.7rem; background:transparent; border:none;
-    color:var(--muted); font:inherit; font-size:.68rem; letter-spacing:.12em;
-    text-transform:uppercase; padding:.2rem 0; cursor:pointer; opacity:0;
-    transition:opacity .12s;}
-  header:hover .addcover, .addcover:focus-visible{opacity:1;}
-  .addcover:hover{color:var(--accent);}
-  @media (hover:none){ .addcover{opacity:.6;} }
+  /* ---- sidebar of pages ---- */
+  .sidebar{position:fixed; left:0; top:0; bottom:0; width:240px; z-index:70;
+    display:flex; flex-direction:column; padding:.8rem .6rem;
+    background:#0b0b0b; border-right:2px solid var(--line);}
+  .sb-head{display:flex; justify-content:space-between; align-items:center;
+    padding:0 .4rem .7rem; font-size:.65rem; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted);}
+  .sb-close{background:transparent; border:none; color:var(--muted); font:inherit;
+    font-size:.95rem; cursor:pointer; padding:0 .2rem;}
+  .sb-close:hover{color:var(--fg);}
+  .sb-open{position:fixed; left:.6rem; top:.6rem; z-index:69; display:none;
+    width:2.1rem; height:2.1rem; background:var(--bg); border:2px solid var(--line);
+    color:var(--fg); font:inherit; font-size:.95rem; cursor:pointer;}
+  .sb-open:hover{border-color:var(--fg);}
+  .sb-list{flex:1 1 auto; overflow:auto; display:flex; flex-direction:column; gap:2px;}
+  .sb-item{display:flex; align-items:center; gap:.55rem; padding:.38rem .45rem;
+    border:2px solid transparent; color:var(--fg); font-size:.78rem; cursor:pointer;}
+  .sb-item:hover, .sb-item:focus-visible{background:#161616; outline:none;}
+  .sb-item.on{background:#161616; border-color:var(--line);}
+  .sb-ico{flex:0 0 18px; width:18px; height:18px; display:inline-flex; align-items:center;
+    justify-content:center; font-size:.9rem; line-height:1; color:var(--muted); overflow:hidden;}
+  .sb-ico img{width:100%; height:100%; object-fit:cover;}
+  .sb-title{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .sb-title.empty{color:var(--muted);}
+  .sb-del{flex:0 0 auto; background:transparent; border:none; color:var(--muted);
+    font:inherit; font-size:.8rem; cursor:pointer; padding:0 .2rem; opacity:0;}
+  .sb-item:hover .sb-del, .sb-del.armed{opacity:1;}
+  .sb-del:hover{color:var(--accent);}
+  .sb-del.armed{color:var(--accent); font-size:.6rem; letter-spacing:.08em; text-transform:uppercase;}
+  .sb-new{margin-top:.6rem; background:transparent; border:2px dashed var(--line);
+    color:var(--muted); font:inherit; font-size:.68rem; letter-spacing:.1em;
+    text-transform:uppercase; padding:.55rem; cursor:pointer;}
+  .sb-new:hover{border-color:var(--accent); color:var(--accent);}
+  .main{position:relative; margin-left:240px; min-height:100vh;}
+  body.sb-hidden .sidebar{display:none;}
+  body.sb-hidden .main{margin-left:0;}
+  body.sb-hidden .sb-open{display:block;}
+  @media (hover:none){ .sb-del{opacity:.6;} }
+  @media (max-width:900px){
+    .main{margin-left:0;}
+    .sb-open{display:block;}
+    body:not(.sb-shown) .sidebar{display:none;}
+    body.sb-shown .sidebar{display:flex; box-shadow:6px 0 0 var(--line);}
+  }
+
+  /* ---- page head: icon over the cover's edge, actions, title ---- */
+  .top{position:relative;}
+  .main.has-cover .wrap{padding-top:1.4rem;}
+  .icon{position:relative; z-index:6; width:110px; height:110px; margin-bottom:.3rem;
+    display:flex; align-items:center; justify-content:center;
+    font-size:78px; line-height:1; cursor:pointer; user-select:none;}
+  .icon img{width:100%; height:100%; object-fit:cover; border:2px solid var(--fg); display:block;}
+  .main.has-cover .icon{margin-top:calc(-1.4rem - 55px);}
+  .head-actions{display:flex; gap:1.1rem; align-items:center; height:1.7rem;
+    opacity:0; transition:opacity .12s;}
+  .top:hover .head-actions, .head-actions:focus-within{opacity:1;}
+  .head-actions button{background:transparent; border:none; color:var(--muted); font:inherit;
+    font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; padding:0; cursor:pointer;}
+  .head-actions button:hover{color:var(--accent);}
+  .head-actions button[hidden]{display:none;}
+  @media (hover:none){ .head-actions{opacity:.6;} }
+  .icon-pop{position:fixed; z-index:90; width:290px; padding:.6rem;
+    background:var(--bg); border:2px solid var(--fg); box-shadow:6px 6px 0 var(--line);}
+  .icon-pop input{width:100%; background:transparent; border:2px solid var(--line);
+    color:var(--fg); font:inherit; font-size:.75rem; padding:.35rem .45rem; outline:none;}
+  .icon-pop input:focus{border-color:var(--accent);}
+  .icon-grid{display:grid; grid-template-columns:repeat(8, 1fr); gap:2px; margin:.5rem 0;}
+  .icon-grid button{background:transparent; border:2px solid transparent; font-size:1.1rem;
+    line-height:1; padding:.25rem 0; cursor:pointer;}
+  .icon-grid button:hover{border-color:var(--line); background:#161616;}
+  .icon-row{display:flex; gap:.4rem;}
+  .icon-row button{flex:1 1 auto; background:transparent; border:2px solid var(--line);
+    color:var(--muted); font:inherit; font-size:.62rem; letter-spacing:.1em;
+    text-transform:uppercase; padding:.4rem; cursor:pointer;}
+  .icon-row button:hover{border-color:var(--accent); color:var(--accent);}
+
+  /* ---- document pages ---- */
+  .doc-title{display:block; width:100%; margin:0 0 1.6rem; padding:0 0 1rem;
+    background:transparent; border:none; border-bottom:2px solid var(--fg); outline:none;
+    color:var(--fg); font:inherit; font-size:2rem; font-weight:700; letter-spacing:.04em;}
+  .doc-title::placeholder{color:var(--line);}
+  .doc .blk-text{font-size:.95rem;}
+  .doc .bt-h .blk-text{font-size:1.35rem;}
+  .doc .blk{padding:.18rem 0;}
+  .doc-tail{min-height:35vh; cursor:text;}
   .pi-image.bw img{filter:grayscale(1);}
 
   @media (max-width:640px){
@@ -299,6 +378,14 @@
 </style>
 </head>
 <body>
+  <div class="toast" id="toast" role="alert" hidden></div>
+  <aside class="sidebar" id="sidebar" aria-label="pages">
+    <div class="sb-head"><span>pages</span><button class="sb-close" id="sbClose" type="button" title="hide sidebar" aria-label="hide sidebar">&laquo;</button></div>
+    <nav class="sb-list" id="sbList"></nav>
+    <button class="sb-new" id="sbNew" type="button">+ new page</button>
+  </aside>
+  <button class="sb-open" id="sbOpen" type="button" title="show sidebar" aria-label="show sidebar">&#9776;</button>
+  <div class="main" id="main">
   <div class="cover" id="cover" hidden>
     <img id="coverImg" alt="" draggable="false">
     <div class="cover-bar"><span class="cover-hint">drag to reposition</span><button class="cover-btn" type="button" data-act="change">change</button><button class="cover-btn" type="button" data-act="move">reposition</button><button class="cover-btn" type="button" data-act="bw">b&amp;w</button><button class="cover-btn" type="button" data-act="remove">remove</button></div>
@@ -307,13 +394,18 @@
   <div id="pageItems"></div>
   <button class="addpage" id="addPage" type="button" title="add to page" aria-label="add to page">+</button>
   <div class="wrap">
-    <header>
-      <button class="addcover" id="addCover" type="button">+ add cover</button>
+    <div class="top">
+      <div class="icon" id="pageIcon" role="button" tabindex="0" aria-label="change icon" hidden></div>
+      <div class="head-actions"><button id="addIcon" type="button">+ add icon</button><button id="addCover" type="button">+ add cover</button></div>
+    <header id="homeHead">
       <h1>100 <span class="n">DAYS</span></h1>
       <input class="sub" id="label" maxlength="48" spellcheck="false"
              placeholder="name your challenge" aria-label="challenge name">
     </header>
+      <input class="doc-title" id="docTitle" placeholder="untitled" spellcheck="false" aria-label="page title" hidden>
+    </div>
 
+    <div id="homeView">
     <div class="stats">
       <span class="count"><b id="done">0</b> / 100</span>
       <span class="right">
@@ -340,7 +432,6 @@
       </div>
     </div>
 
-    <div class="toast" id="toast" role="alert" hidden></div>
     <footer>
       <div class="tools">
         <button class="reset" id="reset" type="button">reset all</button>
@@ -351,6 +442,12 @@
       <span class="hint backup" id="backup"></span>
       <span class="hint"><span class="mouse">click a box to open it · double-click to tick · ← → to step</span><span class="touch">tap a box to open it · long-press to tick</span></span>
     </footer>
+    </div>
+    <div class="doc" id="docView" hidden>
+      <div class="blocks" id="docBody"></div>
+      <div class="doc-tail" id="docTail"></div>
+    </div>
+  </div>
   </div>
   </div>
 
@@ -421,6 +518,27 @@
     });
   }
 
+  function normCover(c){
+    return (c && okSrc(c.src))
+      ? { src:c.src, y:isFinite(c.y) ? Math.min(Math.max(+c.y, 0), 100) : 50, bw:!!c.bw }
+      : null;
+  }
+  // an icon is { emoji } or { src } (a small JPEG), or null
+  function normIcon(i){
+    if(i && typeof i.emoji === "string" && i.emoji.trim()) return { emoji:i.emoji.trim().slice(0, 16) };
+    if(i && okSrc(i.src)) return { src:i.src };
+    return null;
+  }
+  function normPages(arr){
+    if(!Array.isArray(arr)) return [];
+    return arr.filter(function(p){ return p && typeof p === "object"; }).map(function(p){
+      return { id:String(p.id || uid()), title:String(p.title || ""),
+               icon:normIcon(p.icon), cover:normCover(p.cover),
+               blocks:normBlocks(p.blocks) || [mkBlock("text","",false)],
+               items:normItems(p.items) };
+    });
+  }
+
   // validate any parsed object into a state, or null if it is not one
   function normalize(o){
     if(o && Array.isArray(o.days) && o.days.length === N){
@@ -465,10 +583,10 @@
         start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : "",
         lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : "",
         items: normItems(o.items),
-        cover: (o.cover && okSrc(o.cover.src))
-          ? { src:o.cover.src, y:isFinite(o.cover.y) ? Math.min(Math.max(+o.cover.y, 0), 100) : 50,
-              bw:!!o.cover.bw }
-          : null
+        cover: normCover(o.cover),
+        icon: normIcon(o.icon),
+        pages: normPages(o.pages),
+        sidebarHidden: !!o.sidebarHidden
       };
     }
     return null;
@@ -481,7 +599,7 @@
       if(s) return s;
     }catch(e){}
     return { days:new Array(N).fill(false), label:"", dayNotes:{}, start:"",
-             lastExport:"", items:[], cover:null,
+             lastExport:"", items:[], cover:null, icon:null, pages:[], sidebarHidden:false,
              stickies:[ { id:uid(), title:"", pinned:false, done:false,
                           blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
@@ -1192,6 +1310,7 @@
   // left/right step through days, unless you are typing
   document.addEventListener("keydown", function(e){
     if(e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if(homeView.hidden) return;
     if(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     var t = e.target;
     if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
@@ -1213,7 +1332,7 @@
   });
 
   label.value = state.label;
-  label.addEventListener("input", function(){ state.label = label.value; save(); });
+  label.addEventListener("input", function(){ state.label = label.value; save(); renderSidebar(); });
 
   var armed = false, armTimer = null;
   reset.addEventListener("click", function(){
@@ -1286,16 +1405,240 @@
     r.readAsText(f);
   });
 
+  // ---------- pages: a Notion-style sidebar of pages ----------
+  // The tracker is the home page and keeps its cover/icon/items on `state`
+  // itself; every other page is { id, title, icon, cover, blocks, items } in
+  // state.pages. The open page lives in the URL hash (#p/<id>), so back and
+  // forward work. cur() is whichever page is open.
+  var mainEl   = document.getElementById("main");
+  var homeView = document.getElementById("homeView");
+  var homeHead = document.getElementById("homeHead");
+  var docView  = document.getElementById("docView");
+  var docTitle = document.getElementById("docTitle");
+  var docBody  = document.getElementById("docBody");
+  var docTail  = document.getElementById("docTail");
+  var sbList   = document.getElementById("sbList");
+  var pageIcon = document.getElementById("pageIcon");
+  var addIcon  = document.getElementById("addIcon");
+
+  function pageById(id){ return state.pages.filter(function(p){ return p.id === id; })[0] || null; }
+  function cur(){
+    var m = /^#p\/(.+)$/.exec(location.hash);
+    return (m && pageById(decodeURIComponent(m[1]))) || state;
+  }
+  function isHome(p){ return p === state; }
+  function go(id){
+    var want = id === "home" ? "" : "#p/" + encodeURIComponent(id);
+    var have = location.hash === "#" ? "" : location.hash;
+    if(want === have){ renderPage(); return; }
+    if(want === "") history.pushState(null, "", location.pathname + location.search);
+    else history.pushState(null, "", want);
+    renderPage();
+  }
+  window.addEventListener("popstate", renderPage);
+  window.addEventListener("hashchange", renderPage);
+
+  // ---- icons: an emoji or a small picture ----
+  function paintIcon(el, icon){
+    el.innerHTML = "";
+    if(!icon) return;
+    if(icon.src){
+      var im = document.createElement("img");
+      im.src = icon.src; im.alt = ""; im.draggable = false;
+      el.appendChild(im);
+    }else el.textContent = icon.emoji;
+  }
+  function renderIcon(){
+    var ic = cur().icon;
+    pageIcon.hidden = !ic; addIcon.hidden = !!ic;
+    paintIcon(pageIcon, ic);
+    mainEl.classList.toggle("has-icon", !!ic);
+  }
+  var EMOJI = ["🔥","💪","📚","🧠","🎯","⚡","🚀","✍️","🏋️","🏃","🧘","💻",
+               "🎧","📈","✅","⭐","🌙","☀️","🍎","💤","🗓️","🧩","🎮","❤️",
+               "🖤","⚔️","🏆","📝","💰","🌱","🧪","🛠️"];
+  var iconPop = null;
+  function closeIconPop(){
+    if(iconPop && iconPop.parentNode) iconPop.parentNode.removeChild(iconPop);
+    iconPop = null;
+  }
+  function setIcon(ic){
+    cur().icon = ic; save(); renderIcon(); renderSidebar(); closeIconPop();
+  }
+  function firstGrapheme(s){
+    s = s.trim();
+    if(!s) return "";
+    if(window.Intl && Intl.Segmenter){
+      var it = new Intl.Segmenter().segment(s)[Symbol.iterator]().next();
+      return it.done ? "" : it.value.segment;
+    }
+    return Array.from(s)[0];
+  }
+  function openIconPop(anchor){
+    closeIconPop();
+    var pop = iconPop = document.createElement("div");
+    pop.className = "icon-pop";
+    var inp = document.createElement("input");
+    inp.type = "text"; inp.placeholder = "type or paste an emoji, then enter";
+    inp.addEventListener("keydown", function(e){
+      if(e.key === "Enter"){ var g = firstGrapheme(inp.value); if(g) setIcon({ emoji:g }); }
+    });
+    pop.appendChild(inp);
+    var grid = document.createElement("div");
+    grid.className = "icon-grid";
+    EMOJI.forEach(function(em){
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = em;
+      b.addEventListener("click", function(){ setIcon({ emoji:em }); });
+      grid.appendChild(b);
+    });
+    pop.appendChild(grid);
+    var row = document.createElement("div");
+    row.className = "icon-row";
+    var up = document.createElement("button");
+    up.type = "button"; up.textContent = "upload picture";
+    up.addEventListener("click", function(){
+      closeIconPop();
+      pickPhoto(function(src){ setIcon({ src:src }); }, 256);
+    });
+    row.appendChild(up);
+    if(cur().icon){
+      var rm = document.createElement("button");
+      rm.type = "button"; rm.textContent = "remove";
+      rm.addEventListener("click", function(){ setIcon(null); });
+      row.appendChild(rm);
+    }
+    pop.appendChild(row);
+    document.body.appendChild(pop);
+    var r = anchor.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
+    pop.style.top = (r.bottom + 6) + "px";
+    inp.focus();
+  }
+  addIcon.addEventListener("click", function(e){ e.stopPropagation(); openIconPop(addIcon); });
+  pageIcon.addEventListener("click", function(e){ e.stopPropagation(); openIconPop(pageIcon); });
+  document.addEventListener("click", function(e){
+    if(iconPop && !iconPop.contains(e.target)) closeIconPop();
+  });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeIconPop(); });
+  window.addEventListener("scroll", closeIconPop);
+
+  // ---- sidebar ----
+  function renderSidebar(){
+    sbList.innerHTML = "";
+    var open = cur();
+    [state].concat(state.pages).forEach(function(p){
+      var home = isHome(p);
+      var row = document.createElement("div");
+      row.className = "sb-item" + (p === open ? " on" : "");
+      row.setAttribute("role","link"); row.tabIndex = 0;
+      var ico = document.createElement("span");
+      ico.className = "sb-ico";
+      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = home ? "#" : "·";
+      var name = (home ? (state.label || "100 days") : p.title) || "";
+      var t = document.createElement("span");
+      t.className = "sb-title" + (name ? "" : " empty");
+      t.textContent = name || "untitled";
+      row.appendChild(ico); row.appendChild(t);
+      if(!home){
+        // delete takes two clicks, like reset all
+        var del = document.createElement("button");
+        del.type = "button"; del.className = "sb-del"; del.textContent = "×";
+        del.setAttribute("aria-label","delete page");
+        var armed = null;
+        del.addEventListener("click", function(e){
+          e.stopPropagation();
+          if(!armed){
+            del.textContent = "sure?"; del.classList.add("armed");
+            armed = setTimeout(function(){ armed = null; del.textContent = "×"; del.classList.remove("armed"); }, 3000);
+            return;
+          }
+          clearTimeout(armed);
+          var wasOpen = cur() === p;
+          state.pages = state.pages.filter(function(x){ return x !== p; });
+          save();
+          if(wasOpen) go("home"); else renderSidebar();
+        });
+        row.appendChild(del);
+      }
+      function open_(){ go(home ? "home" : p.id); if(isNarrow()) document.body.classList.remove("sb-shown"); }
+      row.addEventListener("click", open_);
+      row.addEventListener("keydown", function(e){ if(e.key === "Enter") open_(); });
+      sbList.appendChild(row);
+    });
+  }
+  document.getElementById("sbNew").addEventListener("click", function(){
+    var p = { id:uid(), title:"", icon:null, cover:null, blocks:[mkBlock("text","",false)], items:[] };
+    state.pages.push(p); save();
+    go(p.id);
+    if(isNarrow()) document.body.classList.remove("sb-shown");
+    docTitle.focus();
+  });
+  // collapse: remembered on desktop; on narrow screens it is an overlay
+  function isNarrow(){ return window.matchMedia("(max-width:900px)").matches; }
+  function paintSidebarHidden(){ document.body.classList.toggle("sb-hidden", !!state.sidebarHidden); }
+  document.getElementById("sbClose").addEventListener("click", function(){
+    if(isNarrow()){ document.body.classList.remove("sb-shown"); return; }
+    state.sidebarHidden = true; save(); paintSidebarHidden();
+  });
+  document.getElementById("sbOpen").addEventListener("click", function(){
+    if(isNarrow()){ document.body.classList.toggle("sb-shown"); return; }
+    state.sidebarHidden = false; save(); paintSidebarHidden();
+  });
+  paintSidebarHidden();
+
+  // ---- document pages ----
+  var docOpts = null;
+  function buildDoc(p){
+    docBody.innerHTML = "";
+    if(!p.blocks.length) p.blocks.push(mkBlock("text","",false));
+    docOpts = { listEl:docBody, getBlocks:function(){ return p.blocks; }, save:save,
+                onChange:function(){} };
+    p.blocks.forEach(function(b){ addBlockRow(docOpts, b, null, false); });
+  }
+  docTitle.addEventListener("input", function(){
+    var p = cur(); if(isHome(p)) return;
+    p.title = docTitle.value; save(); renderSidebar();
+    document.title = p.title || "untitled";
+  });
+  docTitle.addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ e.preventDefault(); var t = docBody.querySelector(".blk-text"); if(t) focusEnd(t); }
+  });
+  // clicking the empty space under a page continues it, like Notion
+  docTail.addEventListener("click", function(){
+    var p = cur(); if(isHome(p)) return;
+    var last = p.blocks[p.blocks.length - 1];
+    var rows = docBody.querySelectorAll(".blk");
+    if(last && last.type === "text" && !last.text && rows.length){
+      focusText(rows[rows.length - 1]); return;
+    }
+    var nb = mkBlock("text","",false);
+    p.blocks.push(nb); save();
+    addBlockRow(docOpts, nb, null, true);
+  });
+
+  function renderPage(){
+    var p = cur(), home = isHome(p);
+    slashClose(); closeIconPop(); closePageMenu();
+    homeView.hidden = !home; homeHead.hidden = !home;
+    docView.hidden = home; docTitle.hidden = home;
+    if(!home){ docTitle.value = p.title; buildDoc(p); }
+    renderCover(); renderIcon(); renderItems(); renderSidebar();
+    document.title = home ? "100 days" : (p.title || "untitled");
+    window.scrollTo(0, 0);
+  }
+
   // ---------- page cover, Notion style ----------
-  // state.cover is { src, y, bw } or null; y is the vertical crop 0..100 (%)
+  // cur().cover is { src, y, bw } or null; y is the vertical crop 0..100 (%)
   var coverEl  = document.getElementById("cover");
   var coverImg = document.getElementById("coverImg");
   var addCover = document.getElementById("addCover");
   var coverBtn = function(act){ return coverEl.querySelector("[data-act=" + act + "]"); };
   var coverMoving = false;
   function renderCover(){
-    var c = state.cover;
+    var c = cur().cover;
     coverEl.hidden = !c; addCover.hidden = !!c;
+    mainEl.classList.toggle("has-cover", !!c);
     if(!c){ setCoverMoving(false); return; }
     if(coverImg.getAttribute("src") !== c.src) coverImg.src = c.src;
     coverImg.style.objectPosition = "50% " + c.y + "%";
@@ -1310,7 +1653,7 @@
   }
   function chooseCover(){
     pickPhoto(function(src){
-      state.cover = { src:src, y:50, bw:!!(state.cover && state.cover.bw) };
+      cur().cover = { src:src, y:50, bw:!!(cur().cover && cur().cover.bw) };
       save(); renderCover();
     }, 1800);
   }
@@ -1325,9 +1668,9 @@
       rmArmed = setTimeout(disarmRemove, 3000); return;
     }
     disarmRemove();
-    state.cover = null; save(); renderCover();
+    cur().cover = null; save(); renderCover();
   });
-  coverBtn("bw").addEventListener("click", function(){ state.cover.bw = !state.cover.bw; save(); renderCover(); });
+  coverBtn("bw").addEventListener("click", function(){ cur().cover.bw = !cur().cover.bw; save(); renderCover(); });
   // a double-click shouldn't flip straight back into reposition mode
   var lastMoveClick = 0;
   coverBtn("move").addEventListener("click", function(){
@@ -1340,7 +1683,7 @@
   var coverDrag = null;
   coverEl.addEventListener("pointerdown", function(e){
     if(!coverMoving || e.button !== 0 || e.target.closest(".cover-bar")) return;
-    coverDrag = { sy:e.clientY, y:state.cover.y };
+    coverDrag = { sy:e.clientY, y:cur().cover.y };
     coverEl.setPointerCapture(e.pointerId); coverEl.classList.add("dragging");
     e.preventDefault();
   });
@@ -1352,8 +1695,8 @@
     var over = nh * Math.max(W / nw, H / nh) - H;        // hidden height to pan through
     if(over <= 0) return;
     // dragging down shows more of the top, so the crop moves up
-    state.cover.y = Math.min(Math.max(coverDrag.y - (e.clientY - coverDrag.sy) / over * 100, 0), 100);
-    coverImg.style.objectPosition = "50% " + state.cover.y + "%";
+    cur().cover.y = Math.min(Math.max(coverDrag.y - (e.clientY - coverDrag.sy) / over * 100, 0), 100);
+    coverImg.style.objectPosition = "50% " + cur().cover.y + "%";
   });
   function endCoverDrag(e){
     if(!coverDrag) return; coverDrag = null;
@@ -1363,7 +1706,6 @@
   coverEl.addEventListener("pointerup", endCoverDrag);
   coverEl.addEventListener("pointercancel", endCoverDrag);
   document.addEventListener("keydown", function(e){ if(e.key === "Escape" && coverMoving) setCoverMoving(false); });
-  renderCover();
 
   // ---------- page items: free-floating text, quotes, tip boxes, photos ----------
   // Each item is { id, type, text, src?, x, y, w }. x is px from the page's
@@ -1437,7 +1779,7 @@
     if(ta) growText(ta);
 
     del.addEventListener("click", function(){
-      state.items = state.items.filter(function(x){ return x.id !== it.id; });
+      cur().items = cur().items.filter(function(x){ return x.id !== it.id; });
       el.parentNode.removeChild(el); save();
     });
 
@@ -1475,7 +1817,7 @@
     var it = { id:uid(), type:type, text:"", w:spec.w,
                x:-Math.round(spec.w / 2),
                y:Math.round(window.scrollY + window.innerHeight / 3) };
-    function commit(){ state.items.push(it); save(); buildPageItem(it, true); }
+    function commit(){ cur().items.push(it); save(); buildPageItem(it, true); }
     if(type === "image") pickPhoto(function(src){ it.src = src; commit(); });
     else commit();
   }
@@ -1509,7 +1851,12 @@
   });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") closePageMenu(); });
 
-  state.items.forEach(function(it){ buildPageItem(it, false); });
+  function renderItems(){
+    pageBox.innerHTML = "";
+    cur().items.forEach(function(it){ buildPageItem(it, false); });
+  }
+
+  renderPage();
 
   window.addEventListener("resize", applyPositions);
   // the calendar day may roll over while the tab sits open
