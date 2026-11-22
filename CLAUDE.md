@@ -17,7 +17,7 @@ linked from anywhere.
   (the side column is `display:contents` so its cards can be reordered).
 - **State is browser-only.** Everything saves to `localStorage` under key
   `hundred-v1` as
-  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, walls, items }`.
+  `{ days: boolean[100], label, dayNotes, stickies, pos, start, lastExport, items }`.
   `start` is an optional `YYYY-MM-DD` start date (empty string when unset).
   `dayNotes` maps a day index to that day's body (a list of blocks). `stickies`
   is the list of added notes, each `{ id, title, pinned, done, check, blocks }`. A
@@ -63,33 +63,18 @@ linked from anywhere.
   not break it; undated, it ends at the last ticked box) and `best` is the
   longest run anywhere. A day with any note text shows a small red dot on its
   box.
-- Two decorative wallpapers sit in the side gutters, Notion style:
-  `assets/wall_1.jpg` on the left and `assets/wall_2.jpg` on the right
-  (shown black and white with a CSS `grayscale` filter; the file itself is in
-  colour). They are `position:fixed`, as wide as the gutter allows (max 460px) and
-  the full window height (`object-fit:cover` crops the sides), and
-  only appear at 1400px wide and up so they never crowd the grid. Each frame
-  has a Notion-style `reposition` button on hover: in that mode you drag to pan
-  and scroll to zoom (1x to 4x over a cover fit), `reset` restores the default
-  crop, and `done` or Esc leaves the mode. Outside that mode, dragging a
-  frame moves it, its four corner handles resize it (min 120px), and a `dock`
-  button (shown on hover once the frame has moved) puts it back in the
-  gutter. Docking is deliberately not on double-click: two quick drags count
-  as a double-click and snapped frames back by accident. Each wall saves to `walls` as
-  `{ zoom, x, y, frame? }` under `l` and `r` (x/y are 0..1 pan fractions;
-  `frame` is a viewport-px `{x,y,w,h}`, absent while docked).
-  `layoutWall()` sizes and offsets the image; `applyFrame()` places the frame,
-  clamped to the window.
 - Free-floating page items: the `+` fixed in the bottom-right corner adds a
   text box, heading, quote box, tip box or photo straight onto the page (not
   inside a card). Each lives in `items` as `{ id, type, text, src?, x, y, w }`
   where `x` is px from the page's centre line (so items stay aligned with the
   centred layout at any width), `y` is px from the top of the page and `w` the
   width. They scroll with the page; hovering shows a grip to drag, a delete,
-  and a corner handle to resize. Text boxes are auto-growing textareas.
+  and a corner handle to resize. Text boxes are auto-growing textareas. (The
+  page once had two fixed side wallpapers; they were removed once photos could
+  be added as page items.)
 - `reset all` is a two-click button (arm, then confirm within 3s) so a stray
   tap never clears the grid; it clears ticks and day notes but keeps the added
-  notes, wallpapers and page items. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
+  notes and page items. If a start date is set, reset moves it to today. No native `confirm()` dialog is used.
 
 ## Deploy
 

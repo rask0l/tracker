@@ -210,46 +210,6 @@
   .hint .touch{display:none;}
   @media (hover:none){ .hint .mouse{display:none;} .hint .touch{display:inline;} }
 
-  /* side wallpapers, Notion style: fixed in the empty gutters on wide screens.
-     The frame crops; the image inside is sized and offset by JS so it can be
-     dragged and zoomed (see layoutWall). */
-  .wall{
-    --gw:calc((100vw - 840px) / 2);           /* width of one gutter */
-    --ww:min(460px, calc(var(--gw) - 4rem));  /* frame width inside it */
-    position:fixed; top:3rem; width:var(--ww); height:calc(100vh - 6rem);
-    border:2px solid var(--line); display:none; overflow:hidden; z-index:1;
-  }
-  .wall-l{left:calc((var(--gw) - var(--ww)) / 2);}
-  .wall-r{right:calc((var(--gw) - var(--ww)) / 2);}
-  .wall img{position:absolute; max-width:none; user-select:none;
-    -webkit-user-drag:none; pointer-events:none;}
-  .wall-r img{filter:grayscale(1);}
-  .wall{cursor:move; touch-action:none;}
-  .wall.moving{border-color:var(--fg);}
-  .wall.editing{border-color:var(--accent); cursor:grab;}
-  .wall-h{position:absolute; width:12px; height:12px; background:var(--fg);
-    border:2px solid var(--bg); opacity:0; z-index:2;}
-  .wall:hover .wall-h{opacity:1;}
-  .wall.editing .wall-h{display:none;}
-  .wall-h[data-dir=nw]{left:0; top:0; cursor:nwse-resize;}
-  .wall-h[data-dir=ne]{right:0; top:0; cursor:nesw-resize;}
-  .wall-h[data-dir=sw]{left:0; bottom:0; cursor:nesw-resize;}
-  .wall-h[data-dir=se]{right:0; bottom:0; cursor:nwse-resize;}
-  .wall.editing.dragging{cursor:grabbing;}
-  .wall-bar{position:absolute; right:1.25rem; bottom:.75rem; display:flex; gap:.4rem;
-    align-items:center; opacity:0; transition:opacity .12s;}
-  .wall:hover .wall-bar, .wall.editing .wall-bar{opacity:1;}
-  .wall-btn, .wall-hint{
-    background:var(--bg); border:2px solid var(--fg); color:var(--fg);
-    font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
-    padding:.3rem .55rem;
-  }
-  .wall-btn{cursor:pointer;}
-  .wall-btn:hover{border-color:var(--accent); color:var(--accent);}
-  .wall-hint{border-color:var(--line); color:var(--muted);}
-  .wall:not(.editing) .wall-hint, .wall:not(.editing) [data-act=reset]{display:none;}
-  .wall:not(.moved) [data-act=dock], .wall.editing [data-act=dock]{display:none;}
-  @media (min-width:1400px){ .wall{display:block;} }
 
   /* free-floating page items, added from the + in the corner */
   #pageItems{position:absolute; top:0; left:0; right:0; height:0; z-index:5;}
@@ -301,16 +261,6 @@
 </style>
 </head>
 <body>
-  <div class="wall wall-l" data-wall="l">
-    <img src="assets/wall_1.jpg" alt="" draggable="false">
-    <span class="wall-h" data-dir="nw"></span><span class="wall-h" data-dir="ne"></span><span class="wall-h" data-dir="sw"></span><span class="wall-h" data-dir="se"></span>
-    <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="dock">dock</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
-  </div>
-  <div class="wall wall-r" data-wall="r">
-    <img src="assets/wall_2.jpg" alt="" draggable="false">
-    <span class="wall-h" data-dir="nw"></span><span class="wall-h" data-dir="ne"></span><span class="wall-h" data-dir="sw"></span><span class="wall-h" data-dir="se"></span>
-    <div class="wall-bar"><span class="wall-hint">drag to move · scroll to zoom</span><button class="wall-btn" type="button" data-act="reset">reset</button><button class="wall-btn" type="button" data-act="dock">dock</button><button class="wall-btn" type="button" data-act="edit">reposition</button></div>
-  </div>
   <div id="pageItems"></div>
   <button class="addpage" id="addPage" type="button" title="add to page" aria-label="add to page">+</button>
   <div class="wrap">
@@ -411,24 +361,6 @@
   function iso(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
   function fmt(d){ return DOW[d.getDay()] + " " + d.getDate() + " " + MON[d.getMonth()]; }
 
-  // wallpaper crop: zoom 1..4 over a cover fit, x/y pan 0..1 (0.5 = centred)
-  var WALL_MIN = 120;
-  var WALL_DEFAULT = { l:{ zoom:1, x:0.5, y:0.5 }, r:{ zoom:1, x:0.7, y:0.5 } };
-  function normWall(w, d){
-    w = w || {};
-    function c(v, lo, hi, def){ v = +v; return isFinite(v) ? Math.min(Math.max(v, lo), hi) : def; }
-    var out = { zoom:c(w.zoom, 1, 4, d.zoom), x:c(w.x, 0, 1, d.x), y:c(w.y, 0, 1, d.y) };
-    // frame: a dragged/resized box in viewport px; absent = docked in the gutter
-    var f = w.frame;
-    if(f && isFinite(f.x) && isFinite(f.y) && f.w >= WALL_MIN && f.h >= WALL_MIN)
-      out.frame = { x:+f.x, y:+f.y, w:+f.w, h:+f.h };
-    return out;
-  }
-  function normWalls(o){
-    o = (o && typeof o === "object") ? o : {};
-    return { l:normWall(o.l, WALL_DEFAULT.l), r:normWall(o.r, WALL_DEFAULT.r) };
-  }
-
   // free-floating page items; anything malformed is dropped
   var ITEM_TYPES = ["text","h","quote","callout","image"];
   function normItems(arr){
@@ -487,7 +419,6 @@
         pos: pos,
         start: (typeof o.start === "string" && parseDate(o.start)) ? o.start : "",
         lastExport: (typeof o.lastExport === "string" && parseDate(o.lastExport)) ? o.lastExport : "",
-        walls: normWalls(o.walls),
         items: normItems(o.items)
       };
     }
@@ -501,7 +432,7 @@
       if(s) return s;
     }catch(e){}
     return { days:new Array(N).fill(false), label:"", dayNotes:{}, start:"",
-             lastExport:"", walls:normWalls(null), items:[],
+             lastExport:"", items:[],
              stickies:[ { id:uid(), title:"", pinned:false, done:false,
                           blocks:[mkBlock("text","",false)] } ], pos:{} };
   }
@@ -1306,126 +1237,6 @@
     r.readAsText(f);
   });
 
-  // ---------- wallpapers: Notion-style reposition ----------
-  var walls = [];
-  function layoutWall(wl){
-    var W = wl.frame.clientWidth, H = wl.frame.clientHeight;
-    var nw = wl.img.naturalWidth, nh = wl.img.naturalHeight;
-    if(!W || !H || !nw || !nh) return;        // hidden on narrow screens, or not loaded
-    var c = state.walls[wl.key];
-    var sc = Math.max(W / nw, H / nh) * c.zoom;
-    wl.dw = nw * sc; wl.dh = nh * sc; wl.W = W; wl.H = H;
-    wl.img.style.width  = wl.dw + "px";
-    wl.img.style.height = wl.dh + "px";
-    wl.img.style.left = (-(wl.dw - W) * c.x) + "px";
-    wl.img.style.top  = (-(wl.dh - H) * c.y) + "px";
-  }
-  Array.prototype.forEach.call(document.querySelectorAll(".wall"), function(frame){
-    var wl = { frame:frame, key:frame.getAttribute("data-wall"),
-               img:frame.querySelector("img"), editing:false };
-    var editBtn = frame.querySelector("[data-act=edit]");
-    var resetBtn = frame.querySelector("[data-act=reset]");
-    walls.push(wl);
-    if(wl.img.complete) layoutWall(wl);
-    wl.img.addEventListener("load", function(){ layoutWall(wl); });
-
-    function setEditing(on){
-      wl.editing = on;
-      frame.classList.toggle("editing", on);
-      editBtn.textContent = on ? "done" : "reposition";
-      if(!on) save();
-    }
-    wl.stop = function(){ if(wl.editing) setEditing(false); };
-    editBtn.addEventListener("click", function(){ setEditing(!wl.editing); });
-    resetBtn.addEventListener("click", function(){
-      var f = state.walls[wl.key].frame;
-      state.walls[wl.key] = normWall(null, WALL_DEFAULT[wl.key]);
-      if(f) state.walls[wl.key].frame = f;
-      layoutWall(wl); save();
-    });
-
-    // docked frames follow the CSS gutter; a moved/resized one gets inline px
-    function applyFrame(){
-      var f = state.walls[wl.key].frame, st = frame.style;
-      if(f){
-        var w = Math.min(f.w, window.innerWidth), h = Math.min(f.h, window.innerHeight);
-        st.width = w + "px"; st.height = h + "px";
-        st.left = Math.min(Math.max(f.x, 0), window.innerWidth  - w) + "px";
-        st.top  = Math.min(Math.max(f.y, 0), window.innerHeight - h) + "px";
-        st.right = "auto";
-        frame.classList.add("moved");
-      }else{
-        frame.classList.remove("moved");
-        st.width = st.height = st.left = st.top = st.right = "";
-      }
-      layoutWall(wl);
-    }
-    wl.applyFrame = applyFrame;
-    applyFrame();
-
-    // one pointer gesture: pan in reposition mode, else a corner resizes and
-    // anywhere else moves the frame
-    var drag = null;
-    frame.addEventListener("pointerdown", function(e){
-      if(e.button !== 0 || e.target.closest(".wall-bar")) return;
-      var c = state.walls[wl.key], r = frame.getBoundingClientRect();
-      var handle = e.target.closest(".wall-h");
-      drag = { sx:e.clientX, sy:e.clientY, x:c.x, y:c.y, r:r,
-               mode: wl.editing ? "pan" : handle ? "resize" : "move",
-               dir: handle ? handle.getAttribute("data-dir") : "" };
-      frame.setPointerCapture(e.pointerId);
-      frame.classList.add(drag.mode === "pan" ? "dragging" : "moving");
-      e.preventDefault();
-    });
-    frame.addEventListener("pointermove", function(e){
-      if(!drag) return;
-      var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy, c = state.walls[wl.key];
-      if(drag.mode === "pan"){
-        // moving the pointer right drags the picture right, so the pan goes left
-        var ox = wl.dw - wl.W, oy = wl.dh - wl.H;
-        if(ox > 0) c.x = Math.min(Math.max(drag.x - dx / ox, 0), 1);
-        if(oy > 0) c.y = Math.min(Math.max(drag.y - dy / oy, 0), 1);
-        layoutWall(wl); return;
-      }
-      var r = drag.r, x = r.left, y = r.top, w = r.width, h = r.height, d = drag.dir;
-      if(drag.mode === "move"){ x += dx; y += dy; }
-      else{
-        if(d.indexOf("e") >= 0) w = Math.max(r.width + dx, WALL_MIN);
-        if(d.indexOf("s") >= 0) h = Math.max(r.height + dy, WALL_MIN);
-        if(d.indexOf("w") >= 0){ w = Math.max(r.width - dx, WALL_MIN); x = r.right - w; }
-        if(d.indexOf("n") >= 0){ h = Math.max(r.height - dy, WALL_MIN); y = r.bottom - h; }
-      }
-      w = Math.min(w, window.innerWidth); h = Math.min(h, window.innerHeight);
-      c.frame = { x:Math.min(Math.max(x, 0), window.innerWidth  - w),
-                  y:Math.min(Math.max(y, 0), window.innerHeight - h), w:w, h:h };
-      applyFrame();
-    });
-    function endDrag(e){
-      if(!drag) return; drag = null;
-      try{ frame.releasePointerCapture(e.pointerId); }catch(_){}
-      frame.classList.remove("dragging"); frame.classList.remove("moving");
-      save();
-    }
-    frame.addEventListener("pointerup", endDrag);
-    frame.addEventListener("pointercancel", endDrag);
-    // docking is an explicit button, never a double-click: two quick drags
-    // read as a double-click and used to snap the frame back by accident
-    frame.querySelector("[data-act=dock]").addEventListener("click", function(){
-      delete state.walls[wl.key].frame;
-      applyFrame(); save();
-    });
-    frame.addEventListener("wheel", function(e){
-      if(!wl.editing) return;
-      e.preventDefault();
-      var c = state.walls[wl.key];
-      c.zoom = Math.min(Math.max(c.zoom * Math.exp(-e.deltaY * 0.0015), 1), 4);
-      layoutWall(wl); save();
-    }, { passive:false });
-  });
-  document.addEventListener("keydown", function(e){
-    if(e.key === "Escape") walls.forEach(function(wl){ wl.stop(); });
-  });
-
   // ---------- page items: free-floating text, quotes, tip boxes, photos ----------
   // Each item is { id, type, text, src?, x, y, w }. x is px from the page's
   // centre line (so items stay put relative to the centred layout at any window
@@ -1562,7 +1373,6 @@
   state.items.forEach(function(it){ buildPageItem(it, false); });
 
   window.addEventListener("resize", applyPositions);
-  window.addEventListener("resize", function(){ walls.forEach(function(wl){ wl.applyFrame(); }); });
   // the calendar day may roll over while the tab sits open
   document.addEventListener("visibilitychange", function(){
     if(!document.hidden){ renderGrid(); refreshDayHead(); }
