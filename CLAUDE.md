@@ -79,8 +79,9 @@ linked from anywhere.
   box.
 - Pages: the home tracker keeps its own `cover`, `icon` and `items` on the
   state itself. Every other page in `pages` has `{ id, kind, icon, cover,
-  items }` plus either document fields (`kind:"doc"`, `title`, `blocks`,
-  using the same block editor and slash menu as notes) or the tracker fields
+  items }` plus either document fields (`kind:"doc"`, `title`, `label` (the
+  subtitle under the title, same style as a tracker's), `blocks`, using the
+  same block editor and slash menu as notes) or the tracker fields
   above (`kind:"tracker"`). Pages saved before trackers existed have no
   `kind` and load as documents.
   The open page lives in the URL hash (`#p/<id>`, none for home) so back and

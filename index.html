@@ -396,9 +396,10 @@
   .icon-row button:hover{border-color:var(--accent); color:var(--accent);}
 
   /* ---- document pages ---- */
-  .doc-title{display:block; width:100%; margin:0 0 1.6rem; padding:0 0 1rem;
-    background:transparent; border:none; border-bottom:2px solid var(--fg); outline:none;
+  .doc-title{display:block; width:100%; margin:0; padding:0;
+    background:transparent; border:none; outline:none;
     color:var(--fg); font:inherit; font-size:2rem; font-weight:700; letter-spacing:.04em;}
+  .sub::placeholder{color:var(--line);}
   .doc-title::placeholder{color:var(--line);}
   .doc .blk-text{font-size:.95rem;}
   .doc .bt-h .blk-text{font-size:1.35rem;}
@@ -480,7 +481,10 @@
       <input class="sub" id="label" maxlength="48" spellcheck="false"
              placeholder="name your challenge" aria-label="challenge name">
     </header>
-      <input class="doc-title" id="docTitle" placeholder="untitled" spellcheck="false" aria-label="page title" hidden>
+      <header class="doc-head" id="docHead" hidden>
+        <input class="doc-title" id="docTitle" placeholder="untitled" spellcheck="false" aria-label="page title">
+        <input class="sub" id="docSub" maxlength="60" spellcheck="false" placeholder="add a subtitle" aria-label="page subtitle">
+      </header>
     </div>
 
     <div id="homeView">
@@ -624,7 +628,7 @@
         o = normTracker(p, n, n + " DAYS");
         o.kind = "tracker";
       }else{
-        o = { kind:"doc", title:String(p.title || ""),
+        o = { kind:"doc", title:String(p.title || ""), label:String(p.label || ""),
               blocks:normBlocks(p.blocks) || [mkBlock("text","",false)] };
       }
       o.id = String(p.id || uid());
@@ -1669,7 +1673,7 @@
     (p.kind === "tracker" ? tkTitle : docTitle).focus();
   }
   function newDoc(){
-    addNewPage({ kind:"doc", id:uid(), title:"", icon:null, cover:null,
+    addNewPage({ kind:"doc", id:uid(), title:"", label:"", icon:null, cover:null,
                  blocks:[mkBlock("text","",false)], items:[] });
   }
   function newTrackerPage(n){
@@ -1745,7 +1749,17 @@
     p.title = docTitle.value; save(); renderSidebar();
     document.title = p.title || "untitled";
   });
+  var docHead = document.getElementById("docHead");
+  var docSub  = document.getElementById("docSub");
+  // Enter walks title -> subtitle -> body
   docTitle.addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ e.preventDefault(); focusEnd(docSub); }
+  });
+  docSub.addEventListener("input", function(){
+    var p = cur(); if(isTracker(p)) return;
+    p.label = docSub.value; save();
+  });
+  docSub.addEventListener("keydown", function(e){
     if(e.key === "Enter"){ e.preventDefault(); var t = docBody.querySelector(".blk-text"); if(t) focusEnd(t); }
   });
   // clicking the empty space under a page continues it, like Notion
@@ -1765,9 +1779,9 @@
     var p = cur(), tk = isTracker(p);
     slashClose(); closeIconPop(); closePageMenu(); closeNewPop();
     homeView.hidden = !tk; homeHead.hidden = !tk;
-    docView.hidden = tk; docTitle.hidden = tk;
+    docView.hidden = tk; docHead.hidden = tk;
     if(tk){ if(T !== p) loadTracker(p); }
-    else{ docTitle.value = p.title; buildDoc(p); }
+    else{ docTitle.value = p.title; docSub.value = p.label || ""; buildDoc(p); }
     renderCover(); renderIcon(); renderItems(); renderSidebar();
     document.title = p.title || "untitled";
     window.scrollTo(0, 0);
