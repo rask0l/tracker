@@ -406,6 +406,34 @@
   .doc .blk{padding:.18rem 0;}
   .doc-tail{min-height:35vh; cursor:text;}
   .pi-image.bw img{filter:grayscale(1);}
+  /* checklist box */
+  .pi-note{border:2px solid var(--line); background:var(--bg); padding:.8rem .9rem;}
+  .pi-note.all-done{border-color:var(--accent);}
+  .pi-nhead{display:flex; align-items:center; gap:.6rem; margin-bottom:.45rem;}
+  .pi-ntitle{flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none;
+    color:var(--fg); font:inherit; font-size:.78rem; font-weight:700; letter-spacing:.14em;
+    text-transform:uppercase; padding:0;}
+  .pi-ntitle::placeholder{color:var(--line);}
+  .pi-nprog{flex:0 0 auto; color:var(--accent); font-size:.72rem; letter-spacing:.06em;}
+  /* countdown box */
+  .pi-countdown{border:2px solid var(--line); background:#161616; padding:.8rem 1rem .9rem;}
+  .pi-clabel{display:block; width:100%; background:transparent; border:none; outline:none;
+    color:var(--muted); font:inherit; font-size:.72rem; font-weight:700; letter-spacing:.14em;
+    text-transform:uppercase; padding:0;}
+  .pi-clabel::placeholder{color:var(--line);}
+  .pi-cnum{margin-top:.25rem; color:var(--accent); font-size:3rem; font-weight:700;
+    line-height:1.05; letter-spacing:.02em;}
+  .pi-countdown.past .pi-cnum{color:var(--muted);}
+  .pi-countdown.unset .pi-cnum{color:var(--line);}
+  .pi-csub{margin-top:.2rem; color:var(--muted); font-size:.64rem; letter-spacing:.12em;
+    text-transform:uppercase;}
+  .pi-cdate{margin-top:.6rem; background:transparent; border:2px solid var(--line);
+    color:var(--fg); font:inherit; font-size:.7rem; padding:.2rem .4rem; outline:none;
+    color-scheme:dark; display:none;}
+  .pi-cdate:focus{border-color:var(--accent);}
+  /* the date picker only takes space while hovering, editing, or before a date is set */
+  .pitem:hover .pi-cdate, .pitem:focus-within .pi-cdate, .pi-countdown.unset .pi-cdate{display:block;}
+  @media (hover:none){ .pi-cdate{display:block;} }
 
   @media (max-width:640px){
     .layout{flex-direction:column; align-items:stretch;}
@@ -546,7 +574,7 @@
   function fmt(d){ return DOW[d.getDay()] + " " + d.getDate() + " " + MON[d.getMonth()]; }
 
   // free-floating page items; anything malformed is dropped
-  var ITEM_TYPES = ["text","h","quote","callout","image"];
+  var ITEM_TYPES = ["text","h","quote","callout","image","note","countdown"];
   function normItems(arr){
     if(!Array.isArray(arr)) return [];
     return arr.filter(function(it){
@@ -555,6 +583,10 @@
     }).map(function(it){
       var o = { id:String(it.id || uid()), type:it.type, text:String(it.text || ""),
                 x:+it.x, y:Math.max(0, +it.y), w:Math.min(Math.max(+it.w, 120), 1200) };
+      // checklist box: text is its title, blocks its body (same editor as notes)
+      if(it.type === "note") o.blocks = normBlocks(it.blocks) || [mkBlock("todo","",false)];
+      // countdown: text is its label, date the YYYY-MM-DD it counts down to
+      if(it.type === "countdown") o.date = (typeof it.date === "string" && parseDate(it.date)) ? it.date : "";
       if(it.type === "image"){
         o.src = it.src; o.bw = !!it.bw;
         // crop: h is the frame height (absent = the photo's own shape),
@@ -1887,6 +1919,8 @@
     { type:"h",       label:"heading", hint:"big bold title",   w:420 },
     { type:"quote",   label:"quote",   hint:"quote box",        w:420 },
     { type:"callout", label:"tip box", hint:"highlighted note", w:340 },
+    { type:"note",      label:"checklist", hint:"title + tick boxes", w:320 },
+    { type:"countdown", label:"countdown", hint:"days until a date",  w:260 },
     { type:"image",   label:"photo",   hint:"from your device", w:300 }
   ];
   var PAGE_PH = { text:"write something", h:"heading", quote:"a quote that keeps you going", callout:"tip" };
@@ -1940,6 +1974,56 @@
       im.src = it.src; im.alt = ""; im.draggable = false;
       frame.appendChild(im);
       el.appendChild(frame);
+    }else if(it.type === "note"){
+      // a floating checklist: title, progress, then the block editor
+      var nh = document.createElement("div"); nh.className = "pi-nhead";
+      var nt = document.createElement("input");
+      nt.type = "text"; nt.className = "pi-ntitle"; nt.spellcheck = false; nt.maxLength = 60;
+      nt.value = it.text; nt.placeholder = "weekly goals";
+      var np = document.createElement("span"); np.className = "pi-nprog";
+      nh.appendChild(nt); nh.appendChild(np); el.appendChild(nh);
+      var nl = document.createElement("div"); nl.className = "blocks";
+      el.appendChild(nl);
+      var paintProg = function(){
+        var pr = todoProgress(it.blocks);
+        np.textContent = pr.total ? pr.done + "/" + pr.total : "";
+        el.classList.toggle("all-done", !!pr.total && pr.done === pr.total);
+      };
+      var nopts = { listEl:nl, getBlocks:function(){ return it.blocks; }, save:save,
+                    onChange:paintProg, onCheck:paintProg };
+      it.blocks.forEach(function(b){ addBlockRow(nopts, b, null, false); });
+      paintProg();
+      nt.addEventListener("input", function(){ it.text = nt.value; save(); });
+      nt.addEventListener("keydown", function(e){
+        if(e.key === "Enter"){ e.preventDefault(); var f = nl.querySelector(".blk-text"); if(f) focusEnd(f); }
+      });
+      ta = null;
+      el.focusFirst = function(){ nt.focus(); };
+    }else if(it.type === "countdown"){
+      var cl = document.createElement("input");
+      cl.type = "text"; cl.className = "pi-clabel"; cl.spellcheck = false; cl.maxLength = 60;
+      cl.value = it.text; cl.placeholder = "counting down to...";
+      var cn = document.createElement("div"); cn.className = "pi-cnum";
+      var cs = document.createElement("div"); cs.className = "pi-csub";
+      var cd = document.createElement("input");
+      cd.type = "date"; cd.className = "pi-cdate"; cd.value = it.date || "";
+      cd.setAttribute("aria-label","date to count down to");
+      el.appendChild(cl); el.appendChild(cn); el.appendChild(cs); el.appendChild(cd);
+      var paintCount = function(){
+        var d = parseDate(it.date);
+        el.classList.toggle("unset", !d);
+        el.classList.remove("past"); el.classList.remove("today");
+        if(!d){ cn.textContent = "--"; cs.textContent = "pick a date below"; return; }
+        var diff = Math.round((d - todayDate()) / 86400000);
+        if(diff > 0){ cn.textContent = diff; cs.textContent = (diff === 1 ? "day left" : "days left") + " · " + fmt(d); }
+        else if(diff === 0){ cn.textContent = "today"; cs.textContent = fmt(d); el.classList.add("today"); }
+        else{ cn.textContent = -diff; cs.textContent = (diff === -1 ? "day ago" : "days ago") + " · " + fmt(d); el.classList.add("past"); }
+      };
+      paintCount();
+      el.repaint = paintCount;
+      cl.addEventListener("input", function(){ it.text = cl.value; save(); });
+      cd.addEventListener("change", function(){ it.date = parseDate(cd.value) ? cd.value : ""; paintCount(); save(); });
+      el.focusFirst = function(){ cl.focus(); };
     }else{
       if(it.type === "callout"){
         var icon = document.createElement("span");
@@ -2076,6 +2160,7 @@
     });
 
     if(focus && ta) ta.focus();
+    else if(focus && el.focusFirst) el.focusFirst();
     return el;
   }
 
@@ -2084,6 +2169,8 @@
     var it = { id:uid(), type:type, text:"", w:spec.w,
                x:-Math.round(spec.w / 2),
                y:Math.round(window.scrollY + window.innerHeight / 3) };
+    if(type === "note") it.blocks = [mkBlock("todo","",false)];
+    if(type === "countdown") it.date = "";
     function commit(){ cur().items.push(it); save(); buildPageItem(it, true); }
     if(type === "image") pickPhoto(function(src){ it.src = src; commit(); });
     else commit();
@@ -2134,7 +2221,10 @@
   window.addEventListener("resize", applyPositions);
   // the calendar day may roll over while the tab sits open
   document.addEventListener("visibilitychange", function(){
-    if(!document.hidden){ renderGrid(); refreshDayHead(); }
+    if(!document.hidden){
+      renderGrid(); refreshDayHead();
+      [].forEach.call(pageBox.querySelectorAll(".pi-countdown"), function(el){ el.repaint && el.repaint(); });
+    }
   });
 
   renderGrid(); refreshDay();

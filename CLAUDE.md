@@ -109,8 +109,13 @@ linked from anywhere.
   the 720px default. Everything below the cover sits in `.page`
   (`position:relative`), so page items keep their place when a cover is added.
 - Free-floating page items: the `+` fixed in the bottom-right corner adds a
-  text box, heading, quote box, tip box or photo straight onto the page (not
-  inside a card). Each lives in `items` as `{ id, type, text, src?, x, y, w }`
+  text box, heading, quote box, tip box, checklist, countdown or photo
+  straight onto the page (not inside a card). A checklist (`type:"note"`)
+  has a title in `text` and a body in `blocks` using the note editor (slash
+  menu included), shows `done/total`, and gets a red border when every item
+  is ticked. A countdown keeps its label in `text` and a `date`; it shows
+  days left, `today`, or days ago, and the date picker only appears on hover
+  or before a date is set. Each lives in `items` as `{ id, type, text, src?, x, y, w }`
   where `x` is px from the page's centre line (so items stay aligned with the
   centred layout at any width), `y` is px from the top of the page and `w` the
   width. They scroll with the page; hovering shows a grip to drag, a delete,
