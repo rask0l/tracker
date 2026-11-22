@@ -1,0 +1,9 @@
+# Cloudflare Worker that stores the tracker's data in R2 (see worker.js).
+# Deploy from this folder:  npx wrangler deploy
+name = "tracker-sync"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "tracker-sync"

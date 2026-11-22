@@ -7,3 +7,8 @@ vendor/
 Gemfile.lock
 .DS_Store
 *.log
+
+# cloud sync worker: local secrets and build output never go in the repo
+sync/.dev.vars
+sync/.wrangler/
+node_modules/

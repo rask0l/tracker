@@ -68,6 +68,21 @@ linked from anywhere.
   file is the backup. `lastExport` is the date of the last export; under the
   buttons the sidebar shows `last backup N days ago` and turns it red once
   there is data and no export in over 7 days.
+- Cloud sync (optional): `sync/` holds a Cloudflare Worker (`worker.js`,
+  `wrangler.toml`, setup steps in `sync/README.md`) that stores the state in
+  an R2 bucket behind a bearer `SYNC_TOKEN` secret. The site's sidebar `sync`
+  button saves the worker address and key in this browser's localStorage
+  (`hundred-sync`, never in the state, the export or the repo). Photos are
+  uploaded once as `blob:<sha256>` refs (`dehydrate`/`rehydrate`), so the
+  synced state stays small; the worker keeps one snapshot per day under
+  `history/`. On open (`syncCheck`) the newer copy wins by `savedAt`: a newer
+  cloud copy replaces the local one after saving a `before-sync-<time>` copy
+  in IndexedDB, then reloads; a newer local copy uploads. Each change uploads
+  about 2.5s later (`schedulePush`), failures retry every 30s, and the
+  sidebar shows `synced N ago` instead of the backup reminder. `save()` skips
+  writes when nothing changed, so loading the page never counts as an edit.
+  `sync/` is excluded from the Jekyll build; local `.dev.vars` is git-ignored.
+  `navigator.storage.persist()` is requested so the browser doesn't evict data.
 - Note cards (the Day card and every added note) sit in the tracker's side
   column and share one look: a checkbox to cross it off (the Day card's
   checkbox also ticks that grid day), a title, and the block body. They do

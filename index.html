@@ -339,6 +339,25 @@
   .sb-tools{display:flex; gap:.4rem;}
   .sb-tools .btn{flex:1 1 0; padding:.35rem .4rem; font-size:.62rem;}
   .sb-foot .backup{display:block; margin-top:.5rem; font-size:.6rem;}
+  .sb-tools .btn.on{border-color:var(--accent); color:var(--accent);}
+  .sync-pop{position:fixed; z-index:96; width:300px; padding:.7rem;
+    background:var(--bg); border:2px solid var(--fg); box-shadow:6px 6px 0 var(--line);}
+  .sp-head{font-size:.68rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-bottom:.5rem;}
+  .sync-pop label{display:block; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:.5rem;}
+  .sync-pop input{display:block; width:100%; margin-top:.25rem; background:transparent;
+    border:2px solid var(--line); color:var(--fg); font:inherit; font-size:.72rem;
+    padding:.35rem .45rem; outline:none; text-transform:none; letter-spacing:0;}
+  .sync-pop input:focus{border-color:var(--accent);}
+  .sp-msg{min-height:1em; font-size:.66rem; color:var(--muted); margin:.1rem 0 .5rem;}
+  .sp-msg.bad{color:var(--accent);}
+  .sp-row{display:flex; gap:.4rem;}
+  .sync-pop button{flex:1 1 auto; background:transparent; border:2px solid var(--line); color:var(--fg);
+    font:inherit; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; padding:.45rem; cursor:pointer;}
+  .sync-pop button:hover{border-color:var(--accent); color:var(--accent);}
+  .sp-choice{margin-top:.6rem; display:flex; flex-direction:column; gap:.35rem;}
+  .sp-choice[hidden]{display:none;}
+  .sp-q{font-size:.66rem; color:var(--fg); line-height:1.5;}
   .main{position:relative; margin-left:240px; min-height:100vh;}
   body.sb-hidden .sidebar{display:none;}
   body.sb-hidden .main{margin-left:0;}
@@ -466,9 +485,11 @@
       <div class="sb-tools">
         <button class="btn" id="export" type="button" title="download a backup of everything">export</button>
         <button class="btn" id="import" type="button" title="load a backup file">import</button>
+        <button class="btn" id="syncBtn" type="button" title="sync to your Cloudflare worker">sync</button>
         <input type="file" id="importFile" accept=".json,application/json" hidden>
       </div>
       <span class="hint backup" id="backup"></span>
+      <span class="hint backup" id="syncStatus" hidden></span>
     </div>
   </aside>
   <button class="sb-open" id="sbOpen" type="button" title="show sidebar" aria-label="show sidebar">&#9776;</button>
@@ -784,7 +805,7 @@ function app(BOOT){
         var o = JSON.parse(raw), st = normalize(o);
         if(!st) throw new Error("not a tracker state");
         var at = +o.savedAt || 0;
-        if(at > bestAt){ best = st; bestAt = at; }
+        if(at > bestAt){ best = st; bestAt = at; st.savedAt = at || undefined; }
       }catch(e){ unreadable = raw; }
     });
     if(unreadable && BOOT.idbOk){
@@ -828,11 +849,23 @@ function app(BOOT){
       if(pendingJson) flushWrite();
     });
   }
+  var lastBody = null;           // the last saved state without its savedAt
+  var sync = null, schedulePush = function(){};   // set up by the cloud sync section
+  function bodyOf(st){
+    var at = st.savedAt; delete st.savedAt;
+    var b = JSON.stringify(st);
+    if(at !== undefined) st.savedAt = at;
+    return b;
+  }
   // returns a promise that resolves once this state (or a newer one) is stored
   function save(){
     if(storageLocked) return Promise.resolve(false);
+    var body = bodyOf(state);
+    if(body === lastBody) return Promise.resolve(true);   // nothing changed
+    lastBody = body;
     state.savedAt = Date.now();
     var json = JSON.stringify(state);
+    schedulePush();
     if(!BOOT.idbOk){
       try{ localStorage.setItem(KEY, json); saved(true); return Promise.resolve(true); }
       catch(e){ saved(false, "storage full"); return Promise.resolve(false); }
@@ -847,6 +880,7 @@ function app(BOOT){
   }
 
   var state = load();
+  lastBody = bodyOf(state);      // loading on its own is not a change
   var T = state;        // the tracker on screen: the home state or a tracker page
   var grid   = document.getElementById("grid");
   var doneEl = document.getElementById("done");
@@ -1950,6 +1984,214 @@ function app(BOOT){
     window.scrollTo(0, 0);
   }
 
+  // ---------- cloud sync (Cloudflare Worker + R2, see sync/worker.js) ----------
+  // The worker address and secret key live in this browser's localStorage
+  // ("hundred-sync"), never in the state or the repo. Photos travel as
+  // "blob:<sha256>" refs and upload once; the state itself is small.
+  // On open: if the cloud copy is newer it replaces this browser's copy (a
+  // copy of the local one is kept in IndexedDB first); if this one is newer
+  // it uploads. After each change it uploads a few seconds later.
+  var SYNC_KEY = "hundred-sync";
+  sync = { cfg:null, timer:null, retry:null, busy:false, again:false, lastOk:0, err:"",
+           remoteAt:0, known:{} };
+  var syncStatusEl = document.getElementById("syncStatus");
+  var syncBtn = document.getElementById("syncBtn");
+  try{ sync.cfg = JSON.parse(localStorage.getItem(SYNC_KEY) || "null"); }catch(e){ sync.cfg = null; }
+  try{ (JSON.parse(localStorage.getItem(SYNC_KEY + "-known") || "[]")).forEach(function(h){ sync.known[h] = 1; }); }catch(e){}
+
+  function syncApi(path, opts){
+    opts = opts || {};
+    opts.headers = Object.assign({ Authorization:"Bearer " + sync.cfg.token }, opts.headers || {});
+    opts.cache = "no-store";
+    return fetch(sync.cfg.url + path, opts).then(function(r){
+      if(r.status === 401) throw new Error("wrong sync key");
+      return r;
+    }, function(){ throw new Error("offline or worker unreachable"); });
+  }
+  function hex(buf){ return Array.prototype.map.call(new Uint8Array(buf), function(b){ return ("0" + b.toString(16)).slice(-2); }).join(""); }
+  function sha(text){ return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(hex); }
+  var DATA_URL = /"(data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+\/=]+)"/g;
+  // swap every photo in a JSON string for a "blob:<sha>" ref
+  function dehydrate(json){
+    var urls = {}, m;
+    DATA_URL.lastIndex = 0;
+    while((m = DATA_URL.exec(json))) urls[m[1]] = 1;
+    var list = Object.keys(urls);
+    return Promise.all(list.map(sha)).then(function(hashes){
+      var byUrl = {}, blobs = {};
+      list.forEach(function(u, i){ byUrl[u] = hashes[i]; blobs[hashes[i]] = u; });
+      return { json: json.replace(DATA_URL, function(_, u){ return '"blob:' + byUrl[u] + '"'; }), blobs: blobs };
+    });
+  }
+  // put the photos back; photos this browser already has are not downloaded
+  function rehydrate(json){
+    var need = {}, m, re = /"blob:([a-f0-9]{64})"/g;
+    while((m = re.exec(json))) need[m[1]] = 1;
+    return dehydrate(JSON.stringify(state)).then(function(local){
+      var have = local.blobs;
+      return Promise.all(Object.keys(need).map(function(h){
+        if(have[h]) return null;
+        return syncApi("/blob/" + h).then(function(r){
+          if(!r.ok) throw new Error("a photo is missing in the cloud");
+          return r.text().then(function(t){ have[h] = t; });
+        });
+      })).then(function(){
+        return json.replace(re, function(_, h){ return '"' + have[h] + '"'; });
+      });
+    });
+  }
+  function rememberBlob(h){
+    sync.known[h] = 1;
+    try{ localStorage.setItem(SYNC_KEY + "-known", JSON.stringify(Object.keys(sync.known).slice(-5000))); }catch(e){}
+  }
+  function push(){
+    if(!sync.cfg || storageLocked) return Promise.resolve();
+    if(sync.busy){ sync.again = true; return Promise.resolve(); }
+    sync.busy = true; clearTimeout(sync.retry); paintSync();
+    var at = state.savedAt || Date.now();
+    return dehydrate(JSON.stringify(state)).then(function(d){
+      var todo = Object.keys(d.blobs).filter(function(h){ return !sync.known[h]; });
+      return todo.reduce(function(p, h){
+        return p.then(function(){
+          return syncApi("/blob/" + h, { method:"HEAD" }).then(function(r){
+            if(r.ok){ rememberBlob(h); return; }
+            return syncApi("/blob/" + h, { method:"PUT", body:d.blobs[h] }).then(function(r2){
+              if(!r2.ok) throw new Error("photo upload failed (" + r2.status + ")");
+              rememberBlob(h);
+            });
+          });
+        });
+      }, Promise.resolve()).then(function(){
+        return syncApi("/state", { method:"PUT", body:d.json, headers:{ "X-Saved-At":String(at), "Content-Type":"application/json" } });
+      });
+    }).then(function(r){
+      if(!r.ok) throw new Error("upload failed (" + r.status + ")");
+      sync.remoteAt = at; sync.lastOk = Date.now(); sync.err = "";
+    }).catch(function(e){
+      sync.err = e.message || "sync failed";
+      sync.retry = setTimeout(push, 30000);          // keep trying in the background
+    }).then(function(){
+      sync.busy = false; paintSync();
+      if(sync.again){ sync.again = false; schedulePush(); }
+    });
+  }
+  schedulePush = function(){
+    if(!sync.cfg || storageLocked) return;
+    clearTimeout(sync.timer);
+    sync.timer = setTimeout(push, 2500);
+    paintSync();
+  };
+  // replace this browser's copy with the cloud's, then reload
+  function adoptRemote(){
+    return syncApi("/state").then(function(r){
+      if(!r.ok) throw new Error("download failed (" + r.status + ")");
+      var at = +r.headers.get("X-Saved-At") || 0;
+      return r.text().then(rehydrate).then(function(json){
+        var st = normalize(JSON.parse(json));
+        if(!st) throw new Error("the cloud copy isn't readable");
+        st.savedAt = at;
+        storageLocked = true;                       // nothing may save over it now
+        var mine = JSON.stringify(state);
+        return STORE.put("before-sync-" + Date.now(), mine).catch(function(){}).then(function(){
+          var out = JSON.stringify(st);
+          if(out.length < 2000000){ try{ localStorage.setItem(KEY, out); }catch(e){} }
+          return BOOT.idbOk ? STORE.put(KEY, out) : null;
+        }).then(function(){ location.reload(); });
+      });
+    });
+  }
+  // compare with the cloud: take the newer copy
+  function syncCheck(){
+    if(!sync.cfg || sync.busy || storageLocked) return Promise.resolve();
+    return syncApi("/state", { method:"HEAD" }).then(function(r){
+      if(r.status === 404){ if(hasData()) return push(); return; }
+      if(!r.ok) throw new Error("check failed (" + r.status + ")");
+      var at = +r.headers.get("X-Saved-At") || 0, mine = state.savedAt || 0;
+      if(at > mine) return adoptRemote();
+      sync.remoteAt = at;
+      if(at < mine) return push();
+      sync.lastOk = Date.now(); sync.err = ""; paintSync();
+    }).catch(function(e){ sync.err = e.message || "sync failed"; paintSync(); });
+  }
+  function ago(ms){
+    var s = Math.round((Date.now() - ms) / 1000);
+    return s < 10 ? "just now" : s < 60 ? s + "s ago" : s < 3600 ? Math.round(s / 60) + " min ago"
+         : s < 86400 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago";
+  }
+  function paintSync(){
+    if(!syncStatusEl) return;
+    var on = !!sync.cfg;
+    syncStatusEl.hidden = !on; backupEl.hidden = on;   // with sync on, the cloud is the backup
+    syncBtn.classList.toggle("on", on);
+    if(!on) return;
+    syncStatusEl.classList.toggle("stale", !!sync.err);
+    syncStatusEl.textContent = sync.err ? "sync: " + sync.err + " · retrying"
+      : (sync.busy || sync.timer && !sync.lastOk) ? "syncing..."
+      : sync.lastOk ? "synced " + ago(sync.lastOk) : "sync on";
+  }
+  setInterval(paintSync, 20000);
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden){ if(sync.cfg && state.savedAt > sync.remoteAt) push(); }
+    else syncCheck();
+  });
+
+  // the connect popover
+  var syncPop = null;
+  function closeSyncPop(){ if(syncPop && syncPop.parentNode) syncPop.parentNode.removeChild(syncPop); syncPop = null; }
+  syncBtn.addEventListener("click", function(e){
+    e.stopPropagation();
+    if(syncPop){ closeSyncPop(); return; }
+    var pop = syncPop = document.createElement("div");
+    pop.className = "sync-pop";
+    pop.innerHTML =
+      '<div class="sp-head">cloud sync</div>' +
+      '<label>worker address<input type="url" class="sp-url" placeholder="https://tracker-sync.you.workers.dev" spellcheck="false"></label>' +
+      '<label>sync key<input type="password" class="sp-key" placeholder="the secret you set on the worker" spellcheck="false" autocomplete="off"></label>' +
+      '<div class="sp-msg"></div>' +
+      '<div class="sp-row"><button type="button" class="sp-go">connect</button><button type="button" class="sp-off">turn off</button></div>' +
+      '<div class="sp-choice" hidden><div class="sp-q"></div><button type="button" class="sp-cloud">use the cloud copy</button><button type="button" class="sp-here">upload this browser\'s copy</button></div>';
+    var url = pop.querySelector(".sp-url"), key = pop.querySelector(".sp-key"), msg = pop.querySelector(".sp-msg");
+    var off = pop.querySelector(".sp-off"), choice = pop.querySelector(".sp-choice");
+    if(sync.cfg){ url.value = sync.cfg.url; key.value = sync.cfg.token; } else off.hidden = true;
+    function say(t, bad){ msg.textContent = t; msg.classList.toggle("bad", !!bad); }
+    pop.querySelector(".sp-go").addEventListener("click", function(){
+      var u = url.value.trim().replace(/\/+$/, ""), k = key.value.trim();
+      if(!/^https?:\/\/\S+$/.test(u)){ say("enter the worker's address (https://...)", true); return; }
+      if(k.length < 16){ say("the sync key is too short", true); return; }
+      say("connecting...");
+      var prev = sync.cfg; sync.cfg = { url:u, token:k };
+      // a different worker means a different bucket: forget which photos were uploaded
+      if(!prev || prev.url !== u){ sync.known = {}; try{ localStorage.removeItem(SYNC_KEY + "-known"); }catch(e){} }
+      syncApi("/state", { method:"HEAD" }).then(function(r){
+        if(r.status !== 404 && !r.ok) throw new Error("the worker answered " + r.status);
+        localStorage.setItem(SYNC_KEY, JSON.stringify(sync.cfg));
+        if(r.status === 404){ say("connected. uploading this browser's copy..."); return push().then(function(){ say(sync.err ? sync.err : "connected and synced", !!sync.err); }); }
+        var at = +r.headers.get("X-Saved-At") || 0;
+        choice.hidden = false;
+        pop.querySelector(".sp-q").textContent = "the cloud already has data (saved " + ago(at) + "). this browser's copy was saved " + (state.savedAt ? ago(state.savedAt) : "a while ago") + ". which one should stay?";
+        say("");
+      }).catch(function(e){ sync.cfg = prev; say(e.message, true); });
+    });
+    pop.querySelector(".sp-cloud").addEventListener("click", function(){ say("downloading..."); adoptRemote().catch(function(e){ say(e.message, true); }); });
+    pop.querySelector(".sp-here").addEventListener("click", function(){
+      say("uploading..."); push().then(function(){ say(sync.err ? sync.err : "uploaded. this browser's copy is in the cloud", !!sync.err); choice.hidden = !sync.err; });
+    });
+    off.addEventListener("click", function(){
+      localStorage.removeItem(SYNC_KEY); sync.cfg = null; clearTimeout(sync.timer); clearTimeout(sync.retry);
+      paintSync(); closeSyncPop();
+    });
+    document.body.appendChild(pop);
+    var r = syncBtn.getBoundingClientRect();
+    pop.style.left = Math.max(8, r.left) + "px";
+    pop.style.bottom = (window.innerHeight - r.top + 6) + "px";
+    (sync.cfg ? key : url).focus();
+  });
+  document.addEventListener("click", function(e){ if(syncPop && !syncPop.contains(e.target)) closeSyncPop(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeSyncPop(); });
+
+  // ask the browser not to clear this site's data when the disk fills up
+  if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){});
+
   // ---------- page cover, Notion style ----------
   // cur().cover is { src, y, bw } or null; y is the vertical crop 0..100 (%)
   var coverEl  = document.getElementById("cover");
@@ -2448,6 +2690,8 @@ function app(BOOT){
 
   renderGrid(); refreshDay();
   if(storageLocked) toast("couldn't read your saved data, so nothing will be saved over it. import a backup, or ask for help before changing anything");
+  paintSync();
+  if(sync.cfg) syncCheck();
   window.dispatchEvent(new Event("app-ready"));   // the app starts after saved data is read
 }
 </script>
