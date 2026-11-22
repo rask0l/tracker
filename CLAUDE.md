@@ -24,8 +24,23 @@ linked from anywhere.
   keys are ignored while typing in an input). On touch screens a long-press
   (450ms) on a box ticks it, and below 640px the Day card moves above the grid
   (the side column is `display:contents` so its cards can be reordered).
-- **State is browser-only.** Everything saves to `localStorage` under key
-  `hundred-v1` as
+- **State is browser-only.** Everything saves to IndexedDB (database
+  `hundred`, store `kv`, key `hundred-v1`) as a JSON string; `STORE` wraps it.
+  localStorage (same key) only mirrors states under 2M characters, so a
+  refresh that lands mid-write still finds the latest copy; on load the copy
+  with the newest `savedAt` wins, and data from before IndexedDB moves over on
+  the first save. localStorage alone used to be the store, but it gives the
+  whole rask0l.github.io origin only about 5M characters: photos filled it,
+  saves failed, and refreshing brought back old or default data. The app is
+  `app(BOOT)`, started once IndexedDB has been read (it falls back to
+  localStorage only if IndexedDB fails or takes over 5s, and then never
+  writes to IndexedDB that session); it fires `app-ready` when done. `save()`
+  queues writes in order and returns a promise (import waits on it before
+  reloading). If saved data exists but nothing readable loads, the page
+  shows a blank tracker but sets `storageLocked`, never saves over the
+  data, keeps an `unreadable-<time>` copy in IndexedDB, and says so in a
+  toast; importing a backup lifts the lock. `safeMap()` drops a single bad
+  page, item or note instead of failing the whole load. The saved shape is
   `{ n, title, days, label, dayNotes, stickies, start, lastExport, items, cover, icon, pages, sidebarHidden }`.
   The root holds the home tracker's own fields (`normTracker()` validates
   the per-tracker part for home and tracker pages alike); `T` is the tracker
@@ -43,9 +58,8 @@ linked from anywhere.
   (filter by typing, arrows and Enter to pick, Esc to close) that converts the
   line, and typing `[]` at the start of a plain line makes it a checklist
   item. There are no add-line buttons: Enter, `/` and `[]` cover it. Photos
-  are shrunk to 720px JPEGs before saving because everything lives in
-  localStorage (about 5MB); if a save ever fails, a red toast says so
-  instead of losing changes silently. Block rows use `bt-<type>` classes;
+  are shrunk to 720px JPEGs before saving to keep the saved state small; if
+  a save ever fails, a red toast says so instead of losing changes silently. Block rows use `bt-<type>` classes;
   never `blk-<type>`, since `.blk-text` is the line's input. The repo holds
   no progress; clearing site data wipes it, so the bottom of the sidebar has
   `export` (downloads the whole state as `100days-<date>.json`) and `import`
@@ -119,8 +133,7 @@ linked from anywhere.
   photos use the 720px default. `pickPhoto` keeps an already-small JPEG/WebP
   exactly as uploaded (no re-encoding), otherwise halves the image in steps
   with high-quality smoothing before the final resize and saves a JPEG
-  (quality 0.86 for covers, 0.8 otherwise). localStorage gives the page
-  about 5M characters, so a handful of large covers can fill it. Everything below the cover sits in `.page`
+  (quality 0.86 for covers, 0.8 otherwise). Everything below the cover sits in `.page`
   (`position:relative`), so page items keep their place when a cover is added.
 - Free-floating page items: the `+` fixed in the bottom-right corner adds a
   text box, heading, quote box, tip box, checklist, countdown or photo

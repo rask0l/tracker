@@ -539,7 +539,60 @@
   </div>
 
 <script>
+// ---------- storage ----------
+// Everything is saved to IndexedDB, which has room for photos and covers
+// (localStorage only gives the whole rask0l.github.io origin about 5MB, and
+// filling it used to make saves fail so a refresh brought back old data).
+// A small state is also mirrored to localStorage, so a refresh that lands
+// mid-write still finds the latest copy; on load the newest copy wins.
+var STORE = (function(){
+  "use strict";
+  var dbp = null;
+  function open(){
+    if(dbp) return dbp;
+    dbp = new Promise(function(res, rej){
+      if(!window.indexedDB){ rej(new Error("no IndexedDB")); return; }
+      var rq = indexedDB.open("hundred", 1);
+      rq.onupgradeneeded = function(){ rq.result.createObjectStore("kv"); };
+      rq.onsuccess = function(){ res(rq.result); };
+      rq.onerror = function(){ rej(rq.error); };
+      rq.onblocked = function(){ rej(new Error("IndexedDB blocked")); };
+    });
+    return dbp;
+  }
+  function get(k){
+    return open().then(function(db){ return new Promise(function(res, rej){
+      var r = db.transaction("kv", "readonly").objectStore("kv").get(k);
+      r.onsuccess = function(){ res(r.result); };
+      r.onerror = function(){ rej(r.error); };
+    }); });
+  }
+  function put(k, v){
+    return open().then(function(db){ return new Promise(function(res, rej){
+      var tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").put(v, k);
+      tx.oncomplete = function(){ res(); };
+      tx.onerror = function(){ rej(tx.error); };
+      tx.onabort = function(){ rej(tx.error || new Error("write aborted")); };
+    }); });
+  }
+  return { get:get, put:put };
+})();
+
 (function(){
+  var ls = null, done = false;
+  try{ ls = localStorage.getItem("hundred-v1"); }catch(e){}
+  function go(idbRaw, idbOk){
+    if(done) return; done = true; clearTimeout(timer);
+    app({ idb:idbRaw, ls:ls, idbOk:idbOk });
+  }
+  // if IndexedDB never answers, run on localStorage alone and never write to
+  // IndexedDB this session (it might hold newer data we could not read)
+  var timer = setTimeout(function(){ go(undefined, false); }, 5000);
+  STORE.get("hundred-v1").then(function(v){ go(v, true); }, function(){ go(undefined, false); });
+})();
+
+function app(BOOT){
   "use strict";
   var KEY = "hundred-v1";
   function uid(){ return "n" + Math.random().toString(36).slice(2,9); }
@@ -591,12 +644,18 @@
 
   // free-floating page items; anything malformed is dropped
   var ITEM_TYPES = ["text","h","quote","callout","image","note","countdown"];
+  // map that drops entries which throw, so one bad item can't break loading
+  function safeMap(arr, fn){
+    var out = [];
+    arr.forEach(function(x){ try{ var v = fn(x); if(v) out.push(v); }catch(e){} });
+    return out;
+  }
   function normItems(arr){
     if(!Array.isArray(arr)) return [];
-    return arr.filter(function(it){
+    return safeMap(arr.filter(function(it){
       return it && ITEM_TYPES.indexOf(it.type) >= 0 && isFinite(it.x) && isFinite(it.y) &&
              isFinite(it.w) && (it.type !== "image" || okSrc(it.src));
-    }).map(function(it){
+    }), function(it){
       var o = { id:String(it.id || uid()), type:it.type, text:String(it.text || ""),
                 x:+it.x, y:Math.max(0, +it.y), w:Math.min(Math.max(+it.w, 120), 1200) };
       // checklist box: text is its title, blocks its body (same editor as notes)
@@ -638,7 +697,7 @@
   // pages are documents ({ kind:"doc", blocks }) or day trackers ({ kind:"tracker", n, days, ... })
   function normPages(arr){
     if(!Array.isArray(arr)) return [];
-    return arr.filter(function(p){ return p && typeof p === "object"; }).map(function(p){
+    return safeMap(arr.filter(function(p){ return p && typeof p === "object"; }), function(p){
       var o;
       if(p.kind === "tracker"){
         var n = normLen(p.n, 30);
@@ -675,7 +734,7 @@
     }
     var stickies;
     if(Array.isArray(o.stickies)){
-      stickies = o.stickies.map(function(s){
+      stickies = safeMap(o.stickies, function(s){
         var blocks = Array.isArray(s && s.blocks) ? normBlocks(s.blocks)
                                                   : migrateBlocks(s && s.text, s && s.items);
         return { id:String(s && s.id || uid()),
@@ -716,12 +775,26 @@
     return st;
   }
 
+  var storageLocked = false;     // set when saved data exists but can't be read
   function load(){
-    try{
-      var raw = localStorage.getItem(KEY);
-      var s = raw ? normalize(JSON.parse(raw)) : null;
-      if(s) return s;
-    }catch(e){}
+    var best = null, bestAt = -1, unreadable = null;
+    [BOOT.idb, BOOT.ls].forEach(function(raw){
+      if(!raw) return;
+      try{
+        var o = JSON.parse(raw), st = normalize(o);
+        if(!st) throw new Error("not a tracker state");
+        var at = +o.savedAt || 0;
+        if(at > bestAt){ best = st; bestAt = at; }
+      }catch(e){ unreadable = raw; }
+    });
+    if(unreadable && BOOT.idbOk){
+      // keep a copy of anything unreadable so it can still be recovered
+      STORE.put("unreadable-" + Date.now(), unreadable).catch(function(){});
+    }
+    if(best) return best;
+    // saved data exists but none of it could be read: start a blank tracker
+    // on screen, but never save it over the real data
+    if(unreadable) storageLocked = true;
     var st = newTracker(100);
     st.stickies = [ { id:uid(), title:"", pinned:false, done:false, check:false,
                       blocks:[mkBlock("text","",false)] } ];
@@ -736,14 +809,41 @@
     if(!t) return;
     t.textContent = msg || ""; t.hidden = !msg;
   }
+  var writing = false, pendingJson = null, waiters = [];
+  function saved(ok, why){
+    if(ok){ if(saveFailed){ saveFailed = false; toast(null); } }
+    else{ saveFailed = true; toast("couldn't save (" + why + "). export a backup now so nothing is lost"); }
+  }
+  function flushWrite(){
+    var json = pendingJson, ws = waiters;
+    pendingJson = null; waiters = []; writing = true;
+    STORE.put(KEY, json).then(function(){
+      writing = false; saved(true);
+      ws.forEach(function(w){ w(true); });
+      if(pendingJson) flushWrite();
+    }, function(err){
+      writing = false;
+      saved(false, err && err.name === "QuotaExceededError" ? "the browser is out of space" : "storage error");
+      ws.forEach(function(w){ w(false); });
+      if(pendingJson) flushWrite();
+    });
+  }
+  // returns a promise that resolves once this state (or a newer one) is stored
   function save(){
-    try{
-      localStorage.setItem(KEY, JSON.stringify(state));
-      if(saveFailed){ saveFailed = false; toast(null); }
-    }catch(e){
-      saveFailed = true;
-      toast("storage full: changes are not being saved. delete a photo, then export a backup");
+    if(storageLocked) return Promise.resolve(false);
+    state.savedAt = Date.now();
+    var json = JSON.stringify(state);
+    if(!BOOT.idbOk){
+      try{ localStorage.setItem(KEY, json); saved(true); return Promise.resolve(true); }
+      catch(e){ saved(false, "storage full"); return Promise.resolve(false); }
     }
+    // small mirror: keeps the shared 5MB of localStorage free for big states
+    if(json.length < 2000000){ try{ localStorage.setItem(KEY, json); }catch(e){} }
+    return new Promise(function(res){
+      waiters.push(res);
+      pendingJson = json;            // a newer state replaces one still waiting
+      if(!writing) flushWrite();
+    });
   }
 
   var state = load();
@@ -1528,8 +1628,8 @@
       try{ s = normalize(JSON.parse(r.result)); }catch(e){}
       importFile.value = "";
       if(!s){ flash(importBtn, "not a backup"); return; }
-      state = s; save();
-      location.reload();   // rebuild every card from the imported state
+      state = s; storageLocked = false;
+      save().then(function(){ location.reload(); });   // rebuild every card once it is stored
     };
     r.readAsText(f);
   });
@@ -2347,7 +2447,9 @@
   });
 
   renderGrid(); refreshDay();
-})();
+  if(storageLocked) toast("couldn't read your saved data, so nothing will be saved over it. import a backup, or ask for help before changing anything");
+  window.dispatchEvent(new Event("app-ready"));   // the app starts after saved data is read
+}
 </script>
 </body>
 </html>
