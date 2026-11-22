@@ -234,7 +234,6 @@
     user-select:none; -webkit-user-drag:none; pointer-events:none;}
   .pi-image.cropping .pi-frame{border-color:var(--accent); cursor:grab; touch-action:none;}
   .pi-image.cropping.panning .pi-frame{cursor:grabbing;}
-  .pi-image .pi-size{cursor:nwse-resize;}
   .pi-crop, .pi-fit{background:transparent; border:none; color:var(--fg); font:inherit;
     font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; padding:.25rem .35rem;
     cursor:pointer;}
@@ -243,7 +242,7 @@
   .pi-image:not(.cropping) .pi-fit{display:none;}
   .pi-image.cropping .pi-ctl{opacity:1;}
   .pi-image.cropping .pi-size{display:none;}
-  .pi-ctl{position:absolute; top:-.2rem; right:-.2rem; display:flex; gap:.15rem;
+  .pi-ctl{position:absolute; top:-.2rem; right:14px; display:flex; gap:.15rem;
     background:var(--bg); border:2px solid var(--fg); opacity:0; transition:opacity .1s;}
   .pitem:hover .pi-ctl, .pitem.active .pi-ctl, .pitem:focus-within .pi-ctl{opacity:1;}
   .pi-grip, .pi-del{background:transparent; border:none; color:var(--fg); font:inherit;
@@ -255,9 +254,16 @@
   .pi-bw:hover{color:var(--accent);}
   .pi-bw.on{background:var(--accent); color:var(--accent-ink);}
   .pi-del:hover{color:var(--accent);}
-  .pi-size{position:absolute; right:-6px; bottom:-6px; width:12px; height:12px;
+  /* a resize handle on every corner; text items only change width */
+  .pi-size{position:absolute; width:12px; height:12px; z-index:2;
     background:var(--fg); border:2px solid var(--bg); cursor:ew-resize; touch-action:none;
     opacity:0;}
+  .pi-size[data-dir=nw]{left:-6px; top:-6px;}
+  .pi-size[data-dir=ne]{right:-6px; top:-6px;}
+  .pi-size[data-dir=sw]{left:-6px; bottom:-6px;}
+  .pi-size[data-dir=se]{right:-6px; bottom:-6px;}
+  .pi-image .pi-size[data-dir=nw], .pi-image .pi-size[data-dir=se]{cursor:nwse-resize;}
+  .pi-image .pi-size[data-dir=ne], .pi-image .pi-size[data-dir=sw]{cursor:nesw-resize;}
   .pitem:hover .pi-size, .pitem.active .pi-size{opacity:1;}
   .addpage{position:fixed; right:1rem; bottom:1rem; z-index:60; width:2.4rem; height:2.4rem;
     background:var(--bg); border:2px solid var(--fg); color:var(--fg); font:inherit;
@@ -1803,9 +1809,13 @@
       ta.addEventListener("input", function(){ it.text = ta.value; growText(ta); save(); });
     }
 
-    var size = document.createElement("span");
-    size.className = "pi-size"; size.title = "drag to resize";
-    el.appendChild(ctl); el.appendChild(size);
+    var sizes = ["nw","ne","sw","se"].map(function(d){
+      var h = document.createElement("span");
+      h.className = "pi-size"; h.title = "drag to resize"; h.setAttribute("data-dir", d);
+      return h;
+    });
+    el.appendChild(ctl);
+    sizes.forEach(function(h){ el.appendChild(h); });
     pageBox.appendChild(el);
     if(ta) growText(ta);
 
@@ -1905,10 +1915,20 @@
       handle.addEventListener("pointercancel", end);
     }
     gesture(grip, function(g, dx, dy){ it.x = g.x + dx; it.y = Math.max(0, g.y + dy); });
-    gesture(size, function(g, dx, dy){
-      it.w = Math.min(Math.max(g.w + dx, 120), 1200);
-      // photos: the corner also sets the frame height, cropping instead of squashing
-      if(frame) it.h = Math.min(Math.max(g.h + dy, 60), 2400);
+    // a left or top corner keeps the opposite edge where it is
+    sizes.forEach(function(h){
+      var d = h.getAttribute("data-dir");
+      gesture(h, function(g, dx, dy){
+        var w = Math.min(Math.max(g.w + (d.charAt(1) === "w" ? -dx : dx), 120), 1200);
+        if(d.charAt(1) === "w") it.x = g.x + (g.w - w);
+        it.w = w;
+        // photos: corners also set the frame height, cropping instead of squashing
+        if(frame){
+          var fh = Math.min(Math.max(g.h + (d.charAt(0) === "n" ? -dy : dy), 60), 2400);
+          if(d.charAt(0) === "n") it.y = Math.max(0, g.y + (g.h - fh));
+          it.h = fh;
+        }
+      });
     });
 
     if(focus && ta) ta.focus();

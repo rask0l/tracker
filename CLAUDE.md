@@ -101,10 +101,11 @@ linked from anywhere.
   where `x` is px from the page's centre line (so items stay aligned with the
   centred layout at any width), `y` is px from the top of the page and `w` the
   width. They scroll with the page; hovering shows a grip to drag, a delete,
-  and a corner handle to resize. Text boxes are auto-growing textareas.
+  and a resize handle on every corner (a left or top corner keeps the
+  opposite edge fixed; text items only change width). Text boxes are auto-growing textareas.
   Photo items also get a `b&w` toggle (`bw: true`), a CSS grayscale filter,
   so the saved photo keeps its colour. Photos sit in a cropping `.pi-frame`:
-  the corner handle sets width and frame height (`h`), `crop` enters a mode
+  the corner handles set width and frame height (`h`), `crop` enters a mode
   where dragging pans and scrolling zooms (`zoom` 1..4, `px`/`py` 0..1 pan),
   `fit` drops `h` and the crop to show the photo's own shape, and `done` or
   Esc leaves the mode. `layoutPhoto()` turns those into the img's size and
