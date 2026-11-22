@@ -475,15 +475,15 @@
   <div class="wrap">
     <div class="top">
       <div class="icon" id="pageIcon" role="button" tabindex="0" aria-label="change icon" hidden></div>
-      <div class="head-actions"><button id="addIcon" type="button">+ add icon</button><button id="addCover" type="button">+ add cover</button></div>
+      <div class="head-actions"><button id="addIcon" type="button">+ add icon</button><button id="addCover" type="button">+ add cover</button><button id="addSub" type="button">+ add subtitle</button></div>
     <header id="homeHead">
       <input class="tk-title" id="tkTitle" maxlength="60" spellcheck="false" placeholder="untitled" aria-label="tracker title">
       <input class="sub" id="label" maxlength="48" spellcheck="false"
-             placeholder="name your challenge" aria-label="challenge name">
+             placeholder="subtitle" aria-label="subtitle">
     </header>
       <header class="doc-head" id="docHead" hidden>
         <input class="doc-title" id="docTitle" placeholder="untitled" spellcheck="false" aria-label="page title">
-        <input class="sub" id="docSub" maxlength="60" spellcheck="false" placeholder="add a subtitle" aria-label="page subtitle">
+        <input class="sub" id="docSub" maxlength="60" spellcheck="false" placeholder="subtitle" aria-label="page subtitle">
       </header>
     </div>
 
@@ -1752,8 +1752,24 @@
   var docHead = document.getElementById("docHead");
   var docSub  = document.getElementById("docSub");
   // Enter walks title -> subtitle -> body
+  // an empty subtitle takes no space: "+ add subtitle" (with add icon/cover) brings it back
+  var addSub = document.getElementById("addSub");
+  function subInput(){ return isTracker(cur()) ? label : docSub; }
+  function paintSub(){
+    var inp = subInput();
+    var has = !!inp.value.trim() || document.activeElement === inp;
+    inp.hidden = !has; addSub.hidden = has;
+  }
+  addSub.addEventListener("click", function(){
+    var inp = subInput(); inp.hidden = false; addSub.hidden = true; inp.focus();
+  });
+  label.addEventListener("blur", paintSub);
+  docSub.addEventListener("blur", paintSub);
   docTitle.addEventListener("keydown", function(e){
-    if(e.key === "Enter"){ e.preventDefault(); focusEnd(docSub); }
+    if(e.key !== "Enter") return;
+    e.preventDefault();
+    if(!docSub.hidden) focusEnd(docSub);
+    else{ var t = docBody.querySelector(".blk-text"); if(t) focusEnd(t); }
   });
   docSub.addEventListener("input", function(){
     var p = cur(); if(isTracker(p)) return;
@@ -1782,7 +1798,7 @@
     docView.hidden = tk; docHead.hidden = tk;
     if(tk){ if(T !== p) loadTracker(p); }
     else{ docTitle.value = p.title; docSub.value = p.label || ""; buildDoc(p); }
-    renderCover(); renderIcon(); renderItems(); renderSidebar();
+    renderCover(); renderIcon(); renderItems(); renderSidebar(); paintSub();
     document.title = p.title || "untitled";
     window.scrollTo(0, 0);
   }

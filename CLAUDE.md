@@ -97,7 +97,10 @@ linked from anywhere.
   shrunk to 256px), picked from a popover (emoji grid, type/paste an emoji,
   upload, remove). Like Notion, the 110px icon overlaps the bottom edge of the
   cover and the title sits under it; the sidebar shows it small.
-  `+ add icon` / `+ add cover` sit above the title and show on hover.
+  `+ add icon` / `+ add cover` / `+ add subtitle` sit above the title and
+  show on hover. An empty subtitle (tracker `label` or document `label`)
+  takes no space at all; `+ add subtitle` reveals it, and clearing it then
+  clicking away hides it again (`paintSub()`).
 - `[hidden]{display:none !important}` is global on purpose: several elements
   set `display` in CSS, which would otherwise override the `hidden` attribute.
 - Page cover, Notion style: `+ add cover` puts a full-width banner
