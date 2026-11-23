@@ -189,7 +189,7 @@ linked from anywhere.
   on the page (app-level, so the browser's own text undo is replaced, except
   inside the sync/icon/font/new-page popups). `save()` compares snapshots
   (`snapOf()`: the state as JSON without `savedAt`, photos swapped for
-  ` img:<n>` tokens kept once in `imgById`), which is also how it skips
+  `\u0000img:<n>` tokens kept once in `imgById`), which is also how it skips
   no-op saves. Each real change pushes the previous snapshot onto an undo
   stack (max 80, this session only); typing groups into one step until a 1s
   pause, any other change is its own step, and a new change clears redo.
