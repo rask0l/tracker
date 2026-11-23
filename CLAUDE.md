@@ -8,8 +8,10 @@ linked from anywhere.
 
 ## What it is
 
-- `index.html` is the entire site: a self-contained static page with inline
-  CSS and JS, no framework, no Jekyll layout. It works like a small Notion: a
+- `index.html` is the site: a static page with inline CSS and JS, no
+  framework, no Jekyll layout. The Finance page type lives in `finance.js`
+  (loaded by a plain script tag before the app; bump its `?v=` when it
+  changes so browsers don't keep an old copy). It works like a small Notion: a
   left sidebar lists pages, the first being the home tracker, and
   `+ new page` adds either a document page or a day tracker of any length
   (presets 7 to 365, or a custom number up to 1000). A tracker is a grid of
@@ -114,8 +116,8 @@ linked from anywhere.
   items }` plus either document fields (`kind:"doc"`, `title`, `label` (the
   subtitle under the title, same style as a tracker's), `blocks`, using the
   same block editor and slash menu as notes) or the tracker fields
-  above (`kind:"tracker"`). Pages saved before trackers existed have no
-  `kind` and load as documents.
+  above (`kind:"tracker"`), or `kind:"finance"` with a `finance` object.
+  Pages saved before trackers existed have no `kind` and load as documents.
   The open page lives in the URL hash (`#p/<id>`, none for home) so back and
   forward work; `cur()` returns the open page (the state object for home) and
   `renderPage()` shows `#homeView` (any tracker) or `#docView`, calls
@@ -125,6 +127,27 @@ linked from anywhere.
   with `«` (remembered as `sidebarHidden`); under 900px it is an overlay
   opened with the fixed `☰` button. Arrow-key day stepping only runs on
   tracker pages.
+- Finance pages (`finance.js`, step 1 of a planned 4: transactions and the
+  monthly overview; next are budgets and goals, analytics charts, then
+  recurring transactions and reports). `finance` is `{ currency, categories,
+  methods, txns, monthlyLimit?, goals, recurring }`. Amounts are integers in
+  the currency's minor unit (cents for USD, riel for KHR), so sums are exact;
+  `parseMoney()` turns typed text into minor units rounding half up, and
+  display uses `Intl.NumberFormat`. A transaction is `{ id, date, type
+  ("income"|"expense"), amount, categoryId, method, note }`; categories are
+  `{ id, name, kind, budget? }` with editable defaults, and deleting one
+  moves its transactions to "Other"/"Other income". The currency locks once
+  transactions exist (changing it would relabel, not convert). The page shows
+  a month switcher, four tiles (income, expenses, left, savings rate = net /
+  income) each compared with the previous month, "saved overall", a "where
+  it went" bar list, and a searchable, filterable, sortable, paged table
+  (stacked 3-line cards on phones). index.html only calls
+  `Finance.normalize()` when loading, `Finance.fresh()` for a new page, and
+  `Finance.mount({ root, page, save })` from `renderPage()`; finance pages
+  reuse the document title block. Saves go through the app's `save()`, so
+  sync, export and undo cover finance too. Undo groups typing only when the
+  save happens inside an `input` event (`window.event`), so clicks and form
+  submits are always their own step.
 - Icons: every page can have an icon, `{ emoji }` or `{ src }` (a picture
   shrunk to 256px), plus `bw: true` for black and white (a grayscale filter
   on the page icon and the sidebar; a new icon keeps the setting), picked

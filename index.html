@@ -589,10 +589,13 @@
       <div class="blocks" id="docBody"></div>
       <div class="doc-tail" id="docTail"></div>
     </div>
+    <div class="fin" id="finView" hidden></div>
   </div>
   </div>
   </div>
 
+<!-- the Finance page type lives in its own file (see finance.js) -->
+<script src="finance.js?v=1"></script>
 <script>
 // ---------- storage ----------
 // Everything is saved to IndexedDB, which has room for photos and covers
@@ -766,6 +769,9 @@ function app(BOOT){
         var n = normLen(p.n, 30);
         o = normTracker(p, n, n + " DAYS");
         o.kind = "tracker";
+      }else if(p.kind === "finance" && window.Finance){
+        o = normFont({ kind:"finance", title:String(p.title || ""), label:String(p.label || "") }, p);
+        o.finance = Finance.normalize(p.finance);
       }else{
         o = normFont({ kind:"doc", title:String(p.title || ""), label:String(p.label || ""),
               blocks:normBlocks(p.blocks) || [mkBlock("text","",false)] }, p);
@@ -913,12 +919,13 @@ function app(BOOT){
   }
   // undo history: typing groups into one step until a 1s pause; every other
   // change is its own step
-  var undoStack = [], redoStack = [], lastUndoAt = 0, lastInputAt = 0, restoring = false;
+  var undoStack = [], redoStack = [], lastUndoAt = 0, restoring = false;
   var UNDO_MAX = 80;
-  document.addEventListener("input", function(){ lastInputAt = Date.now(); }, true);
   function recordUndo(prev){
     if(prev === null) return;
-    var now = Date.now(), typing = now - lastInputAt < 60;
+    // only a save made inside an input event counts as typing; clicks, Enter
+    // and form submits are always their own step
+    var now = Date.now(), typing = !!(window.event && window.event.type === "input");
     if(!(typing && now - lastUndoAt < 1000 && undoStack.length)){
       undoStack.push(prev);
       if(undoStack.length > UNDO_MAX) undoStack.shift();
@@ -1748,6 +1755,7 @@ function app(BOOT){
   var homeView = document.getElementById("homeView");
   var homeHead = document.getElementById("homeHead");
   var docView  = document.getElementById("docView");
+  var finView  = document.getElementById("finView");
   var docTitle = document.getElementById("docTitle");
   var docBody  = document.getElementById("docBody");
   var docTail  = document.getElementById("docTail");
@@ -1882,7 +1890,7 @@ function app(BOOT){
       row.setAttribute("role","link"); row.tabIndex = 0;
       var ico = document.createElement("span");
       ico.className = "sb-ico";
-      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : "·";
+      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : "·";
       var name = p.title || "";
       var t = document.createElement("span");
       t.className = "sb-title" + (name ? "" : " empty");
@@ -1924,6 +1932,10 @@ function app(BOOT){
     if(isNarrow()) document.body.classList.remove("sb-shown");
     (p.kind === "tracker" ? tkTitle : docTitle).focus();
   }
+  function newFinance(){
+    addNewPage({ kind:"finance", id:uid(), title:"money", label:"", icon:null, cover:null,
+                 items:[], finance:Finance.fresh() });
+  }
   function newDoc(){
     addNewPage({ kind:"doc", id:uid(), title:"", label:"", icon:null, cover:null,
                  blocks:[mkBlock("text","",false)], items:[] });
@@ -1943,6 +1955,13 @@ function app(BOOT){
     doc.innerHTML = "<b>document</b><small>notes, headings, quotes, photos</small>";
     doc.addEventListener("click", newDoc);
     pop.appendChild(doc);
+    if(window.Finance){
+      var fin = document.createElement("button");
+      fin.type = "button"; fin.className = "np-doc";
+      fin.innerHTML = "<b>finance</b><small>income, expenses, monthly overview</small>";
+      fin.addEventListener("click", newFinance);
+      pop.appendChild(fin);
+    }
     var head = document.createElement("div");
     head.className = "np-head"; head.textContent = "day tracker";
     pop.appendChild(head);
@@ -2058,11 +2077,16 @@ function app(BOOT){
   function renderPage(){
     var p = cur(), tk = isTracker(p);
     slashClose(); closeIconPop(); closePageMenu(); closeNewPop();
+    var fin = p.kind === "finance";
     homeView.hidden = !tk; homeHead.hidden = !tk;
-    docView.hidden = tk; docHead.hidden = tk;
+    docView.hidden = tk || fin; docHead.hidden = tk; finView.hidden = !fin;
     if(tk){ if(T !== p) loadTracker(p); }
-    else{ docTitle.value = p.title; docSub.value = p.label || ""; buildDoc(p); paintDocFont(); }
-    docFontBtn.hidden = tk; closeFontPop();
+    else{
+      docTitle.value = p.title; docSub.value = p.label || "";
+      if(fin){ finView.innerHTML = ""; Finance.mount({ root:finView, page:p, save:save }); }
+      else{ buildDoc(p); paintDocFont(); }
+    }
+    docFontBtn.hidden = tk || fin; closeFontPop();
     renderCover(); renderIcon(); renderItems(); renderSidebar(); paintSub();
     document.title = p.title || "untitled";
     window.scrollTo(0, 0);
