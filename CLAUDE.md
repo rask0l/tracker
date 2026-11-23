@@ -127,27 +127,55 @@ linked from anywhere.
   with `«` (remembered as `sidebarHidden`); under 900px it is an overlay
   opened with the fixed `☰` button. Arrow-key day stepping only runs on
   tracker pages.
-- Finance pages (`finance.js`, step 1 of a planned 4: transactions and the
-  monthly overview; next are budgets and goals, analytics charts, then
-  recurring transactions and reports). `finance` is `{ currency, categories,
-  methods, txns, monthlyLimit?, goals, recurring }`. Amounts are integers in
-  the currency's minor unit (cents for USD, riel for KHR), so sums are exact;
-  `parseMoney()` turns typed text into minor units rounding half up, and
-  display uses `Intl.NumberFormat`. A transaction is `{ id, date, type
-  ("income"|"expense"), amount, categoryId, method, note }`; categories are
-  `{ id, name, kind, budget? }` with editable defaults, and deleting one
-  moves its transactions to "Other"/"Other income". The currency locks once
-  transactions exist (changing it would relabel, not convert). The page shows
-  a month switcher, four tiles (income, expenses, left, savings rate = net /
-  income) each compared with the previous month, "saved overall", a "where
-  it went" bar list, and a searchable, filterable, sortable, paged table
-  (stacked 3-line cards on phones). index.html only calls
-  `Finance.normalize()` when loading, `Finance.fresh()` for a new page, and
-  `Finance.mount({ root, page, save })` from `renderPage()`; finance pages
-  reuse the document title block. Saves go through the app's `save()`, so
-  sync, export and undo cover finance too. Undo groups typing only when the
-  save happens inside an `input` event (`window.event`), so clicks and form
-  submits are always their own step.
+- Finance pages (`finance.js`): a personal finance system with five tabs,
+  overview (default), transactions, budgets, analytics, settings, under a
+  month switcher and `+ income` / `+ expense`. `finance` is `{ v:2, currency,
+  categories, methods, rates, txns, budgets, goals, recurring, accounts }`
+  (the last three are reserved for later features and passed through as is).
+  - Money is integers in a currency's minor unit (cents for USD, riel for
+    KHR), so sums are exact. `parseMoney()` turns typed text into minor units
+    rounding half up and rejects anything with a minus sign; display uses
+    `Intl.NumberFormat`. Amounts must be above zero.
+  - A transaction is `{ id, createdAt, type, date, amount, currency, desc,
+    notes, method }` plus `categoryId` for income/expense or `to` for a
+    transfer. Transfers move money between your own payment methods and are
+    never counted as income or spending. `id` and `createdAt` never change.
+    Step 1 records (description in `note`, no currency/createdAt) migrate on
+    load; `normalize()` drops duplicate ids so import and sync can't double
+    a transaction.
+  - `currency` is the primary currency; all totals and budgets are in it,
+    and it locks once transactions exist. A transaction in another currency
+    keeps its own amount; if you typed a rate ("1 primary = rate units") it
+    also stores `rate` and `base`, its primary value, computed once with
+    BigInt in `convert()` and never recomputed, so history never shifts.
+    Without a rate it is listed separately ("not counted"), never added to
+    primary totals. `rates` remembers the last rate per currency as a
+    suggestion for new entries. There is no exchange-rate API on purpose.
+  - Totals (`sum()`/`monthSum()`): income, expenses, net cash flow = income
+    minus expenses, savings rate = net / income (none when income is 0).
+    Everything is for the selected month and compared with the previous one.
+  - `budgets` is `{ "YYYY-MM": { limit?, cats:{ categoryId: amount } } }`. A
+    month without its own entry uses the latest earlier month
+    (`budgetFor()`); editing an inherited budget saves a copy for that month
+    first. Over budget shows in the accent red; 80%+ is called out in the
+    overview's "what stands out" list.
+  - Categories are `{ id, name, kind }` with editable defaults (new pages get
+    Food, Transportation, Housing, Bills & Utilities, Internet & Phone,
+    Shopping, Entertainment, Health, Education, Subscriptions, Personal Care,
+    Other Expenses; Salary, Freelance, Business, Other Income). Renaming keeps
+    the id. Deleting a used category asks where its transactions (and budget
+    amounts) should move; it never deletes transactions.
+  - Charts are hand-built, no library: grouped income (light ink) vs
+    expense (accent red) bars with a legend and hover tooltips, a separate
+    savings-rate line (percent never shares an axis with money), category
+    bars, and a month-by-month table with the same numbers.
+  - index.html only calls `Finance.normalize()` when loading,
+    `Finance.fresh()` for a new page and `Finance.mount({ root, page, save })`
+    from `renderPage()`; finance pages reuse the document title block. Saves
+    go through the app's `save()`, so IndexedDB, sync, export/import and undo
+    cover finance too. Undo groups typing only when the save happens inside
+    an `input` event (`window.event`), so clicks and form submits are always
+    their own step.
 - Icons: every page can have an icon, `{ emoji }` or `{ src }` (a picture
   shrunk to 256px), plus `bw: true` for black and white (a grayscale filter
   on the page icon and the sidebar; a new icon keeps the setting), picked
