@@ -170,6 +170,9 @@ linked from anywhere.
   width. They scroll with the page; hovering shows a grip to drag, a delete,
   and a resize handle on every corner (a left or top corner keeps the
   opposite edge fixed; text items only change width). Text boxes are auto-growing textareas.
+  If an item hangs past the window edge, `fitCtl()` slides its grip and
+  delete back on screen whenever it is hovered or focused, and Backspace in
+  an empty text box removes the item.
   Photo items also get a `b&w` toggle (`bw: true`), a CSS grayscale filter,
   so the saved photo keeps its colour. Photos sit in a cropping `.pi-frame`:
   the corner handles set width and frame height (`h`), `crop` enters a mode

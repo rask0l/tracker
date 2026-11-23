@@ -2520,10 +2520,30 @@ function app(BOOT){
       }, { passive:false });
     }
 
-    del.addEventListener("click", function(){
+    function removeItem(){
       cur().items = cur().items.filter(function(x){ return x.id !== it.id; });
-      el.parentNode.removeChild(el); save();
+      if(el.parentNode) el.parentNode.removeChild(el);
+      save();
+    }
+    del.addEventListener("click", removeItem);
+    // Backspace in an empty text box removes it, like an empty block in Notion
+    if(ta) ta.addEventListener("keydown", function(e){
+      if(e.key === "Backspace" && ta.value === ""){ e.preventDefault(); removeItem(); }
     });
+
+    // an item hanging past the window edge must still show its grip and delete:
+    // slide the controls back on screen whenever it is hovered or focused
+    function fitCtl(){
+      ctl.style.right = ""; ctl.style.left = "";
+      var r = el.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+      var over = r.right - (vw - 8);
+      if(over > 0) ctl.style.right = (14 + over) + "px";
+      if(ctl.getBoundingClientRect().left < 8){
+        ctl.style.right = ""; ctl.style.left = Math.max(0, 8 - r.left) + "px";
+      }
+    }
+    el.addEventListener("pointerenter", fitCtl);
+    el.addEventListener("focusin", fitCtl);
 
     // grip moves, corner handle resizes (width; height follows the content)
     function gesture(handle, onMove){
