@@ -10,6 +10,10 @@
   :root{
     --bg:#0f0f0f; --fg:#e7e7e7; --muted:#8f8f8f;
     --line:#2d2d2d; --accent:#e5484b; --accent-ink:#0f0f0f;
+    /* fonts a page item or document can switch between; all built in, nothing downloads */
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
   }
   *{box-sizing:border-box;}
   /* the hidden attribute always wins over display rules set below */
@@ -17,7 +21,7 @@
   html{font-size:16px;}
   body{
     margin:0; background:var(--bg); color:var(--fg);
-    font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-family:var(--mono);
     line-height:1.5; -webkit-font-smoothing:antialiased;
   }
   .wrap{max-width:840px; margin:0 auto; padding:3rem 1rem 5rem;}
@@ -211,13 +215,15 @@
 
   /* free-floating page items, added from the + in the corner */
   #pageItems{position:absolute; top:0; left:0; right:0; height:0; z-index:5;}
-  .pitem{position:absolute; min-width:120px;}
+  /* a page item's text sizes are in em off its own font-size, so the Aa size
+     scales everything inside it; its controls stay rem and mono */
+  .pitem{position:absolute; min-width:120px; font-size:16px;}
   .pitem:hover, .pitem.active, .pitem:focus-within{outline:2px dashed var(--line); outline-offset:4px;}
   .pi-text{display:block; width:100%; background:transparent; border:none; outline:none;
-    resize:none; overflow:hidden; color:var(--fg); font:inherit; font-size:.85rem;
+    resize:none; overflow:hidden; color:var(--fg); font:inherit; font-size:.85em;
     line-height:1.55; padding:0;}
   .pi-text::placeholder{color:var(--line);}
-  .pi-h .pi-text{font-size:1.5rem; font-weight:700; letter-spacing:.04em; line-height:1.25;}
+  .pi-h .pi-text{font-size:1.5em; font-weight:700; letter-spacing:.04em; line-height:1.25;}
   .pi-quote{background:#161616; border:2px solid var(--line); border-left:4px solid var(--fg);
     padding:.85rem 1rem;}
   .pi-quote .pi-text{font-style:italic;}
@@ -238,7 +244,7 @@
   .pi-image:not(.cropping) .pi-fit{display:none;}
   .pi-image.cropping .pi-ctl{opacity:1;}
   .pi-image.cropping .pi-size{display:none;}
-  .pi-ctl{position:absolute; top:-.2rem; right:14px; display:flex; gap:.15rem;
+  .pi-ctl{position:absolute; top:-.2rem; right:14px; display:flex; gap:.15rem; font-family:var(--mono);
     background:var(--bg); border:2px solid var(--fg); opacity:0; transition:opacity .1s;}
   .pitem:hover .pi-ctl, .pitem.active .pi-ctl, .pitem:focus-within .pi-ctl{opacity:1;}
   .pi-grip, .pi-del{background:transparent; border:none; color:var(--fg); font:inherit;
@@ -428,8 +434,34 @@
     color:var(--fg); font:inherit; font-size:2rem; font-weight:700; letter-spacing:.04em;}
   .sub::placeholder{color:var(--line);}
   .doc-title::placeholder{color:var(--line);}
-  .doc .blk-text{font-size:.95rem;}
-  .doc .bt-h .blk-text{font-size:1.35rem;}
+  .doc{font-size:16px;}
+  .doc .blk-text{font-size:.95em;}
+  .doc .bt-h .blk-text{font-size:1.35em;}
+  /* the Aa font menu */
+  .pi-aa{background:transparent; border:none; color:var(--fg); font:inherit; font-size:.72rem;
+    padding:.25rem .35rem; cursor:pointer; letter-spacing:.02em;}
+  .pi-aa:hover, .pi-aa.on{color:var(--accent);}
+  .font-pop{position:fixed; z-index:96; width:240px; padding:.6rem;
+    background:var(--bg); border:2px solid var(--fg); box-shadow:6px 6px 0 var(--line); font-family:var(--mono);}
+  .fp-head{font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:.1rem 0 .4rem;}
+  .fp-fonts{display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; margin-bottom:.7rem;}
+  .fp-fonts button{background:transparent; border:2px solid var(--line); color:var(--fg);
+    padding:.4rem 0 .3rem; cursor:pointer; line-height:1.1;}
+  .fp-fonts button b{display:block; font-size:1.15rem; font-weight:600;}
+  .fp-fonts button small{display:block; font-family:var(--mono); font-size:.55rem; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--muted); margin-top:.2rem;}
+  .fp-fonts button:hover{border-color:var(--fg);}
+  .fp-fonts button.on{border-color:var(--accent);}
+  .fp-fonts button.on small{color:var(--accent);}
+  .fp-size{display:flex; align-items:center; gap:4px;}
+  .fp-size button{flex:0 0 auto; width:2.4rem; background:transparent; border:2px solid var(--line);
+    color:var(--fg); font:inherit; font-size:.72rem; padding:.35rem 0; cursor:pointer;}
+  .fp-size button:hover{border-color:var(--accent); color:var(--accent);}
+  .fp-size button:disabled{opacity:.35; cursor:default; border-color:var(--line); color:var(--fg);}
+  .fp-size span{flex:1 1 auto; text-align:center; font-size:.75rem;}
+  .fp-reset{display:block; width:100%; margin-top:.5rem; background:transparent; border:none;
+    color:var(--muted); font:inherit; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; cursor:pointer; padding:.2rem;}
+  .fp-reset:hover{color:var(--accent);}
   .doc .blk{padding:.18rem 0;}
   .doc-tail{min-height:35vh; cursor:text;}
   .pi-image.bw img{filter:grayscale(1);}
@@ -438,21 +470,23 @@
   .pi-note.all-done{border-color:var(--accent);}
   .pi-nhead{display:flex; align-items:center; gap:.6rem; margin-bottom:.45rem;}
   .pi-ntitle{flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none;
-    color:var(--fg); font:inherit; font-size:.78rem; font-weight:700; letter-spacing:.14em;
+    color:var(--fg); font:inherit; font-size:.78em; font-weight:700; letter-spacing:.14em;
     text-transform:uppercase; padding:0;}
+  .pitem .blk-text{font-size:.82em;}
+  .pitem .bt-h .blk-text{font-size:1em;}
   .pi-ntitle::placeholder{color:var(--line);}
-  .pi-nprog{flex:0 0 auto; color:var(--accent); font-size:.72rem; letter-spacing:.06em;}
+  .pi-nprog{flex:0 0 auto; color:var(--accent); font-size:.72em; letter-spacing:.06em;}
   /* countdown box */
   .pi-countdown{border:2px solid var(--line); background:#161616; padding:.8rem 1rem .9rem;}
   .pi-clabel{display:block; width:100%; background:transparent; border:none; outline:none;
-    color:var(--muted); font:inherit; font-size:.72rem; font-weight:700; letter-spacing:.14em;
+    color:var(--muted); font:inherit; font-size:.72em; font-weight:700; letter-spacing:.14em;
     text-transform:uppercase; padding:0;}
   .pi-clabel::placeholder{color:var(--line);}
-  .pi-cnum{margin-top:.25rem; color:var(--accent); font-size:3rem; font-weight:700;
+  .pi-cnum{margin-top:.25rem; color:var(--accent); font-size:3em; font-weight:700;
     line-height:1.05; letter-spacing:.02em;}
   .pi-countdown.past .pi-cnum{color:var(--muted);}
   .pi-countdown.unset .pi-cnum{color:var(--line);}
-  .pi-csub{margin-top:.2rem; color:var(--muted); font-size:.64rem; letter-spacing:.12em;
+  .pi-csub{margin-top:.2rem; color:var(--muted); font-size:.64em; letter-spacing:.12em;
     text-transform:uppercase;}
   .pi-cdate{margin-top:.6rem; background:transparent; border:2px solid var(--line);
     color:var(--fg); font:inherit; font-size:.7rem; padding:.2rem .4rem; outline:none;
@@ -505,7 +539,7 @@
   <div class="wrap">
     <div class="top">
       <div class="icon" id="pageIcon" role="button" tabindex="0" aria-label="change icon" hidden></div>
-      <div class="head-actions"><button id="addIcon" type="button">+ add icon</button><button id="addCover" type="button">+ add cover</button><button id="addSub" type="button">+ add subtitle</button></div>
+      <div class="head-actions"><button id="addIcon" type="button">+ add icon</button><button id="addCover" type="button">+ add cover</button><button id="addSub" type="button">+ add subtitle</button><button id="docFont" type="button" title="font and text size">Aa</button></div>
     <header id="homeHead">
       <input class="tk-title" id="tkTitle" maxlength="60" spellcheck="false" placeholder="untitled" aria-label="tracker title">
       <input class="sub" id="label" maxlength="48" spellcheck="false"
@@ -665,6 +699,13 @@ function app(BOOT){
 
   // free-floating page items; anything malformed is dropped
   var ITEM_TYPES = ["text","h","quote","callout","image","note","countdown"];
+  var FONTS = ["mono","sans","serif"];
+  var SIZES = [0.75, 0.875, 1, 1.125, 1.25, 1.5, 1.75, 2, 2.5, 3];
+  function normFont(o, src){
+    if(src && FONTS.indexOf(src.font) > 0) o.font = src.font;          // mono is the default
+    if(src && SIZES.indexOf(+src.size) >= 0 && +src.size !== 1) o.size = +src.size;
+    return o;
+  }
   // map that drops entries which throw, so one bad item can't break loading
   function safeMap(arr, fn){
     var out = [];
@@ -683,6 +724,7 @@ function app(BOOT){
       if(it.type === "note") o.blocks = normBlocks(it.blocks) || [mkBlock("todo","",false)];
       // countdown: text is its label, date the YYYY-MM-DD it counts down to
       if(it.type === "countdown") o.date = (typeof it.date === "string" && parseDate(it.date)) ? it.date : "";
+      if(it.type !== "image") normFont(o, it);
       if(it.type === "image"){
         o.src = it.src; o.bw = !!it.bw;
         // crop: h is the frame height (absent = the photo's own shape),
@@ -725,8 +767,8 @@ function app(BOOT){
         o = normTracker(p, n, n + " DAYS");
         o.kind = "tracker";
       }else{
-        o = { kind:"doc", title:String(p.title || ""), label:String(p.label || ""),
-              blocks:normBlocks(p.blocks) || [mkBlock("text","",false)] };
+        o = normFont({ kind:"doc", title:String(p.title || ""), label:String(p.label || ""),
+              blocks:normBlocks(p.blocks) || [mkBlock("text","",false)] }, p);
       }
       o.id = String(p.id || uid());
       o.icon = normIcon(p.icon); o.cover = normCover(p.cover); o.items = normItems(p.items);
@@ -1931,6 +1973,18 @@ function app(BOOT){
     document.title = p.title || "untitled";
   });
   var docHead = document.getElementById("docHead");
+  var docFontBtn = document.getElementById("docFont");
+  // a document's font covers its title, subtitle and body; its size only the body
+  function paintDocFont(){
+    var p = cur();
+    if(isTracker(p)) return;
+    applyFont(docView, p);
+    applyFont(docHead, p, true);
+  }
+  docFontBtn.addEventListener("click", function(e){
+    e.stopPropagation();
+    openFontPop(docFontBtn, cur(), paintDocFont);
+  });
   var docSub  = document.getElementById("docSub");
   // Enter walks title -> subtitle -> body
   // an empty subtitle takes no space: "+ add subtitle" (with add icon/cover) brings it back
@@ -1978,7 +2032,8 @@ function app(BOOT){
     homeView.hidden = !tk; homeHead.hidden = !tk;
     docView.hidden = tk; docHead.hidden = tk;
     if(tk){ if(T !== p) loadTracker(p); }
-    else{ docTitle.value = p.title; docSub.value = p.label || ""; buildDoc(p); }
+    else{ docTitle.value = p.title; docSub.value = p.label || ""; buildDoc(p); paintDocFont(); }
+    docFontBtn.hidden = tk; closeFontPop();
     renderCover(); renderIcon(); renderItems(); renderSidebar(); paintSub();
     document.title = p.title || "untitled";
     window.scrollTo(0, 0);
@@ -2316,6 +2371,71 @@ function app(BOOT){
   // double-clicking the edge goes back to the default height
   coverSize.addEventListener("dblclick", function(){ delete cur().cover.h; renderCover(); save(); });
 
+  // ---------- fonts: the Aa menu for page items and document pages ----------
+  // o.font is "sans" | "serif" (absent = mono), o.size a scale from SIZES
+  // (absent = 1). applyFont() puts them on an element whose text is in em.
+  var FONT_STACK = { mono:"var(--mono)", sans:"var(--sans)", serif:"var(--serif)" };
+  var FONT_NAME = { mono:"mono", sans:"sans", serif:"serif" };
+  function applyFont(el, o, familyOnly){
+    el.style.fontFamily = o.font ? FONT_STACK[o.font] : "";
+    if(!familyOnly) el.style.fontSize = o.size ? (16 * o.size) + "px" : "";
+  }
+  var fontPop = null;
+  function closeFontPop(){
+    if(fontPop){ fontPop.anchor.classList.remove("on"); if(fontPop.parentNode) fontPop.parentNode.removeChild(fontPop); }
+    fontPop = null;
+  }
+  function openFontPop(anchor, o, onChange){
+    var again = fontPop && fontPop.anchor === anchor;
+    closeFontPop();
+    if(again) return;
+    var pop = fontPop = document.createElement("div");
+    pop.className = "font-pop"; pop.anchor = anchor; anchor.classList.add("on");
+    pop.innerHTML = '<div class="fp-head">font</div><div class="fp-fonts"></div>' +
+      '<div class="fp-head">text size</div><div class="fp-size"><button type="button" class="fp-dn" aria-label="smaller">A&minus;</button><span></span><button type="button" class="fp-up" aria-label="bigger">A+</button></div>' +
+      '<button type="button" class="fp-reset">back to default</button>';
+    var fonts = pop.querySelector(".fp-fonts"), label = pop.querySelector(".fp-size span");
+    var dn = pop.querySelector(".fp-dn"), up = pop.querySelector(".fp-up");
+    FONTS.forEach(function(f){
+      var b = document.createElement("button");
+      b.type = "button"; b.setAttribute("data-font", f);
+      b.innerHTML = "<b>Aa</b><small></small>";
+      b.firstChild.style.fontFamily = FONT_STACK[f];
+      b.lastChild.textContent = FONT_NAME[f];
+      b.addEventListener("click", function(){
+        if(f === "mono") delete o.font; else o.font = f;
+        changed();
+      });
+      fonts.appendChild(b);
+    });
+    function step(d){
+      var i = SIZES.indexOf(o.size || 1) + d;
+      if(i < 0 || i >= SIZES.length) return;
+      if(SIZES[i] === 1) delete o.size; else o.size = SIZES[i];
+      changed();
+    }
+    dn.addEventListener("click", function(){ step(-1); });
+    up.addEventListener("click", function(){ step(1); });
+    pop.querySelector(".fp-reset").addEventListener("click", function(){ delete o.font; delete o.size; changed(); });
+    function paint(){
+      [].forEach.call(fonts.children, function(b){ b.classList.toggle("on", (o.font || "mono") === b.getAttribute("data-font")); });
+      var i = SIZES.indexOf(o.size || 1);
+      label.textContent = Math.round((o.size || 1) * 100) + "%";
+      dn.disabled = i <= 0; up.disabled = i >= SIZES.length - 1;
+    }
+    function changed(){ save(); onChange(); paint(); }
+    paint();
+    document.body.appendChild(pop);
+    var r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
+    pop.style.top = (r.bottom + 6 + h > window.innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + "px";
+  }
+  document.addEventListener("click", function(e){
+    if(fontPop && !fontPop.contains(e.target) && e.target !== fontPop.anchor) closeFontPop();
+  });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeFontPop(); });
+  window.addEventListener("scroll", closeFontPop);
+
   // ---------- page items: free-floating text, quotes, tip boxes, photos ----------
   // Each item is { id, type, text, src?, x, y, w }. x is px from the page's
   // centre line (so items stay put relative to the centred layout at any window
@@ -2353,6 +2473,16 @@ function app(BOOT){
     del.type = "button"; del.className = "pi-del"; del.textContent = "×";
     del.setAttribute("aria-label","remove from page");
     ctl.appendChild(grip);
+    if(it.type !== "image"){
+      var aa = document.createElement("button");
+      aa.type = "button"; aa.className = "pi-aa"; aa.textContent = "Aa"; aa.title = "font and text size";
+      aa.addEventListener("click", function(e){
+        e.stopPropagation();
+        openFontPop(aa, it, function(){ applyFont(el, it); if(ta) growText(ta); fitCtl(); });
+      });
+      ctl.appendChild(aa);
+      applyFont(el, it);
+    }
     if(it.type === "image"){
       // colour stays in the saved photo; b&w is just a display toggle
       var bw = document.createElement("button");

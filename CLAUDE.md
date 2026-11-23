@@ -170,6 +170,15 @@ linked from anywhere.
   width. They scroll with the page; hovering shows a grip to drag, a delete,
   and a resize handle on every corner (a left or top corner keeps the
   opposite edge fixed; text items only change width). Text boxes are auto-growing textareas.
+  Every text item (text, heading, quote, tip box, checklist, countdown) has
+  an `Aa` button in its controls: a menu to pick a font (`font` is `sans` or
+  `serif`, absent means mono; stacks are the `--mono`/`--sans`/`--serif`
+  variables, all built-in fonts, nothing downloads) and a text size (`size`,
+  one of `SIZES` from 0.75 to 3, absent means 1). Text inside page items is
+  sized in `em` off the item's own `font-size`, so `applyFont()` scales it
+  all; the item's controls stay rem and mono. Document pages get the same
+  `Aa` above the title (`font`/`size` on the page): the font covers title,
+  subtitle and body, the size only the body.
   If an item hangs past the window edge, `fitCtl()` slides its grip and
   delete back on screen whenever it is hovered or focused, and Backspace in
   an empty text box removes the item.
