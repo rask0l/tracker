@@ -134,6 +134,16 @@ linked from anywhere.
   show on hover. An empty subtitle (tracker `label` or document `label`)
   takes no space at all; `+ add subtitle` reveals it, and clearing it then
   clicking away hides it again (`paintSub()`).
+- Undo/redo: Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes, anywhere
+  on the page (app-level, so the browser's own text undo is replaced, except
+  inside the sync/icon/font/new-page popups). `save()` compares snapshots
+  (`snapOf()`: the state as JSON without `savedAt`, photos swapped for
+  ` img:<n>` tokens kept once in `imgById`), which is also how it skips
+  no-op saves. Each real change pushes the previous snapshot onto an undo
+  stack (max 80, this session only); typing groups into one step until a 1s
+  pause, any other change is its own step, and a new change clears redo.
+  `restoreSnap()` replaces the state, saves (so it syncs), and rebuilds the
+  tracker and page; the text cursor is not kept.
 - `[hidden]{display:none !important}` is global on purpose: several elements
   set `display` in CSS, which would otherwise override the `hidden` attribute.
 - Page cover, Notion style: `+ add cover` puts a full-width banner

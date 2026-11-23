@@ -891,20 +891,49 @@ function app(BOOT){
       if(pendingJson) flushWrite();
     });
   }
-  var lastBody = null;           // the last saved state without its savedAt
-  var sync = null, schedulePush = function(){};   // set up by the cloud sync section
-  function bodyOf(st){
-    var at = st.savedAt; delete st.savedAt;
-    var b = JSON.stringify(st);
-    if(at !== undefined) st.savedAt = at;
-    return b;
+  // A snapshot is the state as JSON without savedAt, with every photo swapped
+  // for a short token (the photo strings are kept once in imgById). Snapshots
+  // detect real changes cheaply and are what undo/redo step through.
+  var curSnap = null, imgIds = new Map(), imgById = [];
+  function snapOf(st){
+    return JSON.stringify(st, function(k, v){
+      if(k === "savedAt") return undefined;
+      if(typeof v === "string" && v.length > 200 && v.lastIndexOf("data:image/", 0) === 0){
+        var id = imgIds.get(v);
+        if(id === undefined){ id = imgById.length; imgById.push(v); imgIds.set(v, id); }
+        return "\u0000img:" + id;
+      }
+      return v;
+    });
   }
+  function fromSnap(snap){
+    return JSON.parse(snap, function(k, v){
+      return (typeof v === "string" && v.lastIndexOf("\u0000img:", 0) === 0) ? imgById[+v.slice(5)] : v;
+    });
+  }
+  // undo history: typing groups into one step until a 1s pause; every other
+  // change is its own step
+  var undoStack = [], redoStack = [], lastUndoAt = 0, lastInputAt = 0, restoring = false;
+  var UNDO_MAX = 80;
+  document.addEventListener("input", function(){ lastInputAt = Date.now(); }, true);
+  function recordUndo(prev){
+    if(prev === null) return;
+    var now = Date.now(), typing = now - lastInputAt < 60;
+    if(!(typing && now - lastUndoAt < 1000 && undoStack.length)){
+      undoStack.push(prev);
+      if(undoStack.length > UNDO_MAX) undoStack.shift();
+    }
+    lastUndoAt = now;
+    redoStack = [];
+  }
+  var sync = null, schedulePush = function(){};   // set up by the cloud sync section
   // returns a promise that resolves once this state (or a newer one) is stored
   function save(){
     if(storageLocked) return Promise.resolve(false);
-    var body = bodyOf(state);
-    if(body === lastBody) return Promise.resolve(true);   // nothing changed
-    lastBody = body;
+    var snap = snapOf(state);
+    if(snap === curSnap) return Promise.resolve(true);   // nothing changed
+    if(!restoring) recordUndo(curSnap);
+    curSnap = snap;
     state.savedAt = Date.now();
     var json = JSON.stringify(state);
     schedulePush();
@@ -922,7 +951,7 @@ function app(BOOT){
   }
 
   var state = load();
-  lastBody = bodyOf(state);      // loading on its own is not a change
+  curSnap = snapOf(state);       // loading on its own is not a change
   var T = state;        // the tracker on screen: the home state or a tracker page
   var grid   = document.getElementById("grid");
   var doneEl = document.getElementById("done");
@@ -2370,6 +2399,38 @@ function app(BOOT){
   coverSize.addEventListener("pointercancel", endSize);
   // double-clicking the edge goes back to the default height
   coverSize.addEventListener("dblclick", function(){ delete cur().cover.h; renderCover(); save(); });
+
+  // ---------- undo / redo (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl+Y) ----------
+  function restoreSnap(snap){
+    var o = fromSnap(snap);
+    o.savedAt = state.savedAt;
+    state = o;
+    restoring = true; save(); restoring = false;
+    // every card and page is rebuilt from the restored state
+    var p = cur();
+    loadTracker(isTracker(p) ? p : state);
+    renderPage();
+  }
+  function undo(){
+    if(storageLocked || !undoStack.length) return;
+    redoStack.push(curSnap);
+    restoreSnap(undoStack.pop());
+  }
+  function redo(){
+    if(storageLocked || !redoStack.length) return;
+    undoStack.push(curSnap);
+    restoreSnap(redoStack.pop());
+  }
+  document.addEventListener("keydown", function(e){
+    if(!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    var k = (e.key || "").toLowerCase();
+    var isUndo = k === "z" && !e.shiftKey, isRedo = (k === "z" && e.shiftKey) || (k === "y" && !e.metaKey);
+    if(!isUndo && !isRedo) return;
+    // popups for settings keep the browser's own text undo
+    if(e.target && e.target.closest && e.target.closest(".sync-pop, .icon-pop, .new-pop, .font-pop")) return;
+    e.preventDefault(); e.stopPropagation();
+    if(isUndo) undo(); else redo();
+  }, true);
 
   // ---------- fonts: the Aa menu for page items and document pages ----------
   // o.font is "sans" | "serif" (absent = mono), o.size a scale from SIZES
