@@ -125,9 +125,20 @@
   .card-hint{margin:-.3rem 0 .4rem; font-size:.62rem; letter-spacing:.1em;
     text-transform:uppercase; color:var(--line);}
   .card-date{color:var(--muted);}
-  .card-plan{color:var(--muted); display:flex; gap:.6rem; align-items:baseline; flex-wrap:wrap;}
-  .card-plan button{background:transparent; border:none; padding:0; font:inherit; color:var(--muted); text-decoration:underline; cursor:pointer;}
-  .card-plan button:hover{color:var(--accent);}
+  .card-plan{color:var(--muted);}
+  .plan-head{display:flex; gap:.6rem; align-items:baseline; flex-wrap:wrap;}
+  .plan-head button{background:transparent; border:none; padding:0; font:inherit; color:var(--muted); text-decoration:underline; cursor:pointer;}
+  .plan-head button:hover{color:var(--accent);}
+  .plan-items{display:flex; flex-direction:column; gap:.25rem; margin-top:.55rem;}
+  .plan-item{display:flex; align-items:center; gap:.5rem; border-left:3px solid var(--line); padding:.15rem 0 .15rem .45rem;
+    font-size:.72rem; color:var(--fg); text-transform:none; letter-spacing:0; min-width:0;}
+  .plan-ck{flex:0 0 auto; width:14px; height:14px; padding:0; border:2px solid var(--fg); background:transparent; color:var(--accent-ink);
+    font:inherit; font-size:.55rem; line-height:10px; text-align:center; cursor:pointer;}
+  .plan-ck.on{background:var(--accent); border-color:var(--accent);}
+  .plan-time{flex:0 0 auto; color:var(--muted); font-size:.62rem; font-variant-numeric:tabular-nums; min-width:4.6rem;}
+  .plan-title{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .plan-item.done .plan-title{text-decoration:line-through; color:var(--muted);}
+  .plan-item.allday .plan-time{text-transform:uppercase; letter-spacing:.06em; font-size:.55rem;}
   .ttl-input{
     flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none;
     font:inherit; font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
@@ -386,6 +397,24 @@
   .np-doc:hover{border-color:var(--accent);}
   .np-doc b{display:block; font-size:.75rem; letter-spacing:.06em;}
   .np-doc small{color:var(--muted); font-size:.6rem; letter-spacing:.06em;}
+  .sb-game{display:grid; grid-template-columns:auto 1fr auto; grid-template-rows:auto auto; align-items:center; gap:.35rem .6rem;
+    margin:.6rem 0 .4rem; padding:.55rem .6rem; background:transparent; border:2px solid var(--line); color:var(--fg);
+    font:inherit; text-align:left; cursor:pointer; position:relative;}
+  .sb-game:hover{border-color:var(--accent);}
+  .sbg-medal{grid-row:1 / span 2; display:block; width:34px; height:34px; line-height:0; filter:drop-shadow(0 0 4px rgba(229,72,75,.4));}
+  .sbg-medal svg{width:100%; height:100%; display:block; overflow:visible;}
+  .sbg-txt{display:flex; flex-direction:column; line-height:1.15; min-width:0;}
+  .sbg-txt b{font-size:.74rem; letter-spacing:.08em; text-transform:uppercase;}
+  .sbg-txt small{font-size:.56rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);}
+  .sbg-coins{font-size:.6rem; color:var(--muted); white-space:nowrap;}
+  .sbg-bar{grid-column:2 / span 2; height:4px; background:var(--line); position:relative;}
+  .sbg-bar i{position:absolute; left:0; top:0; bottom:0; background:var(--accent);}
+  .sbg-gain{position:absolute; right:.5rem; top:-.7rem; font-size:.6rem; font-weight:700; color:var(--accent); background:var(--bg); padding:0 .3rem;
+    animation:sbg-up 1.6s ease-out forwards;}
+  @keyframes sbg-up{ 0%{ opacity:0; transform:translateY(4px); } 15%{ opacity:1; transform:none; } 80%{ opacity:1; } 100%{ opacity:0; } }
+  @media (prefers-reduced-motion:reduce){ .sbg-gain{animation:none;} }
+  .game-empty{border:2px dashed var(--line); padding:1.4rem; display:flex; flex-direction:column; gap:1rem; align-items:flex-start;}
+  .game-empty p{margin:0; color:var(--muted); font-size:.8rem; line-height:1.6;}
   .kind-missing{border:2px solid var(--accent); padding:1rem; font-size:.8rem; color:var(--accent);}
   .np-head{margin:.6rem 0 .35rem; font-size:.62rem; letter-spacing:.14em;
     text-transform:uppercase; color:var(--muted);}
@@ -518,6 +547,7 @@
   <aside class="sidebar" id="sidebar" aria-label="pages">
     <div class="sb-head"><span>pages</span><button class="sb-close" id="sbClose" type="button" title="hide sidebar" aria-label="hide sidebar">&laquo;</button></div>
     <nav class="sb-list" id="sbList"></nav>
+    <button class="sb-game" id="sbGame" type="button" hidden aria-label="your level and coins: open the game"></button>
     <button class="sb-new" id="sbNew" type="button">+ new page</button>
     <div class="sb-foot">
       <div class="sb-tools">
@@ -601,7 +631,7 @@
 
 <!-- the Finance and Command Center page types live in their own files -->
 <script src="finance.js?v=2"></script>
-<script src="planner.js?v=6"></script>
+<script src="planner.js?v=24"></script>
 <script>
 // ---------- storage ----------
 // Everything is saved to IndexedDB, which has room for photos and covers
@@ -778,6 +808,8 @@ function app(BOOT){
       }else if(p.kind === "finance" && window.Finance){
         o = normFont({ kind:"finance", title:String(p.title || ""), label:String(p.label || "") }, p);
         o.finance = Finance.normalize(p.finance);
+      }else if(p.kind === "game"){
+        o = normFont({ kind:"game", title:String(p.title || ""), label:String(p.label || "") }, p);
       }else if(p.kind === "planner" && window.Planner){
         o = normFont({ kind:"planner", title:String(p.title || ""), label:String(p.label || "") }, p);
         o.planner = Planner.normalize(p.planner);
@@ -856,7 +888,25 @@ function app(BOOT){
     st.icon = normIcon(o.icon);
     st.pages = normPages(o.pages);
     st.sidebarHidden = !!o.sidebarHidden;
+    if(window.Planner){
+      st.game = o.game ? Planner.normGame(o.game)
+        : Planner.mergeGames(st.pages.filter(function(p){ return p.kind === "planner" && p.planner; }).map(function(p){ return p.planner.game; }));
+    }else if(o.game) st.game = o.game;       // planner.js didn't load: keep it exactly as saved
+    if(window.Planner && st.game && !st.game.pageMade) makeGamePage(st);
     return st;
+  }
+  // the game gets its own page, once: right after the first Command Center
+  function makeGamePage(st, force){
+    var pls = st.pages.filter(function(p){ return p.kind === "planner"; });
+    if(!pls.length && !force) return null;
+    var gp = st.pages.filter(function(p){ return p.kind === "game"; })[0];
+    if(!gp){
+      gp = { kind:"game", id:uid(), title:"game", label:"", icon:null, cover:null, items:[] };
+      var at = pls.length ? st.pages.indexOf(pls[0]) + 1 : st.pages.length;
+      st.pages.splice(at, 0, gp);
+    }
+    st.game.pageMade = true;
+    return gp;
   }
 
   var storageLocked = false;     // set when saved data exists but can't be read
@@ -884,6 +934,7 @@ function app(BOOT){
                       blocks:[mkBlock("text","",false)] } ];
     st.lastExport = ""; st.items = []; st.cover = null; st.icon = null;
     st.pages = []; st.sidebarHidden = false;
+    if(window.Planner) st.game = Planner.normGame({});
     return st;
   }
   // a failed save (usually storage full from photos) must never be silent
@@ -959,6 +1010,7 @@ function app(BOOT){
     state.savedAt = Date.now();
     var json = JSON.stringify(state);
     schedulePush();
+    scheduleProfile();
     if(!BOOT.idbOk){
       try{ localStorage.setItem(KEY, json); saved(true); return Promise.resolve(true); }
       catch(e){ saved(false, "storage full"); return Promise.resolve(false); }
@@ -1429,7 +1481,7 @@ function app(BOOT){
     dayDate = document.createElement("p");
     dayDate.className = "card-hint card-date";
     panel.appendChild(dayDate);
-    dayPlan = document.createElement("p");
+    dayPlan = document.createElement("div");
     dayPlan.className = "card-hint card-plan";
     panel.appendChild(dayPlan);
 
@@ -1473,11 +1525,41 @@ function app(BOOT){
     dayPlan.hidden = !(pl && d);
     if(pl && d){
       var date = iso(d), line = Planner.daySummary(pl.planner, date);
-      dayPlan.appendChild(document.createTextNode("planner: " + (line || "nothing planned")));
+      var head = document.createElement("div");
+      head.className = "plan-head";
+      head.appendChild(document.createTextNode("planner: " + (line || "nothing planned")));
       var open = document.createElement("button");
       open.type = "button"; open.textContent = "open in planner";
       open.addEventListener("click", function(){ Planner.show(pl.id, date); go(pl.id); });
-      dayPlan.appendChild(open);
+      head.appendChild(open);
+      dayPlan.appendChild(head);
+      // the plan itself; ticking here is the same as ticking in the planner
+      var items = Planner.dayItems(pl.planner, date);
+      if(items.length){
+        var list = document.createElement("div");
+        list.className = "plan-items";
+        items.forEach(function(it){
+          var row = document.createElement("div");
+          row.className = "plan-item" + (it.done ? " done" : "") + (it.allDay ? " allday" : "");
+          row.style.borderLeftColor = it.color;
+          if(!it.allDay){
+            var ck = document.createElement("button");
+            ck.type = "button"; ck.className = "plan-ck" + (it.done ? " on" : "");
+            ck.textContent = it.done ? "✓" : "";
+            ck.setAttribute("aria-label", (it.done ? "untick " : "tick ") + it.title);
+            ck.addEventListener("click", function(){
+              if(!Planner.tick(pl.planner, date, it.key)) return;
+              linkStreaks(); save(); renderGrid(); refreshDayHead();
+            });
+            row.appendChild(ck);
+          }
+          var tm = document.createElement("span"); tm.className = "plan-time"; tm.textContent = it.time;
+          var tt = document.createElement("span"); tt.className = "plan-title"; tt.textContent = it.title;
+          row.appendChild(tm); row.appendChild(tt);
+          list.appendChild(row);
+        });
+        dayPlan.appendChild(list);
+      }
     }
   }
   function refreshDayBody(){
@@ -1798,6 +1880,18 @@ function app(BOOT){
   var addIcon  = document.getElementById("addIcon");
 
   function pageById(id){ return state.pages.filter(function(p){ return p.id === id; })[0] || null; }
+  function openFinancePage(){
+    var fp = state.pages.filter(function(p){ return p.kind === "finance"; })[0];
+    if(fp) go(fp.id);
+  }
+  function openGamePage(){
+    if(!window.Planner || !state.game) return;
+    var gp = state.pages.filter(function(p){ return p.kind === "game"; })[0];
+    if(!gp){ gp = makeGamePage(state, true); save(); }
+    go(gp.id);
+    if(isNarrow()) document.body.classList.remove("sb-shown");
+  }
+  document.getElementById("sbGame").addEventListener("click", openGamePage);
 
   // ---- a Command Center page can keep one tracker's streak ----
   // planner.streak.page is "home" or a tracker page id. Every planner save
@@ -1830,6 +1924,50 @@ function app(BOOT){
       for(var i = 0; i <= upto; i++) dates.push(iso(new Date(s.getFullYear(), s.getMonth(), s.getDate() + i)));
       Planner.countDays(p.planner, dates).forEach(function(c, i){ if(c && !t.days[i]) t.days[i] = true; });
     });
+  }
+  // ---- one game for the whole site (planner.js scores it) ----
+  // every planner page (the first is the main one: quests, bosses, the cleared-day streak),
+  // trackers no planner keeps (+20 xp a ticked box) and Finance pages (+15 xp a day with money logged)
+  function gameSources(){
+    return {
+      planners:state.pages.filter(function(p){ return p.kind === "planner" && p.planner; }),
+      trackers:[state].concat(state.pages.filter(function(p){ return p.kind === "tracker"; }))
+        .filter(function(tr){ return !plannerFor(tr); })
+        .map(function(tr){ return { id:trackerKey(tr), title:tr.title, start:tr.start, n:tr.n, days:tr.days }; }),
+      finances:state.pages.filter(function(p){ return p.kind === "finance" && p.finance; }).map(function(p){ return p.finance; })
+    };
+  }
+  function siteScore(){
+    if(!window.Planner || !state.game) return null;
+    return Planner.score(gameSources(), state.game);
+  }
+  var profTimer = null, lastXp = null;
+  function scheduleProfile(){ if(profTimer) clearTimeout(profTimer); profTimer = setTimeout(renderProfile, 250); }
+  function renderProfile(){
+    profTimer = null;
+    var card = document.getElementById("sbGame");
+    if(!card) return;
+    var G = null;
+    if(state.game && !state.game.off){ try{ G = siteScore(); }catch(e){ G = null; } }
+    card.hidden = !G;
+    if(!G) return;
+    card.innerHTML = "";
+    var medal = document.createElement("i"); medal.className = "sbg-medal"; medal.innerHTML = Planner.medalHTML(G.rank[2], G.rankR);
+    var txt = document.createElement("span"); txt.className = "sbg-txt";
+    var lv = document.createElement("b"); lv.textContent = "lvl " + G.level;
+    var rk = document.createElement("small"); rk.textContent = G.rank[1];
+    txt.appendChild(lv); txt.appendChild(rk);
+    var coins = document.createElement("span"); coins.className = "sbg-coins"; coins.textContent = G.coins + " coins";
+    var bar = document.createElement("span"); bar.className = "sbg-bar";
+    var fillEl = document.createElement("i"); fillEl.style.width = Math.round((G.xp - G.base) / (G.next - G.base) * 100) + "%";
+    bar.appendChild(fillEl);
+    card.appendChild(medal); card.appendChild(txt); card.appendChild(coins); card.appendChild(bar);
+    card.title = G.xp + " xp · " + (G.next - G.xp) + " to level " + (G.level + 1);
+    if(lastXp !== null && G.xp > lastXp){
+      var gain = document.createElement("span"); gain.className = "sbg-gain"; gain.textContent = "+" + (G.xp - lastXp) + " xp";
+      card.appendChild(gain);
+    }
+    lastXp = G.xp;
   }
   function streakOf(k){
     var t = trackerByKey(k);
@@ -1956,6 +2094,7 @@ function app(BOOT){
 
   // ---- sidebar ----
   function renderSidebar(){
+    scheduleProfile();
     sbList.innerHTML = "";
     var open = cur();
     [state].concat(state.pages).forEach(function(p){
@@ -1965,7 +2104,7 @@ function app(BOOT){
       row.setAttribute("role","link"); row.tabIndex = 0;
       var ico = document.createElement("span");
       ico.className = "sb-ico";
-      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : p.kind === "planner" ? "▦" : "·";
+      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : p.kind === "planner" ? "▦" : p.kind === "game" ? "★" : "·";
       var name = p.title || "";
       var t = document.createElement("span");
       t.className = "sb-title" + (name ? "" : " empty");
@@ -2014,6 +2153,8 @@ function app(BOOT){
   function newPlanner(){
     addNewPage({ kind:"planner", id:uid(), title:"command center", label:"", icon:null, cover:null,
                  items:[], planner:Planner.fresh() });
+    // the first Command Center also brings the game page (once)
+    if(state.game && !state.game.pageMade){ makeGamePage(state); save(); renderSidebar(); }
   }
   function newDoc(){
     addNewPage({ kind:"doc", id:uid(), title:"", label:"", icon:null, cover:null,
@@ -2047,6 +2188,13 @@ function app(BOOT){
       pln.innerHTML = "<b>command center</b><small>day and week planner, focus areas, review</small>";
       pln.addEventListener("click", newPlanner);
       pop.appendChild(pln);
+      if(!state.pages.some(function(p){ return p.kind === "game"; })){
+        var gmb = document.createElement("button");
+        gmb.type = "button"; gmb.className = "np-doc";
+        gmb.innerHTML = "<b>game</b><small>your level, badges, bosses and rewards</small>";
+        gmb.addEventListener("click", function(){ closeNewPop(); openGamePage(); });
+        pop.appendChild(gmb);
+      }
     }
     var head = document.createElement("div");
     head.className = "np-head"; head.textContent = "day tracker";
@@ -2166,6 +2314,7 @@ function app(BOOT){
     // finance, planner, or a kind this copy can't read: none of them are documents
     var special = !tk && !!p.kind && p.kind !== "doc";
     var fin = special && p.kind === "finance" && !!window.Finance;
+    var gm = special && p.kind === "game" && !!window.Planner;
     var pl = special && !fin;
     homeView.hidden = !tk; homeHead.hidden = !tk;
     docView.hidden = tk || special; docHead.hidden = tk; finView.hidden = !fin; plView.hidden = !pl;
@@ -2179,8 +2328,24 @@ function app(BOOT){
       if(fin){ finView.innerHTML = ""; Finance.mount({ root:finView, page:p, save:save }); }
       else if(pl){
         plView.innerHTML = "";
-        if(p.kind === "planner" && window.Planner) Planner.mount({ root:plView, page:p,
-          save:function(){ linkStreaks(); return save(); }, trackers:trackerList, streakOf:streakOf });
+        if(gm){
+          var mainPl = state.pages.filter(function(x){ return x.kind === "planner" && x.planner; })[0];
+          if(mainPl) Planner.mountGame({ root:plView, page:mainPl, save:function(){ linkStreaks(); return save(); },
+            trackers:trackerList, streakOf:streakOf, game:state.game, score:siteScore, openFinance:openFinancePage,
+            openPlanner:function(then){ go(mainPl.id); if(then) setTimeout(then, 0); } });
+          else{
+            // the game runs on a Command Center: offer to make one
+            var empty = document.createElement("div"); empty.className = "game-empty";
+            var em = document.createElement("p");
+            em.textContent = "the game runs on your Command Center: every block you finish there earns xp, and so do tracker boxes and logged money. make one to start.";
+            var mk = document.createElement("button"); mk.type = "button"; mk.className = "btn"; mk.textContent = "+ command center";
+            mk.addEventListener("click", newPlanner);
+            empty.appendChild(em); empty.appendChild(mk); plView.appendChild(empty);
+          }
+        }
+        else if(p.kind === "planner" && window.Planner) Planner.mount({ root:plView, page:p,
+          save:function(){ linkStreaks(); return save(); }, trackers:trackerList, streakOf:streakOf,
+          game:state.game, score:siteScore, openGame:openGamePage, openFinance:openFinancePage });
         else{
           var msg = document.createElement("p");
           msg.className = "kind-missing";

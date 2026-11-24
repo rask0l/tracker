@@ -44,7 +44,8 @@ linked from anywhere.
   data, keeps an `unreadable-<time>` copy in IndexedDB, and says so in a
   toast; importing a backup lifts the lock. `safeMap()` drops a single bad
   page, item or note instead of failing the whole load. The saved shape is
-  `{ n, title, days, label, dayNotes, stickies, start, lastExport, items, cover, icon, pages, sidebarHidden }`.
+  `{ n, title, days, label, dayNotes, stickies, start, lastExport, items, cover, icon, pages, sidebarHidden, game }`
+  (`game` is the site-wide game record, see Command Center below).
   The root holds the home tracker's own fields (`normTracker()` validates
   the per-tracker part for home and tracker pages alike); `T` is the tracker
   on screen and all tracker code reads `T.days`, `T.n` and so on, never
@@ -193,7 +194,7 @@ linked from anywhere.
   priority and due date; area, type and "repeats" live in the tooltip
   (`tip()`), and week columns leave out flex windows. One toolbar row holds
   the day/week nav, the tabs (day, week, areas, settings) and `+ add`. `planner` is `{ v:1, areas, settings, acts, rules,
-  streak, timer, reflect, reviews, rest, templates }`.
+  streak, timer, game, reflect, reviews, rest, templates }`.
   - Dates are local `YYYY-MM-DD` strings and times are minutes from
     midnight (`start`/`end`, both null for a task with no time), so nothing
     shifts with timezones. The week starts on the day picked in settings
@@ -244,7 +245,9 @@ linked from anywhere.
     instead of adding a copy, so the streak still counts.
   - Timer: `▶ timer` starts `planner.timer` (`{ title, area, sub, at }`, so
     it survives a refresh and syncs); `stop & log` saves the real minutes
-    through the same matching, `discard` takes two clicks.
+    through the same matching, `discard` takes two clicks. A session that
+    runs past midnight is saved as two blocks: the part before midnight on
+    the day it started, the rest on today.
   - Day view: a timeline or list toggle (`settings.dayMode`), tasks without
     a time, a 15 minute snapping timeline (drag a
     block to move it, its bottom edge to resize; on touch only the `≡` grip
@@ -262,7 +265,155 @@ linked from anywhere.
     unticks a box. Linking gives a tracker without a start date today's
     date. The tracker's status line says "kept by <page>" and its Day card
     shows `Planner.daySummary()` with an "open in planner" link
-    (`Planner.show()`).
+    (`Planner.show()`), then that day's plan from `Planner.dayItems()`
+    (all-day items first, flex windows left out), each with a checkbox:
+    `Planner.tick()` ticks it in the planner (a repeating occurrence is
+    saved as its own activity first), then `linkStreaks()` and `save()`.
+  - One game for the whole site: the game record lives on the root state
+    (`state.game`, cleaned by `Planner.normGame()`; the first time it is
+    made, `Planner.mergeGames()` folds together the old per-page records:
+    highest level, earliest badge dates, rewards by name, every claim).
+    Old `planner.game` copies stay in the pages but are no longer used.
+    `Planner.score(gameSources(), state.game)` adds up every planner page
+    (the first in the sidebar is the main one: daily quests, the weekly
+    boss and the cleared-day streak come from it; the others add XP and
+    hours), trackers no planner keeps (+20 xp a ticked, dated box) and
+    Finance pages (+15 xp a day with money logged, a "log today's money"
+    quest, and the "money & trackers" badges). It scores other planners by
+    mounting them headless (`mount({ page, headless:true, game })` returns
+    `{ parts, finish }` before drawing anything). Each planner page gets
+    `ctx.game` and `ctx.score`.
+  - The game has its own page (`kind:"game"`: title, subtitle, icon,
+    cover and items only; the game itself is `state.game`). It is made
+    once, right after the first Command Center (`makeGamePage()`, then
+    `game.pageMade`, so deleting it sticks; "+ new page" offers it again).
+    It draws the main planner in game-only mode
+    (`Planner.mountGame({ root, page:mainPlanner, ... })`): a hero (rank
+    medallion, level, XP bar, next rank, XP/coins/badges/run/bosses),
+    ranks, next badge, this week's boss, today's quests, rewards, badges,
+    the 12-month heatmap, recent XP, game settings (on/off, loud/subtle,
+    sound) and the icon credit. With no Command Center it offers to make
+    one. The planner itself has no game tab: its header keeps the level,
+    XP bar and quests, and `g` opens the game page (`ctx.openGame`).
+    A player card at the bottom of the sidebar
+    (`#sbGame`, `renderProfile()`, refreshed 250ms after each save) shows
+    the rank medallion, level, coins and XP bar, flashes "+N xp" when XP
+    goes up, and opens the game page.
+  - Game (subtle, switchable in settings as `game.off`): XP, levels, three
+    daily quests, a weekly boss and the badges below, all worked out by
+    `computeGame()` from what was finished, so undo, sync and backups stay
+    consistent and nothing new is logged. XP only for finished work
+    (CWES/side hustle 60 an hour, first gym session of a day 50, work 20
+    an hour, personal 10, `!!!` +15, about 1 in 7 a ×2 "crit" by a hash
+    of the id), +50 a cleared day, +30 a quest, +200 a beaten boss. Level
+    L starts at 50*(L-1)*L XP. Quests are picked from the day's own plan
+    (seeded by date) and stored in `game.quests[date]` on the first change
+    of the day; the boss's HP is 100 per weekly target. `game.level` and
+    `game.seen` (badge unlock dates) only decide what to toast, and the
+    first change after the game appears records them silently. "run" is
+    cleared days in a row; rest days never break it.
+  - NOW panel (header): the block happening now in big type with a live
+    countdown (refreshed every 30s), a progress bar, `✓ done`, `▶ timer`
+    and what's next; with nothing on, it counts down to the next block
+    (with its checkbox), or falls back to tomorrow's first items.
+  - "suggest" in plan day (`suggest()`): spreads what's left of this
+    week's targets over the remaining non-rest days and fits the day's
+    share into free time (flex windows count as free), minus what's
+    already planned that day, so pressing it twice adds nothing; gym goes
+    in the evening, CWES rotates theory/lab/revision, the side hustle gets
+    a marketing block if the week has nothing money-facing; it respects
+    `maxHours`. Its lines go into the plan box for editing.
+  - The game page has a 12-month heatmap of XP per day (absolute steps at
+    100, 200 and 350 XP).
+  - Single-key shortcuts while the planner is on screen and you aren't
+    typing (paused while a big card is open): `q` quick log, `n` new,
+    `p` plan day, `d w a g s` tabs, `[ ]` back/forward, `t` today, `?` list.
+    The `keys` button next to `+ add` (or `?`) opens the same list as
+    tappable buttons, one table (`KEYS`) for both, so it works on touch.
+    A leading zero in a typed time means 24-hour (`06:00` is morning);
+    without it, 1 to 6 reads as pm.
+  - Badges: 88 in nine groups (`ACH_GROUPS`: hardcore, streaks, cwes,
+    side hustle, gym, quests & bosses, money & trackers, xp, life), each shown as a hexagon medallion
+    (`medalSvg()`/`medal()`): an icon from game-icons.net on a dark plate,
+    in the theme's colours only (no emoji). The icons (`GI`, path data only,
+    rounded to 1 decimal with a tokeniser so numbers never merge, 512x512)
+    are by Lorc, Delapouite and contributors under CC BY 3.0, so the game
+    tab carries a credit line with links; keep it. They are copied into
+    planner.js, never loaded from another site. `PIX` (8x8 pixel icons) is
+    only a fallback. Rarity (`RARE`, default common)
+    sets the frame: common one frame, rare a second inner frame, epic a
+    heavy frame with white corner studs, legendary spikes from every corner,
+    a dashed ring and a white icon. Earned medallions glow red (stronger
+    with rarity) and get a light sweep on hover; locked ones are dark
+    steel with a progress bar. Ranks are medallions too (`rankRarity()`),
+    the current one shown big by the level in the game page; unlock cards
+    name the rarity ("legendary badge unlocked"). Each earned badge is worth +25 coins. The
+    game page names the closest unearned badge ("next badge"). When badges
+    are added, bump `ACH_VERSION`: on the next change, badges already earned
+    are recorded quietly (`game.achv`) instead of toasting all at once.
+    Ranks (`RANKS`) every few levels from recruit (1) to ascended (100),
+    each with a pixel insignia shown by the level in the header; a new rank gets
+    its own full-screen card, and so does a badge when nothing bigger
+    happened in the same change.
+  - Quests are generated (`DT` daily and `WT` weekly templates x amounts x
+    40 CWES web topics in `TOPICS`): 123 daily, their 123 elite versions
+    and 127 weekly, 373 in all. A seeded draw per date or week
+    (`pickGen()`, `rng()`) always gives the same picks; it never repeats a
+    template in one draw, leans toward the main planner's
+    `settings.focus` (main priority: CWES by default; the first daily
+    pick and two weekly picks always come from it; side-hustle quests are
+    rare unless it's the priority), and gets harder with level (tiers by
+    amount; elite third daily quest from level 10, double xp). Ids hold
+    everything needed to check them later (`d:cwesmin:90`,
+    `e:early:8`, `w:topicw:xss.3`); `resolveQ()` also still reads the old
+    fixed ids. Each quest reports progress `[have, need]` from `dayCtx()`
+    or `weekCtx()`. Topic quests count CWES blocks with the topic's word
+    in the title or notes. Weekly picks are stored in `game.wquests` by the
+    week's first day; finishing all three adds a +100 "weekly sweep" (big
+    card) and the weekly badges. The planner header shows today's quests
+    with progress and "week n/3", the week view and the game page list the
+    weekly ones with progress bars.
+  - Quest style (`settings.questStyle`, set next to main priority):
+    `flexible` (the default) only asks for outcomes (time, days, early
+    starts, cleared days, gym, planning, reflecting) and never says how to
+    study; `structured` also draws the templates marked `structured: true`
+    (labs, theory/revision blocks, long blocks, topics). In flexible mode,
+    today's and this week's stored picks that hold a structured quest are
+    drawn again as long as none of them is done (`misfit()`, then `qFresh`
+    makes `gameStep` store the new ids); finished history never changes.
+  - Quests are never ticked by hand: they tick from finished work. Each
+    unfinished quest has a button (`questAction()`): CWES, gym and side
+    hustle quests `▶ start` the timer with a fitting title (a topic quest
+    names the topic so its keyword counts) and open the planner; plan
+    quests open tomorrow with plan day (or a new CWES form); reflection
+    quests open and focus today's reflection; money quests open the first
+    Finance page (`ctx.openFinance`); anything else opens today. From the
+    game page this goes through `ctx.openPlanner(then)`; UI flags live in
+    `uiState` by page id, so the planner mount picks them up. Header quest
+    chips are buttons doing the same.
+  - Hardcore layer: a "hardcore" badge group (consistency and intensity:
+    no zero days = 1h+ of CWES or side hustle a day, deep work = 4h+ in a
+    day, flawless weeks = boss beaten and every day cleared, boss and gym
+    runs in a row, raids, a comeback after a broken 7+ run, 5am club, 1,000
+    xp days, 500h CWES, 1,000h of focus, level 150...) and a fifth rarity,
+    mythic: an inverted medallion (solid red plate, dark icon, twelve
+    spikes, white ring). Runs never break on a week or day that isn't over.
+    Raid bosses: every 4th week (`isRaid()`, by week number) the boss needs
+    150% of every target and pays 500 xp. Elite quests: from level 10 the
+    third daily quest is an elite one (`QDEF` entries with `elite`, worth
+    60). Ranks go on to immortal (150) and godlike (200).
+  - Coins and real rewards: 1 coin per 10 XP plus 25 per badge, minus what
+    was spent. The
+    reward shop (`game.rewards`, `{ id, name, cost }`, editable, three
+    examples on a new page) is for real treats; claiming one adds to
+    `game.claims` (`{ id, name, cost, date }`), only when you can afford it,
+    and Ctrl+Z gives the coins back.
+  - Loud mode (`game.loud`, the default) vs subtle: loud plays tiny
+    chiptunes made with the Web Audio API (no sound files; `game.mute`
+    silences them, the `♪` button in the header), drops red and white
+    squares, and shows a full-screen card for level ups, a beaten boss and
+    a claimed reward; subtle uses toasts only. Confetti and the card's
+    motion are skipped when the device asks for reduced motion.
   - index.html calls `Planner.normalize()` when loading, `Planner.fresh()` for
     a new page and `Planner.mount({ root, page, save, trackers, streakOf })`
     from `renderPage()`; like finance, everything saves through the app's
