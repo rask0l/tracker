@@ -31,7 +31,7 @@ var SUBS = {
   personal:[]
 };
 var MONEY_SUBS = ["marketing", "monetize"];
-var FIELDS = ["title", "area", "sub", "start", "end", "prio", "notes", "due"];
+var FIELDS = ["title", "area", "sub", "start", "end", "allDay", "prio", "notes", "due"];
 var DOW = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 var DAYNAME = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 var MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -78,6 +78,9 @@ function hrs(min){ var x = Math.round(min / 6) / 10; return (x % 1 ? x.toFixed(1
 function num(x){ x = Math.round(x * 10) / 10; return x % 1 ? x.toFixed(1) : String(x); }
 function mins(it){ return it.start == null ? 0 : it.end - it.start; }
 function isFlex(it){ return it.area === "work" && it.sub === "flex"; }
+// flex windows and all-day items (a trip, an exam day) are context, not tasks:
+// no checkbox, never counted as done, planned, overdue or for the streak
+function notTask(it){ return isFlex(it) || !!it.allDay; }
 function normTime(v){ return Number.isInteger(v) && v >= 0 && v <= 1440 ? v : null; }
 
 // ---------- data ----------
@@ -87,6 +90,7 @@ function normFields(o, t){
   o.sub = SUBS[o.area].indexOf(t.sub) >= 0 ? t.sub : "";
   var s = normTime(t.start), e = normTime(t.end);
   if(s != null && e != null && e > s){ o.start = s; o.end = e; } else { o.start = null; o.end = null; }
+  if(t.allDay === true){ o.allDay = true; o.start = null; o.end = null; }
   if(o.sub === "flex" && o.start == null) o.sub = "core";     // a flex window needs times
   o.prio = (t.prio === 1 || t.prio === 2 || t.prio === 3) ? t.prio : 0;
   o.notes = str(t.notes, 2000);
@@ -118,13 +122,17 @@ function normalize(x){
   var st = hour(s.dayStart, 360), en = hour(s.dayEnd, 1380);
   if(en <= st){ st = 360; en = 1380; }
   out.settings = { dayStart:st, dayEnd:en,
-    maxHours:(Number.isInteger(s.maxHours) && s.maxHours >= 1 && s.maxHours <= 24) ? s.maxHours : 12 };
+    maxHours:(Number.isInteger(s.maxHours) && s.maxHours >= 1 && s.maxHours <= 24) ? s.maxHours : 12,
+    dayMode:s.dayMode === "list" ? "list" : "timeline",
+    weekStart:(Number.isInteger(s.weekStart) && s.weekStart >= 0 && s.weekStart <= 6) ? s.weekStart : 0 };
 
   var ids = {};
   out.acts = arr(x.acts).filter(function(t){ return t && typeof t === "object" && isDate(t.date); }).map(function(t){
     var o = normFields({ id:str(t.id || rid(), 40), date:t.date, done:!!t.done,
       createdAt:Number.isInteger(t.createdAt) && t.createdAt > 0 ? t.createdAt : 0 }, t);
     if(t.ruleId && isDate(t.ruleDate)){ o.ruleId = str(t.ruleId, 40); o.ruleDate = t.ruleDate; }
+    // an all-day item can run over several days (a trip): up to 60
+    if(o.allDay && isDate(t.to) && t.to > o.date && t.to <= addDays(o.date, 60)) o.to = t.to;
     return o;
   }).filter(function(o){
     // one record per id, and one override per occurrence, so import and sync never double anything
@@ -152,6 +160,10 @@ function normalize(x){
   var k = obj(x.streak);
   out.streak = { page:str(k.page, 40), rule:k.rule === "pct" ? "pct" : "all",
     pct:(Number.isInteger(k.pct) && k.pct >= 10 && k.pct <= 100) ? k.pct : 80 };
+  // a running timer: { title, area, sub, at (epoch ms) }; it syncs like everything else
+  var tm = obj(x.timer);
+  out.timer = (typeof tm.at === "number" && tm.at > 0 && tm.at <= Date.now() + 864e5)
+    ? normTimer(tm) : null;
   out.reflect = normText(x.reflect, REFLECT);
   out.reviews = normText(x.reviews, REVIEW);
   out.rest = {};
@@ -166,10 +178,119 @@ function normalize(x){
 }
 function fresh(){ return normalize({}); }
 
+function normTimer(t){
+  var f = normFields({}, { title:t.title, area:t.area, sub:t.sub === "flex" ? "" : t.sub });
+  return { title:f.title, area:f.area, sub:f.sub, at:Math.round(t.at) };
+}
+
+// ---------- quick log: one line of text -> an activity ----------
+// "gym 1h", "cwes lab 18:00-19:30 sqli", "side 45m landing page", "email boss",
+// "6-7pm push day", "standup 9:15 15m done", "tomorrow cwes 2h plan".
+// Area keys (work, gym, cwes, side, personal or an area's own name) are taken
+// out of the title; hint words (study, run, client...) pick the area but stay.
+var AREA_HINTS = {
+  work:["job", "office", "meeting", "standup"],
+  gym:["workout", "lift", "lifting", "run", "running", "cardio", "strength", "mobility"],
+  cwes:["study", "htb", "hackthebox", "sqli", "xss", "ssrf", "idor", "lfi", "burp", "lab", "theory", "revision", "module"],
+  side:["hustle", "client", "clients", "landing", "marketing", "monetize", "sales", "idea", "research", "build"]
+};
+function clock(hh, mm, mer){
+  hh = +hh; mm = +(mm || 0);
+  if(mm > 59) return null;
+  if(mer){ if(hh < 1 || hh > 12) return null; if(mer === "pm" && hh < 12) hh += 12; if(mer === "am" && hh === 12) hh = 0; }
+  else if(hh > 24) return null;
+  var v = hh * 60 + mm;
+  return v <= 1440 ? v : null;
+}
+function parseQuick(text, P, baseDate, now, plan){
+  var raw = String(text || "").trim();
+  if(!raw) return null;
+  var t = " " + raw.toLowerCase()
+    .replace(/\ball[ -]?day\b/g, "allday")
+    .replace(/(\d)\s+(am|pm)\b/g, "$1$2")
+    .replace(/(\d(?::\d{2})?(?:am|pm)?)\s*(?:-|–|—|\bto\b)\s*(\d)/g, "$1-$2")
+    .replace(/(\d)\s+(h|hrs?|hours?|m|mins?|minutes?)\b/g, "$1$2") + " ";
+  var area = null;
+  // multi-word area names ("side hustle", "cwes study") count as one key
+  FOCUS.forEach(function(a){
+    var n = P.areas[a].name.toLowerCase();
+    if(n.indexOf(" ") > 0 && t.indexOf(" " + n + " ") >= 0){ if(!area) area = a; t = t.replace(" " + n + " ", " "); }
+  });
+  var q = { date:baseDate, start:null, end:null, dur:0, done:null, prio:0, hadTime:false, guessed:false }, words = [], allw = [], sub = "", hintArea = null;
+  t.trim().split(/\s+/).forEach(function(w){
+    var m, k = w.replace(/[,.;]+$/, "");
+    if((m = /^(\d{1,2})(?::(\d{2}))?(am|pm)?-(\d{1,2})(?::(\d{2}))?(am|pm)?$/.exec(k))){
+      var m1 = m[3] || m[6], m2 = m[6] || m[3];
+      // "11-1pm" is 11am to 1pm: a start later than the end flips its am/pm
+      if(!m[3] && m[6] && +m[1] > +m[4] && +m[1] !== 12) m1 = m[6] === "pm" ? "am" : "pm";
+      var a1 = +m[1], a2 = +m[4];
+      if(!m1 && a1 >= 1 && a1 <= 6){ a1 += 12; q.guessed = true; }
+      if(!m2 && a2 >= 1 && a2 <= 7 && a1 >= 12){ a2 += 12; }
+      var s1 = clock(m1 ? m[1] : a1, m[2], m1), s2 = clock(m2 ? m[4] : a2, m[5], m2);
+      if(s1 != null && s2 != null && s2 <= s1 && s2 + 720 <= 1440) s2 += 720;
+      if(s1 != null && s2 != null && s2 > s1){ q.start = s1; q.end = s2; q.hadTime = true; return; }
+    }else if((m = /^(\d{1,2}):(\d{2})(am|pm)?$/.exec(k)) || (m = /^(\d{1,2})()(am|pm)$/.exec(k))){
+      var hh = +m[1];
+      if(!m[3] && hh >= 1 && hh <= 6){ hh += 12; q.guessed = true; }
+      var c = clock(m[3] ? m[1] : hh, m[2], m[3]);
+      if(c != null && c < 1440){ q.start = c; q.hadTime = true; return; }
+    }else if((m = /^(\d+(?:\.\d+)?)(h|hr|hrs|hour|hours)$/.exec(k))){ q.dur = Math.round(+m[1] * 60); return; }
+    else if((m = /^(\d+)(m|min|mins|minute|minutes)$/.exec(k))){ q.dur = +m[1]; return; }
+    else if((m = /^(\d+)h(\d{1,2})m?$/.exec(k))){ q.dur = +m[1] * 60 + +m[2]; return; }
+    if(k === "today"){ q.date = today(); return; }
+    if(k === "tomorrow" || k === "tmr" || k === "tmrw"){ q.date = addDays(today(), 1); return; }
+    if(k === "yesterday"){ q.date = addDays(today(), -1); return; }
+    if(k === "done" || k === "did" || k === "✓"){ q.done = true; q.explicitDone = true; return; }
+    if(k === "allday"){ q.allDay = true; return; }
+    if(k === "plan" || k === "todo" || k === "later"){ q.done = false; return; }
+    if(/^!{1,3}$/.test(k)){ q.prio = k.length; return; }
+    if((k === "at" || k === "for" || k === "from") ) { words.push(w); allw.push(w); return; }
+    var key = AREAS.filter(function(a){ return k === a || (a !== "personal" && k === P.areas[a].name.toLowerCase()); })[0];
+    if(key){ if(!area) area = key; allw.push(w); return; }
+    if(!hintArea) FOCUS.forEach(function(a){ if(!hintArea && AREA_HINTS[a].indexOf(k) >= 0) hintArea = a; });
+    if(!sub) Object.keys(SUBS).forEach(function(a){ if(!sub && SUBS[a].indexOf(k) >= 0 && k !== "flex") sub = a + ":" + k; });
+    words.push(w); allw.push(w);
+  });
+  // filler words only make sense next to a time
+  var filler = function(w){ return !(/^(at|for|from)$/.test(w) && (q.hadTime || q.dur)); };
+  words = words.filter(filler); allw = allw.filter(filler);
+  // "core work" stays "core work": if only a type word is left, keep the area word too
+  var isSub = function(w){ return Object.keys(SUBS).some(function(a){ return SUBS[a].indexOf(w.replace(/[,.;]+$/, "")) >= 0; }); };
+  if(words.length && words.every(isSub) && allw.length > words.length) words = allw;
+  q.area = area || hintArea || (sub ? sub.split(":")[0] : "personal");
+  q.sub = sub && sub.split(":")[0] === q.area ? sub.split(":")[1] : "";
+  // keep the user's own capitals for the title
+  var keep = raw.split(/\s+/), title = [];
+  words.forEach(function(w){
+    for(var i = 0; i < keep.length; i++) if(keep[i].toLowerCase().replace(/[,.;]+$/, "") === w.replace(/[,.;]+$/, "")){ title.push(keep[i]); keep.splice(i, 1); return; }
+    title.push(w);
+  });
+  q.title = title.join(" ").trim();
+  q.autoTitle = !q.title;
+  if(!q.title) q.title = (q.area === "personal" ? "personal" : P.areas[q.area].name) + (q.sub ? " " + q.sub : "");
+  if(q.allDay){ q.start = null; q.end = null; q.dur = 0; q.hadTime = false; q.done = false; return q; }
+  // times: a range, a start (+ length), or a length that ended just now
+  if(q.start != null && q.end == null) q.end = Math.min(1440, q.start + (q.dur || 60));
+  // planning a whole day: a bare length is placed after the line before it, by the caller
+  if(plan){ q.done = !!q.explicitDone; return q; }
+  if(q.start == null && q.dur){
+    var end = q.date === today() ? Math.floor(now / 5) * 5 : P.settings.dayEnd;
+    q.end = Math.max(q.dur, end); q.start = q.end - q.dur;
+  }
+  if(q.done === null){
+    // a length with no clock time is something you just did; a past time range is a log too
+    if(q.dur && !q.hadTime) q.done = true;
+    else if(q.start != null) q.done = q.date < today() || (q.date === today() && q.start <= now);
+    else q.done = false;
+  }
+  return q;
+}
+
 // ---------- occurrences (shared by the page and by index.html's streak link) ----------
 function indexOf(P){
-  var ix = { byDate:{}, over:{} };
+  var ix = { byDate:{}, over:{}, spans:[] };
   P.acts.forEach(function(a){
+    if(a.to) ix.spans.push(a);
     (ix.byDate[a.date] || (ix.byDate[a.date] = [])).push(a);
     if(a.ruleId) ix.over[a.ruleId + "|" + a.ruleDate] = a;
   });
@@ -189,13 +310,14 @@ function byTime(a, b){
 }
 function itemsFor(P, ix, date){
   var out = (ix.byDate[date] || []).slice();
+  ix.spans.forEach(function(a){ if(a.date < date && date <= a.to) out.push(a); });
   P.rules.forEach(function(r){ if(occurs(r, date) && !ix.over[r.id + "|" + date]) out.push(virt(r, date)); });
   return out.sort(byTime);
 }
 // a day counts for the linked streak when something was planned and enough of it is done
 function countsFor(P, items){
   var total = 0, done = 0;
-  items.forEach(function(it){ if(!isFlex(it)){ total++; if(it.done) done++; } });
+  items.forEach(function(it){ if(!notTask(it)){ total++; if(it.done) done++; } });
   if(!total) return false;
   return P.streak.rule === "pct" ? done * 100 >= total * P.streak.pct : done === total;
 }
@@ -207,7 +329,7 @@ function countDays(P, dates){
 function daySummary(P, date){
   var items = itemsFor(P, indexOf(P), date), total = 0, done = 0, by = {};
   items.forEach(function(it){
-    if(isFlex(it)) return;
+    if(notTask(it)) return;
     total++;
     if(it.done){ done++; by[it.area] = (by[it.area] || 0) + mins(it); if(it.area === "gym") by.gymDone = true; }
   });
@@ -246,6 +368,7 @@ function armed(btn, label, act){
 
 // ---------- the page ----------
 var uiState = {};     // view state per page id; survives redraws and undo
+var timerTick = null; // the running timer's 1s repaint
 function mount(ctx){
   var p = ctx.page, P = p.planner, root = ctx.root;
   var u = uiState[p.id] || (uiState[p.id] = { view:"day", date:today(), form:null, tplSave:false, flash:"", qarea:"personal" });
@@ -253,10 +376,12 @@ function mount(ctx){
   function areaName(a){ return a === "personal" ? "personal" : P.areas[a].name; }
 
   // ----- occurrences -----
-  var ix = { byDate:{}, over:{} }, byDate = ix.byDate, over = ix.over;
+  var ix = { byDate:{}, over:{}, spans:[] }, byDate = ix.byDate, over = ix.over;
   function buildIndex(){ ix = indexOf(P); byDate = ix.byDate; over = ix.over; }
   function ruleById(id){ for(var i = 0; i < P.rules.length; i++) if(P.rules[i].id === id) return P.rules[i]; return null; }
   function itemsOn(date){ return itemsFor(P, ix, date); }
+  // the first day of the week holding `s`, by the chosen start day
+  function wkStart(s){ return addDays(s, -((wd(s) - P.settings.weekStart + 7) % 7)); }
   // the linked streak page, as index.html reports it: { title, cur, best } or null
   function linked(){ return P.streak.page && ctx.streakOf ? ctx.streakOf(P.streak.page) : null; }
   function counts(date){ return !!linked() && countsFor(P, itemsOn(date)); }
@@ -289,6 +414,7 @@ function mount(ctx){
   function dayStat(date){
     var s = { total:0, done:0, sched:0, flex:0 };
     itemsOn(date).forEach(function(it){
+      if(it.allDay) return;
       if(isFlex(it)){ s.flex += mins(it); return; }
       s.total++; s.sched += mins(it); if(it.done) s.done++;
     });
@@ -300,7 +426,7 @@ function mount(ctx){
     for(var k = 0; k < 7; k++){
       var d = addDays(mon, k), day = { date:d, total:0, done:0, sched:0 };
       itemsOn(d).forEach(function(it){
-        if(isFlex(it)) return;
+        if(notTask(it)) return;
         var A = w.area[it.area], m = mins(it);
         A.sched += m; A.count++; A.days[d] = 1;
         day.total++; day.sched += m;
@@ -337,7 +463,9 @@ function mount(ctx){
     buildIndex();
     if(u.form && u.form.key && !(u.form.key.slice(0, 2) === "r:" ? ruleById(u.form.key.slice(2)) : findItem(u.form.key))) u.form = null;
     root.innerHTML = "";
+    if(timerTick){ clearInterval(timerTick); timerTick = null; }
     root.appendChild(dashboard());
+    root.appendChild(quickBar());
     root.appendChild(toolbar());
     if(u.form) root.appendChild(form());
     body = h("div", { class:"pl-body" });
@@ -354,61 +482,145 @@ function mount(ctx){
 
   // ===== DASHBOARD (always about today and this week) =====
   function dashboard(){
-    var t = today(), w = weekStats(monday(t)), td = dayStat(t);
-    var overdue = overdueList(t).length;
-    var tiles = [];
-    tiles.push(h("div", { class:"pl-tile" }, [
-      h("div", { class:"pl-tlabel", text:"today" }),
-      h("div", { class:"pl-tval", text:dayLabel(t) }),
-      pbar(td.total ? td.done / td.total : 0),
-      h("div", { class:"pl-tsub" }, [ (td.total ? Math.round(td.done / td.total * 100) + "% · " : "") + td.done + "/" + td.total + " done",
-        overdue ? h("b", { class:"pl-red", text:" · " + overdue + " overdue" }) : null ])
-    ]));
-    ["gym", "cwes", "side"].forEach(function(a){
-      var A = P.areas[a], v = actual(w, a);
-      tiles.push(h("div", { class:"pl-tile" }, [
-        h("div", { class:"pl-tlabel" }, [ h("i", { class:"pl-sw a-" + a }), A.name ]),
-        h("div", { class:"pl-tval", text:fmtVal(a, v) + (A.target ? " / " + fmtVal(a, A.target) : "") }),
-        pbar(A.target ? v / A.target : 0, a),
-        h("div", { class:"pl-tsub", text:(A.unit === "sessions" ? "sessions" : "hours") + " done this week" })
-      ]));
+    var t = today(), w = weekStats(wkStart(t)), td = dayStat(t), od = overdueList(t).length, L = linked();
+    var right = ["gym", "cwes", "side"].map(function(a){
+      var A = P.areas[a], v = actual(w, a), hrsUnit = A.unit === "h";
+      var txt = hrsUnit ? num(v) + (A.target ? "/" + num(A.target) : "") + "h" : Math.round(v) + (A.target ? "/" + A.target : "");
+      return h("span", null, [ A.name.split(" ")[0] + " ", h("b", { text:txt }) ]);
     });
-    var wp = weekPct(w);
-    tiles.push(h("div", { class:"pl-tile" }, [
-      h("div", { class:"pl-tlabel", text:"this week" }),
-      h("div", { class:"pl-tval", text:wp == null ? "—" : wp + "%" }),
-      h("div", { class:"pl-strip", title:"each day: ticked of planned" }, w.days.map(function(d){
-        var f = d.total ? d.done / d.total : 0;
-        return h("span", { class:"pl-sday" + (d.date === t ? " now" : ""), title:dayLabel(d.date) + ": " + d.done + "/" + d.total },
-          [ h("i", { style:"height:" + Math.round(f * 100) + "%" }) ]);
-      })),
-      h("div", { class:"pl-tsub" }, (function(){
-        var L = linked();
-        return L ? [ h("b", { class:"pl-streak", text:"streak " + L.cur }), " · best " + L.best ] : [ "of weekly targets" ];
-      })())
-    ]));
-    // where the week's planned hours go
-    var total = 0;
-    AREAS.forEach(function(a){ total += w.area[a].sched; });
-    var dist = h("div", { class:"pl-dist" }, [
-      h("div", { class:"pl-distbar", role:"img", "aria-label":"planned hours this week by area" }, AREAS.filter(function(a){ return w.area[a].sched; }).map(function(a){
-        var A = w.area[a];
-        return h("i", { class:"a-" + a, style:"flex-grow:" + A.sched, title:areaName(a) + ": " + hrs(A.sched) + " planned, " + hrs(A.done) + " done" });
-      })),
-      h("div", { class:"pl-legend" }, AREAS.map(function(a){
-        var A = w.area[a];
-        return h("span", null, [ h("i", { class:"pl-sw a-" + a }), areaName(a) + " " + hrs(A.sched), A.sched ? h("small", { text:" (" + hrs(A.done) + " done)" }) : null ]);
-      }).concat([ h("span", { class:"pl-lmuted", text:total ? "planned this week: " + hrs(total) : "nothing planned this week yet" }) ]))
-    ]);
-    // next few things today (or tomorrow)
+    if(L) right.push(h("span", null, [ "streak ", h("b", { text:String(L.cur) }) ]));
+    if(od) right.push(h("span", { class:"pl-red", text:od + " overdue" }));
+    var pct = td.total ? Math.round(td.done / td.total * 100) : 0;
+    var head = h("div", { class:"stats pl-stats" }, [
+      h("span", { class:"count" }, [ h("b", { text:String(td.done) }), " / " + td.total, h("small", { class:"pl-cnt", text:"today" }) ]),
+      h("span", { class:"right" }, right) ]);
+    var bar = h("div", { class:"bar pl-dbar" }, [ h("i", { style:"width:" + pct + "%" }) ]);
+    // the week as seven boxes: solid red once a day is done
+    var week = h("div", { class:"pl-wk" }, w.days.map(function(d){
+      var full = d.total > 0 && countsFor(P, itemsOn(d.date));
+      return h("button", { type:"button", class:"cell pl-wkc" + (full ? " done" : "") + (d.date === t ? " today" : "") + (u.view === "day" && d.date === u.date ? " sel" : ""),
+        title:dayLabel(d.date) + ": " + d.done + "/" + d.total + " done", onclick:function(){ u.view = "day"; u.date = d.date; draw(); } },
+        [ h("b", { text:DOW[wd(d.date)] }), h("span", { text:d.total ? d.done + "/" + d.total : "·" }) ]);
+    }));
     var now = nowMin(), next = itemsOn(t).filter(function(it){ return it.start != null && !it.done && !isFlex(it) && it.end > now; }).slice(0, 3);
-    var when = "";
-    if(!next.length){ next = itemsOn(addDays(t, 1)).filter(function(it){ return it.start != null && !isFlex(it); }).slice(0, 3); when = "tomorrow "; }
-    var nextEl = h("div", { class:"pl-next" }, [ h("span", { class:"pl-h", text:"next" }) ].concat(next.length ? next.map(function(it){
-      return h("button", { type:"button", class:"pl-nextit a-" + it.area, onclick:function(){ u.view = "day"; u.date = it.date; openEdit(it); } },
-        [ h("i", { class:"pl-sw a-" + it.area }), when + hm(it.start) + " " + it.title ]);
-    }) : [ h("span", { class:"pl-lmuted", text:"nothing else scheduled" }) ]));
-    return h("div", { class:"pl-dash" }, [ h("div", { class:"pl-tiles" }, tiles), dist, nextEl ]);
+    var later = false;
+    if(!next.length){ next = itemsOn(addDays(t, 1)).filter(function(it){ return it.start != null && !isFlex(it); }).slice(0, 3); later = true; }
+    var nextEl = h("div", { class:"pl-next" }, [ h("span", { class:"pl-nlab", text:later ? "tomorrow" : "next" }) ].concat(next.length ? next.map(function(it){
+      return h("span", { class:"pl-nextwrap" }, [ chk(it),
+        h("button", { type:"button", class:"pl-nextit", onclick:function(){ u.view = "day"; u.date = it.date; openEdit(it); } }, [ hm(it.start) + " " + it.title ]) ]);
+    }) : [ h("span", { class:"pl-lmuted", text:"nothing planned" }) ]));
+    return h("div", { class:"pl-dash" }, [ head, bar, week, nextEl ]);
+  }
+
+  // ===== QUICK LOG + TIMER =====
+  // logging something you had planned ticks that block instead of adding a copy
+  function matchPlanned(q){
+    if(!q.done) return null;
+    var c = itemsOn(q.date).filter(function(it){
+      return !it.done && !notTask(it) && it.area === q.area && (!q.sub || !it.sub || it.sub === q.sub);
+    });
+    if(!c.length) return null;
+    if(q.hadTime){
+      var ov = c.filter(function(it){ return it.start != null && it.start < q.end && q.start < it.end; });
+      return ov[0] || null;
+    }
+    return c[0];
+  }
+  function logQuick(q){
+    var m = matchPlanned(q), a;
+    if(m){
+      a = materialize(m); a.done = true;
+      if(q.hadTime || a.start == null){ a.start = q.start; a.end = q.end; }
+      else if(q.dur) a.end = Math.min(1440, a.start + q.dur);
+      if(!q.autoTitle && q.title !== a.title) a.notes = (a.notes ? a.notes + "\n" : "") + q.title;
+    }else{
+      a = { id:rid(), date:q.date, done:q.done, createdAt:Date.now() };
+      setFields(a, normFields({}, q));
+      P.acts.push(a);
+    }
+    return { act:a, matched:!!m };
+  }
+  function describe(q){
+    var m = matchPlanned(q), bits = [];
+    bits.push(q.area === "personal" ? "personal" : P.areas[q.area].name);
+    if(q.sub) bits.push(q.sub);
+    bits.push(q.date === today() ? "today" : dayLabel(q.date).toLowerCase());
+    // show the times it will really get
+    var s0 = q.start, e0 = q.end;
+    if(m && !q.hadTime && m.start != null){ s0 = m.start; e0 = q.dur ? Math.min(1440, m.start + q.dur) : m.end; }
+    bits.push(q.allDay ? "all day" : s0 != null ? hm(s0) + "–" + hm(e0) + (q.guessed ? " (read as pm)" : "") : "no time");
+    var how = m ? "✓ ticks your planned " + (m.start != null ? hm(m.start) + " " : "") + m.title : q.done ? "✓ logged as done" : "planned";
+    return { line:bits.join(" · "), title:q.title, how:how, matched:!!m };
+  }
+  function quickBar(){
+    var wrap = h("div", { class:"pl-quick" });
+    if(P.timer){
+      var T0 = P.timer, clockEl = h("span", { class:"pl-tclock" });
+      var paint = function(){
+        var sec = Math.max(0, Math.floor((Date.now() - T0.at) / 1000));
+        clockEl.textContent = pad(Math.floor(sec / 3600)) + ":" + pad(Math.floor(sec / 60) % 60) + ":" + pad(sec % 60);
+      };
+      paint(); timerTick = setInterval(paint, 1000);
+      wrap.appendChild(h("div", { class:"pl-timer", role:"timer" }, [ h("i", { class:"pl-tdot" }), clockEl,
+        h("span", { class:"pl-tttl", title:areaName(T0.area) + (T0.sub ? ", " + T0.sub : ""), text:T0.title }),
+        h("button", { type:"button", class:"pl-btn pl-primary", text:"stop & log", onclick:stopTimer }),
+        armed(h("button", { type:"button", class:"pl-btn pl-ghost", text:"discard" }), "sure?", function(){ P.timer = null; commit(); })
+      ]));
+    }
+    var prev = h("div", { class:"pl-qprev", "aria-live":"polite" });
+    var input = h("input", { type:"text", class:"pl-in pl-qin", maxlength:"160", value:u.qtext || "", "aria-label":"log or plan something",
+      placeholder:"log or plan, e.g. gym 1h or cwes lab 18:00-19:30",
+      oninput:function(){ u.qtext = input.value; u.qflash = ""; paintPrev(); },
+      onkeydown:function(e){
+        if(e.key === "Enter"){ e.preventDefault(); submit(); }
+        else if(e.key === "Escape"){ input.value = ""; u.qtext = ""; paintPrev(); }
+      } });
+    function parsed(){ return parseQuick(input.value, P, u.view === "day" ? u.date : today(), nowMin()); }
+    function paintPrev(){
+      var q = parsed();
+      prev.innerHTML = "";
+      if(!q){ prev.textContent = u.qflash || ""; return; }
+      var dsc = describe(q);
+      prev.appendChild(h("b", { text:dsc.title }));
+      prev.appendChild(document.createTextNode(" · " + dsc.line + " · "));
+      prev.appendChild(h("span", { class:dsc.matched || q.done ? "pl-streak" : "", text:dsc.how }));
+    }
+    function submit(){
+      var q = parsed();
+      if(!q) return;
+      var dsc = describe(q), r = logQuick(q);
+      u.qtext = "";
+      u.qflash = (r.matched ? "ticked: " + r.act.title : (q.done ? "logged: " : "planned: ") + q.title) + " · " + dsc.line + " · ctrl+z undoes it";
+      commit();
+      var n = root.querySelector(".pl-qin"); if(n) n.focus();
+    }
+    var startBtn = h("button", { type:"button", class:"pl-btn", text:P.timer ? "▶ switch" : "▶ timer",
+      title:"start a timer for what you typed (or a focus session); stopping it logs the real time",
+      onclick:function(){
+        if(P.timer) stopTimer(true);
+        var q = parseQuick(input.value || "", P, today(), nowMin());
+        P.timer = normTimer({ title:q ? q.title : "focus session", area:q ? q.area : "personal", sub:q ? q.sub : "", at:Date.now() });
+        u.qtext = ""; u.qflash = "timer started";
+        commit();
+      } });
+    wrap.appendChild(h("div", { class:"pl-qrow" }, [ input, startBtn ]));
+    wrap.appendChild(prev);
+    paintPrev();
+    return wrap;
+  }
+  // stopping logs the real time (ticking a planned block of the same area if they overlap)
+  function stopTimer(quiet){
+    var T0 = P.timer;
+    if(!T0) return;
+    var a0 = new Date(T0.at), now = new Date(), date = ds(a0);
+    var st = a0.getHours() * 60 + a0.getMinutes();
+    var en = ds(now) === date ? now.getHours() * 60 + now.getMinutes() : 1440;
+    if(en <= st) en = Math.min(1440, st + 1);
+    var q = { title:T0.title, autoTitle:false, area:T0.area, sub:T0.sub, date:date, start:st, end:en, dur:en - st, done:true, prio:0, hadTime:true };
+    var r = logQuick(q);
+    P.timer = null;
+    u.qflash = "logged " + hrs(en - st) + (en - st < 60 ? " (" + (en - st) + "m)" : "") + ": " + r.act.title + (r.matched ? " (ticked the planned block)" : "");
+    if(quiet !== true) commit();
   }
 
   // ===== TOOLBAR =====
@@ -416,11 +628,11 @@ function mount(ctx){
     var t = today(), isWeek = u.view === "week" || u.view === "focus";
     var step = isWeek ? 7 : 1, label, isNow;
     if(isWeek){
-      var m = monday(u.date), e = addDays(m, 6);
+      var m = wkStart(u.date), e = addDays(m, 6);
       label = short(m) + " – " + short(e) + (m.slice(0, 4) !== t.slice(0, 4) ? " " + m.slice(0, 4) : "");
-      isNow = m === monday(t);
+      isNow = m === wkStart(t);
     }else{ label = dayLabel(u.date); isNow = u.date === t; }
-    var nav = u.view === "settings" ? h("div") : h("div", { class:"pl-navrow" }, [
+    var nav = u.view === "settings" ? null : h("div", { class:"pl-navrow" }, [
       h("button", { type:"button", class:"pl-nav", "aria-label":isWeek ? "previous week" : "previous day", text:"‹",
         onclick:function(){ u.date = addDays(u.date, -step); draw(); } }),
       h("span", { class:"pl-navlabel" + (isNow ? " now" : ""), text:label }),
@@ -429,19 +641,17 @@ function mount(ctx){
       isNow ? null : h("button", { type:"button", class:"pl-link", text:isWeek ? "this week" : "today",
         onclick:function(){ u.date = t; draw(); } })
     ]);
-    return h("div", null, [
-      h("div", { class:"pl-bar" }, [ nav,
-        h("button", { type:"button", class:"pl-btn pl-primary", text:"+ add", onclick:function(){ openNew({ date:u.date }); } }) ]),
-      h("div", { class:"pl-tabs", role:"tablist" }, [["day", "day"], ["week", "week"], ["focus", "focus areas"], ["settings", "settings"]].map(function(v){
+    return h("div", { class:"pl-bar" }, [ nav,
+      h("div", { class:"pl-tabs", role:"tablist" }, [["day", "day"], ["week", "week"], ["focus", "areas"], ["settings", "settings"]].map(function(v){
         return h("button", { type:"button", role:"tab", class:"pl-tab" + (u.view === v[0] ? " on" : ""), "aria-selected":u.view === v[0] ? "true" : "false",
           text:v[1], onclick:function(){ u.view = v[0]; u.tplSave = false; u.flash = ""; draw(); } });
-      }))
-    ]);
+      })),
+      h("button", { type:"button", class:"pl-btn pl-primary pl-addbtn", text:"+ add", onclick:function(){ openNew({ date:u.date }); } }) ]);
   }
 
   // ===== FORM (add / edit an activity) =====
   function blankDraft(date){
-    return { title:"", area:"personal", sub:"", date:date || u.date, start:"", end:"", prio:0, due:"", notes:"",
+    return { title:"", area:"personal", sub:"", date:date || u.date, start:"", end:"", allDay:false, to:"", prio:0, due:"", notes:"",
              repeat:"none", days:[false, false, false, false, false, false, false], scope:"day" };
   }
   function openNew(pre){
@@ -457,7 +667,7 @@ function mount(ctx){
   }
   function draftOf(it, date){
     return { title:it.title, area:it.area, sub:it.sub, date:date, start:it.start == null ? "" : hm(it.start),
-      end:it.end == null ? "" : hm(it.end), prio:it.prio, due:it.due || "", notes:it.notes || "",
+      end:it.end == null ? "" : hm(it.end), allDay:!!it.allDay, to:it.to || "", prio:it.prio, due:it.due || "", notes:it.notes || "",
       repeat:"none", days:[false, false, false, false, false, false, false], scope:"day" };
   }
   function openEdit(it){
@@ -504,6 +714,16 @@ function mount(ctx){
       s.value = String(d[key]);
       return s;
     }
+    // any minute works; picking a start fills an empty end one hour later
+    var noTime = h("p", { class:"pl-hint wide", text:"no time: it goes on the task list." });
+    var startIn = inp({ type:"time", class:"pl-fstart" }, "start"), endIn = inp({ type:"time", class:"pl-fend" }, "end");
+    function paintNoTime(){ noTime.hidden = d.allDay || !(d.start === "" && d.end === ""); }
+    startIn.addEventListener("input", function(){
+      var sv = parseHm(d.start);
+      if(sv != null && d.end === ""){ d.end = hm(Math.min(sv + 60, 1439)); endIn.value = d.end; }
+      paintNoTime();
+    });
+    endIn.addEventListener("input", paintNoTime);
     var title = inp({ type:"text", class:"pl-ftitle", placeholder:"what is it? e.g. SQLi lab, push day, landing page", maxlength:"120" }, "title");
     var subs = SUBS[d.area];
     var grid = h("div", { class:"pl-fgrid" }, [
@@ -513,8 +733,11 @@ function mount(ctx){
         return [s, s === "flex" ? "flex time (if work allows)" : s];
       }))) ]) : null,
       h("label", null, [ ruleMode ? "starts" : "date", inp({ type:"date" }, "date") ]),
-      h("label", null, [ "start", inp({ type:"time", step:"900" }, "start") ]),
-      h("label", null, [ "end", inp({ type:"time", step:"900" }, "end") ]),
+      d.allDay ? null : h("label", null, [ "start", startIn ]),
+      d.allDay ? null : h("label", null, [ "end", endIn ]),
+      d.allDay && !seriesScope ? h("label", null, [ "until (optional)", inp({ type:"date" }, "to") ]) : null,
+      h("label", { class:"pl-check" }, [ h("input", { type:"checkbox", checked:d.allDay ? true : null,
+        onchange:function(e){ d.allDay = e.target.checked; draw(); } }), "all day" ]),
       h("label", null, [ "priority", sel("prio", PRIO_NAME.map(function(n, i){ return [String(i), n + (i ? " " + PRIO[i] : "")]; })) ]),
       seriesScope ? null : h("label", null, [ "deadline", inp({ type:"date" }, "due") ]),
       showRepeat ? h("label", null, [ "repeat", sel("repeat", (seriesScope ? [] : [["none", "no"]]).concat([["daily", "every day"], ["weekdays", "weekdays (mon–fri)"],
@@ -525,8 +748,8 @@ function mount(ctx){
       })) : null,
       h("label", { class:"wide" }, [ "notes", inp({ tag:"textarea", rows:"2", placeholder:"topics, links, what done looks like…", maxlength:"2000" }, "notes") ])
     ]);
-    if(d.area === "work" && d.sub === "flex") grid.appendChild(h("p", { class:"pl-hint wide", text:"flex time is only a window: it isn't counted as work or as done, and you can plan study or side-hustle blocks inside it. if work gets busy, delete it for that day." }));
-    if(d.start === "" && d.end === "") grid.appendChild(h("p", { class:"pl-hint wide", text:"no start and end: it goes in the day's task list instead of the timeline." }));
+    if(d.area === "work" && d.sub === "flex") grid.appendChild(h("p", { class:"pl-hint wide", text:"flex time isn't counted as work. plan study or side hustle inside it." }));
+    paintNoTime(); grid.appendChild(noTime);
     var scope = (rule && !ruleMode) ? h("div", { class:"pl-toggle" }, [["day", "this day only"], ["series", "the whole series"]].map(function(s){
       return h("button", { type:"button", class:"pl-tog" + (d.scope === s[0] ? " on" : ""), text:s[1], onclick:function(){ d.scope = s[0]; draw(); } });
     })) : null;
@@ -552,11 +775,15 @@ function mount(ctx){
     if(!d.title.trim()) return "give it a title";
     if(!isDate(d.date)) return "pick a date";
     var s = parseHm(d.start), e = parseHm(d.end);
-    if((d.start === "") !== (d.end === "")) return "set both start and end, or leave both empty for a task without a time";
-    if(d.start !== "" && (s == null || e == null)) return "times look wrong";
-    if(d.start !== "" && e <= s) return "end must be after start";
+    if(!d.allDay){
+      if((d.start === "") !== (d.end === "")) return "set both start and end, or leave both empty for a task without a time";
+      if(d.start !== "" && (s == null || e == null)) return "times look wrong";
+      if(d.start !== "" && e <= s) return "end must be after start";
+    }else if(d.to && (!isDate(d.to) || d.to < d.date)) return "“until” must be on or after the date";
     if(d.due && !isDate(d.due)) return "deadline looks wrong";
-    var f = normFields({}, { title:d.title, area:d.area, sub:d.sub, start:s, end:e, prio:d.prio, notes:d.notes, due:d.due });
+    var f = normFields({}, { title:d.title, area:d.area, sub:d.sub, start:s, end:e, allDay:d.allDay, prio:d.prio, notes:d.notes, due:d.due });
+    // a several-day all-day item keeps its last day
+    var setTo = function(a){ if(d.allDay && isDate(d.to) && d.to > a.date) a.to = d.to; else delete a.to; };
     var ruleMode = !!F.key && F.key.slice(0, 2) === "r:";
     if(ruleMode){
       var rr = ruleById(F.key.slice(2));
@@ -567,7 +794,7 @@ function mount(ctx){
         nr.days = repeatDays(d); nr.from = d.date; nr.skip = [];
         P.rules.push(nr);
       }else{
-        var a = { id:rid(), date:d.date, done:false, createdAt:Date.now() }; setFields(a, f);
+        var a = { id:rid(), date:d.date, done:false, createdAt:Date.now() }; setFields(a, f); setTo(a);
         P.acts.push(a);
       }
     }else{
@@ -577,9 +804,9 @@ function mount(ctx){
         setFields(rule, f); delete rule.due; rule.days = repeatDays(d);
         if(!it.virtual){ setFields(it, f); delete it.due; it.date = d.date; }
       }else if(rule){
-        var m = materialize(it); setFields(m, f); m.date = d.date;
+        var m = materialize(it); setFields(m, f); m.date = d.date; setTo(m);
       }else{
-        setFields(it, f); it.date = d.date;
+        setFields(it, f); it.date = d.date; setTo(it);
         if(d.repeat !== "none"){
           var cr = { id:rid() }; setFields(cr, f); delete cr.due;
           cr.days = repeatDays(d); cr.from = d.date; cr.skip = [];
@@ -612,18 +839,21 @@ function mount(ctx){
 
   // ===== DAY VIEW =====
   function chk(it){
-    if(isFlex(it)) return null;
+    if(notTask(it)) return null;
     return h("button", { type:"button", class:"pl-chk" + (it.done ? " on" : ""), "aria-pressed":it.done ? "true" : "false",
       "aria-label":(it.done ? "untick " : "tick ") + it.title, text:it.done ? "✓" : "",
       onclick:function(e){ e.stopPropagation(); toggle(it); }, onpointerdown:function(e){ e.stopPropagation(); } });
   }
   function meta(it){
     var bits = [];
-    if(it.sub) bits.push(it.sub === "flex" ? "flex · if work allows" : it.sub);
     if(it.prio) bits.push(PRIO[it.prio]);
-    if(it.due) bits.push("due " + short(it.due));
-    if(it.ruleId && liveRule(it)) bits.push("↻");
-    return bits.join(" · ");
+    if(it.due) bits.push("due " + short(it.due).toLowerCase());
+    return bits.join("  ");
+  }
+  // the details live in the tooltip
+  function tip(it){
+    return (it.allDay ? "all day" + (it.to ? " until " + dayLabel(it.to).toLowerCase() : "") + "  " : it.start != null ? hm(it.start) + "–" + hm(it.end) + "  " : "") + it.title + "\n" +
+      [areaName(it.area), it.sub, it.ruleId && liveRule(it) ? "repeats" : ""].filter(Boolean).join(", ");
   }
   function layout(blocks){
     // overlapping blocks share the width in lanes; returns { key: { lane, lanes } }
@@ -660,13 +890,13 @@ function mount(ctx){
   }
   function overdueList(t){
     return P.acts.filter(function(a){
-      return !a.done && !isFlex(a) && ((!a.ruleId && a.date < t) || (a.due && a.due < t));
+      return !a.done && !notTask(a) && ((!a.ruleId && a.date < t) || (a.due && a.due < t));
     }).sort(function(a, b){ return a.date < b.date ? -1 : 1; });
   }
   function dayView(){
     var d = u.date, t = today(), items = itemsOn(d);
     var timed = items.filter(function(it){ return it.start != null; });
-    var untimed = items.filter(function(it){ return it.start == null; });
+    var untimed = items.filter(function(it){ return it.start == null && !it.allDay; });
     var flex = timed.filter(isFlex), blocks = timed.filter(function(it){ return !isFlex(it); });
     // overlapping blocks share the width; a clash is any overlap except work inside work
     // (a meeting during core work is normal)
@@ -681,28 +911,27 @@ function mount(ctx){
 
     // --- left: task list + timeline ---
     var left = h("div", { class:"pl-dmain" });
+    // timeline or a plain checklist of the day
+    var listMode = P.settings.dayMode === "list";
     left.appendChild(h("div", { class:"pl-dhead" }, [
-      h("h2", { class:"pl-dtitle" + (d === t ? " now" : ""), text:DAYNAME[wd(d)] + " " + +d.slice(8, 10) + " " + MON[+d.slice(5, 7) - 1].toLowerCase() }),
-      h("span", { class:"pl-dstat" }, [ st.done + "/" + st.total + " done · " + hrs(st.sched) + " planned" + (st.flex ? " · " + hrs(st.flex) + " flex" : ""),
-        linked() ? (counts(d) ? h("b", { class:"pl-streak", text:" · counts for the streak ✓" })
-          : st.total ? h("span", { text:" · streak: " + (P.streak.rule === "pct" ? "reach " + P.streak.pct + "%" : "finish everything") }) : null) : null ]),
-      h("button", { type:"button", class:"pl-link" + (P.rest[d] ? " on" : ""), text:P.rest[d] ? "rest day ✓" : "mark rest day",
+      h("div", { class:"pl-toggle pl-modes" }, [["timeline", "timeline"], ["list", "list"]].map(function(m){
+        return h("button", { type:"button", class:"pl-tog" + (P.settings.dayMode === m[0] ? " on" : ""), "aria-pressed":P.settings.dayMode === m[0] ? "true" : "false", text:m[1],
+          onclick:function(){ if(P.settings.dayMode !== m[0]){ P.settings.dayMode = m[0]; commit(); } } });
+      })),
+      h("button", { type:"button", class:"pl-link pl-planlink" + (u.planDay ? " on" : ""), text:"plan day",
+        onclick:function(){ u.planDay = !u.planDay; draw(); var x = root.querySelector(".pl-plan"); if(x) x.focus(); } }),
+      h("button", { type:"button", class:"pl-link" + (P.rest[d] ? " on" : ""), text:P.rest[d] ? "rest day ✓" : "rest day",
         onclick:function(){ if(P.rest[d]) delete P.rest[d]; else P.rest[d] = true; commit(); } })
     ]));
+    if(u.planDay) left.appendChild(planPanel(d));
+    // all-day items sit above everything else
+    items.filter(function(it){ return it.allDay; }).forEach(function(it){
+      left.appendChild(h("div", { class:"pl-allday a-" + it.area, title:tip(it), onclick:function(){ openEdit(it); } }, [
+        h("span", { class:"pl-adlab", text:"all day" }), h("span", { class:"pl-adt", text:it.title }),
+        it.to ? h("small", { text:(it.date < d ? "since " + short(it.date).toLowerCase() + ", " : "") + "until " + dayLabel(it.to).toLowerCase() }) : null ]));
+    });
     // tasks without a time
-    var qa = h("input", { type:"text", class:"pl-in pl-qadd", placeholder:"add a task (no time) and press enter", maxlength:"120",
-      onkeydown:function(e){
-        if(e.key !== "Enter" || !e.target.value.trim()) return;
-        e.preventDefault();
-        var a = { id:rid(), date:d, done:false, createdAt:Date.now() };
-        setFields(a, normFields({}, { title:e.target.value, area:u.qarea }));
-        P.acts.push(a); commit();
-        var n = root.querySelector(".pl-qadd"); if(n) n.focus();
-      } });
-    var qsel = h("select", { class:"pl-in pl-qarea", "aria-label":"focus area for new tasks", onchange:function(e){ u.qarea = e.target.value; } },
-      AREAS.map(function(a){ return h("option", { value:a, text:areaName(a) }); }));
-    qsel.value = u.qarea;
-    left.appendChild(h("div", { class:"pl-tasks" }, untimed.map(taskRow).concat([ h("div", { class:"pl-qrow" }, [ qa, qsel ]) ])));
+    if(untimed.length) left.appendChild(h("div", { class:"pl-tasks" }, untimed.map(taskRow)));
 
     // timeline
     var s0 = P.settings.dayStart, e0 = P.settings.dayEnd;
@@ -726,7 +955,7 @@ function mount(ctx){
           var y = e.clientY - grid.getBoundingClientRect().top, at = Math.max(it.start, s0 + Math.floor(y / PX / 15) * 15);
           openNew({ date:d, start:hm(at), end:hm(Math.min(it.end, at + 60)) });
         } },
-        [ h("button", { type:"button", class:"pl-flab", text:"flex " + hm(it.start) + "–" + hm(it.end) + " · if work allows",
+        [ h("button", { type:"button", class:"pl-flab", text:"flex",
             onclick:function(e){ e.stopPropagation(); openEdit(it); } }) ]);
       grid.appendChild(band);
     });
@@ -735,72 +964,135 @@ function mount(ctx){
       var nm = nowMin();
       if(nm >= s0 && nm <= e0) grid.appendChild(h("div", { class:"pl-nowline", style:"top:" + Math.round((nm - s0) * PX) + "px" }));
     }
-    left.appendChild(h("div", { class:"pl-gridwrap" }, [ grid ]));
-    left.appendChild(h("p", { class:"pl-hint" }, [ h("span", { class:"pl-mouse", text:"click empty time to add · drag a block to move it, its bottom edge to resize" }),
-      h("span", { class:"pl-touch", text:"tap empty time to add · drag ≡ to move, the bottom edge to resize" }) ]));
+    if(listMode){
+      var nm2 = nowMin();
+      left.appendChild(h("div", { class:"pl-tasks pl-agenda" }, timed.length ? timed.map(function(it){
+        var isNow = d === t && it.start <= nm2 && nm2 < it.end;
+        return h("div", { class:"pl-task a-" + it.area + (it.done ? " done" : "") + (isFlex(it) ? " flex" : "") + (clash[keyOf(it)] ? " over" : "") + (isNow ? " now" : ""),
+          title:tip(it), onclick:function(){ openEdit(it); } }, [
+          chk(it) || h("span", { class:"pl-chk pl-nochk", "aria-hidden":"true" }),
+          h("span", { class:"pl-atime", text:hm(it.start) + "–" + hm(it.end) }),
+          h("span", { class:"pl-ttitle", text:isFlex(it) ? "flex" : it.title }),
+          h("small", { text:meta(it) + (isNow ? "  now" : "") })
+        ]);
+      }) : [ h("p", { class:"pl-hint", text:"nothing with a time yet" }) ]));
+    }else{
+      grid.title = "click empty time to add · drag a block to move it, its bottom edge to resize";
+      left.appendChild(h("div", { class:"pl-gridwrap" }, [ grid ]));
+    }
 
-    // --- right: warnings, free time, overdue, reflection ---
-    var side = h("div", { class:"pl-dside" });
+    // warnings sit right under the day's heading
     var warns = [];
-    if(st.sched > P.settings.maxHours * 60) warns.push(hrs(st.sched) + " planned: more than your " + P.settings.maxHours + "h limit. leave room to recover.");
-    if(st.total > 14) warns.push(st.total + " activities in one day is a lot. what can move?");
-    overlaps.forEach(function(it){ warns.push("overlap: " + hm(it.start) + "–" + hm(it.end) + " " + it.title); });
-    if(warns.length) side.appendChild(section("heads up", [ h("ul", { class:"pl-warn" }, warns.map(function(w){ return h("li", { text:w }); })) ]));
+    if(st.sched > P.settings.maxHours * 60) warns.push(hrs(st.sched) + " planned, over your " + P.settings.maxHours + "h limit");
+    if(st.total > 14) warns.push(st.total + " things in one day");
+    overlaps.forEach(function(it){ warns.push("overlap " + hm(it.start) + "–" + hm(it.end) + " " + it.title); });
+    if(warns.length) left.insertBefore(h("div", { class:"pl-warns" }, warns.map(function(w){ return h("p", { text:w }); })), left.children[1]);
 
-    var fs = freeSlots(d, blocks);
-    if(fs.length || flex.length){
+    // footer, like the tracker's: day tools on the left, reflection on the right
+    var tools = [];
+    var unfinished = items.filter(function(it){ return !it.virtual && !it.ruleId && !it.done && !notTask(it); });
+    if(unfinished.length && d <= t){
+      var nd = addDays(d, 1);
+      tools.push(armed(h("button", { type:"button", class:"pl-btn", text:"carry " + unfinished.length + " to " + DOW[wd(nd)].toLowerCase() }),
+        "sure?", function(){ unfinished.forEach(function(a){ a.date = nd; }); commit(); }));
+    }
+    tools.push(templateRow("day", d));
+    left.appendChild(h("div", { class:"pl-foot" }, tools));
+    left.appendChild(textBox("reflection", P.reflect, d, REFLECT));
+
+    var side = h("div", { class:"pl-dside" });
+    if(d === t){
+      var od = overdueList(t);
+      if(od.length){
+        side.appendChild(section("overdue", od.slice(0, 8).map(function(a){
+          return h("div", { class:"pl-odrow" }, [ chk(a),
+            h("button", { type:"button", class:"pl-odt", text:a.title, onclick:function(){ u.date = a.date; openEdit(a); } }),
+            h("small", { text:a.due && a.due < t ? "due " + short(a.due).toLowerCase() : short(a.date).toLowerCase() }),
+            h("button", { type:"button", class:"pl-act", title:"move to today", text:"→ today", onclick:function(){ a.date = t; commit(); } }) ]);
+        }).concat(od.length > 8 ? [ h("p", { class:"pl-hint", text:"+" + (od.length - 8) + " more" }) ] : []),
+        od.length > 1 ? armed(h("button", { type:"button", class:"pl-link", text:"all to today" }), "sure?", function(){
+          od.forEach(function(a){ if(a.date < t) a.date = t; }); commit();
+        }) : null));
+      }
+    }
+    var dl = P.acts.filter(function(a){ return !a.done && a.due && a.due >= t && a.due <= addDays(t, 7); })
+      .sort(function(a, b){ return a.due < b.due ? -1 : 1; });
+    if(dl.length && d >= t) side.appendChild(section("due", dl.map(function(a){
+      return h("button", { type:"button", class:"pl-dlrow", onclick:function(){ u.date = a.date; openEdit(a); } },
+        [ h("span", { text:a.title }), h("small", { text:a.due === t ? "today" : dayLabel(a.due).toLowerCase() }) ]);
+    })));
+    var fs = freeSlots(d, blocks).slice(0, 3);
+    if(fs.length){
       var rows = fs.map(function(x){
         var inFlex = 0;
         flex.forEach(function(f){ inFlex += Math.max(0, Math.min(f.end, x.end) - Math.max(f.start, x.start)); });
         return h("button", { type:"button", class:"pl-slot", title:"plan something here",
           onclick:function(){ openNew({ date:d, start:hm(x.start), end:hm(Math.min(x.end, x.start + 60)) }); } },
-          [ h("span", { text:hm(x.start) + "–" + hm(x.end) }), h("small", { text:hrs(x.end - x.start) + (inFlex ? " · " + (inFlex >= x.end - x.start ? "flex" : "part flex") + ", if work allows" : "") }) ]);
+          [ h("span", { text:hm(x.start) + "–" + hm(x.end) }), h("small", { text:hrs(x.end - x.start) + (inFlex ? " flex" : "") }) ]);
       });
-      flex.forEach(function(f){
-        var used = 0;
-        blocks.forEach(function(b){ if(b.area !== "work") used += Math.max(0, Math.min(f.end, b.end) - Math.max(f.start, b.start)); });
-        rows.push(h("div", { class:"pl-flexuse" }, [ h("span", { text:"flex " + hm(f.start) + "–" + hm(f.end) }),
-          h("small", { text:used ? hrs(used) + " used for study / side hustle" : "not used yet" }) ]));
-      });
-      side.appendChild(section("free time", rows));
+      side.appendChild(section("free", rows));
     }
-
-    if(d === t){
-      var od = overdueList(t);
-      if(od.length){
-        side.appendChild(section("overdue", od.slice(0, 8).map(function(a){
-          return h("div", { class:"pl-odrow a-" + a.area }, [ chk(a),
-            h("button", { type:"button", class:"pl-odt", text:a.title, onclick:function(){ u.date = a.date; openEdit(a); } }),
-            h("small", { text:a.due && a.due < t ? "due " + short(a.due) : short(a.date) }),
-            h("button", { type:"button", class:"pl-act", title:"move to today", text:"→ today", onclick:function(){ a.date = t; commit(); } }) ]);
-        }).concat(od.length > 8 ? [ h("p", { class:"pl-hint", text:"+" + (od.length - 8) + " more" }) ] : []),
-        armed(h("button", { type:"button", class:"pl-link", text:"move all " + od.length + " to today" }), "confirm: move " + od.length + "?", function(){
-          od.forEach(function(a){ if(a.date < t) a.date = t; }); commit();
-        })));
-      }
-    }
-    var dl = P.acts.filter(function(a){ return !a.done && a.due && a.due >= t && a.due <= addDays(t, 7); })
-      .sort(function(a, b){ return a.due < b.due ? -1 : 1; });
-    if(dl.length && d >= t) side.appendChild(section("deadlines this week", dl.map(function(a){
-      return h("button", { type:"button", class:"pl-dlrow", onclick:function(){ u.date = a.date; openEdit(a); } },
-        [ h("i", { class:"pl-sw a-" + a.area }), h("span", { text:a.title }), h("small", { text:a.due === t ? "today" : dayLabel(a.due) }) ]);
-    })));
-
-    var unfinished = items.filter(function(it){ return !it.virtual && !it.ruleId && !it.done && !isFlex(it); });
-    if(unfinished.length && d <= t){
-      var nd = addDays(d, 1);
-      side.appendChild(h("div", { class:"pl-sec" }, [ armed(h("button", { type:"button", class:"pl-btn", text:"carry " + unfinished.length + " unfinished → " + DOW[wd(nd)].toLowerCase() }),
-        "confirm: move " + unfinished.length + "?", function(){ unfinished.forEach(function(a){ a.date = nd; }); commit(); }) ]));
-    }
-    side.appendChild(templateRow("day", d));
-    side.appendChild(textBox("daily reflection", P.reflect, d, REFLECT));
 
     body.appendChild(h("div", { class:"pl-day" }, [ left, side ]));
   }
+  // plan a whole day at once: one line per activity, read like the quick log
+  function planPanel(d){
+    var ta = h("textarea", { class:"pl-in pl-plan", rows:"7", maxlength:"4000", value:u.planText || "",
+      placeholder:"one per line\n9-11 core work\n11:15-12:15 cwes lab sqli\n12:30-1:30 lunch\ngym 1h\n6-7pm side landing page\nexam prep all day",
+      oninput:function(){ u.planText = ta.value; paint(); },
+      onkeydown:function(e){
+        if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){ e.preventDefault(); addAll(); }
+        if(e.key === "Escape"){ e.preventDefault(); u.planDay = false; draw(); }
+      } });
+    var list = h("div", { class:"pl-planprev" });
+    var addBtn = h("button", { type:"button", class:"pl-btn pl-primary", onclick:function(){ addAll(); } });
+    function parsedLines(){
+      var cursor = P.settings.dayStart;
+      return (ta.value || "").split("\n").map(function(l){ return l.trim(); }).filter(Boolean).map(function(l){
+        var q = parseQuick(l, P, d, nowMin(), true);
+        if(!q) return null;
+        // a bare length goes right after the line before it
+        if(!q.allDay && q.start == null && q.dur){ q.start = cursor; q.end = Math.min(1440, cursor + q.dur); }
+        if(q.end != null) cursor = Math.max(cursor, q.end);
+        return q;
+      }).filter(Boolean);
+    }
+    function paint(){
+      var qs = parsedLines();
+      list.innerHTML = "";
+      // clashes with what's already planned that day and with each other (work inside work is fine)
+      var timed = itemsOn(d).filter(function(it){ return it.start != null && !notTask(it); }).concat(qs.filter(function(q){ return q.start != null && q.date === d && !(q.area === "work" && q.sub === "flex"); }));
+      qs.forEach(function(q){
+        var clash = q.start != null && timed.some(function(o){ return o !== q && o.start < q.end && q.start < o.end && !(o.area === "work" && q.area === "work"); });
+        list.appendChild(h("div", { class:"pl-pprow a-" + q.area + (clash ? " over" : "") }, [
+          h("span", { class:"pl-atime", text:q.allDay ? "all day" : q.start != null ? hm(q.start) + "–" + hm(q.end) : "task" }),
+          h("span", { class:"pl-ttitle", text:q.title }),
+          h("small", { text:(q.date !== d ? dayLabel(q.date).toLowerCase() + "  " : "") + (clash ? "clash  " : "") + (q.area === "personal" ? "" : P.areas[q.area].name) })
+        ]));
+      });
+      addBtn.textContent = qs.length ? "add " + qs.length : "add";
+      addBtn.disabled = !qs.length;
+    }
+    function addAll(){
+      var qs = parsedLines();
+      if(!qs.length) return;
+      qs.forEach(function(q){
+        var a = { id:rid(), date:q.date, done:!!q.done, createdAt:Date.now() };
+        setFields(a, normFields({}, q));
+        P.acts.push(a);
+      });
+      u.planDay = false; u.planText = "";
+      commit();
+    }
+    paint();
+    return h("div", { class:"pl-planbox" }, [ ta, list, h("div", { class:"pl-frow" }, [ addBtn,
+      h("button", { type:"button", class:"pl-btn pl-ghost", text:"cancel", onclick:function(){ u.planDay = false; draw(); } }),
+      h("span", { class:"pl-hint", text:"ctrl+enter adds" }) ]) ]);
+  }
   function taskRow(it){
-    return h("div", { class:"pl-task a-" + it.area + (it.done ? " done" : ""), onclick:function(){ openEdit(it); } }, [
+    return h("div", { class:"pl-task a-" + it.area + (it.done ? " done" : ""), title:tip(it), onclick:function(){ openEdit(it); } }, [
       chk(it), h("span", { class:"pl-ttitle", text:it.title }),
-      h("small", { text:[areaName(it.area), meta(it)].filter(Boolean).join(" · ") })
+      h("small", { text:meta(it) })
     ]);
   }
   var justDragged = false;
@@ -808,13 +1100,13 @@ function mount(ctx){
     var top = Math.round((it.start - s0) * PX), ht = Math.max(12, Math.round(mins(it) * PX) - 2);
     var el = h("div", { class:"pl-blk a-" + it.area + (it.done ? " done" : "") + (isClash ? " over" : "") + (ht < 30 ? " tiny" : ""),
       style:"top:" + top + "px;height:" + ht + "px;--l:" + ln.lane + ";--n:" + ln.lanes,
-      tabindex:"0", role:"button", "aria-label":hm(it.start) + " to " + hm(it.end) + " " + it.title + (it.done ? ", done" : ""),
+      tabindex:"0", role:"button", title:tip(it), "aria-label":hm(it.start) + " to " + hm(it.end) + " " + it.title + (it.done ? ", done" : ""),
       onclick:function(){ if(justDragged) return; openEdit(it); },
       onkeydown:function(e){ if(e.key === "Enter"){ e.preventDefault(); openEdit(it); } } }, [
       chk(it),
       h("span", { class:"pl-btime", text:hm(it.start) + "–" + hm(it.end) }),
       h("span", { class:"pl-btitle", text:it.title }),
-      h("span", { class:"pl-bmeta", text:[areaName(it.area), meta(it)].filter(Boolean).join(" · ") + (isClash ? " · overlap" : "") }),
+      h("span", { class:"pl-bmeta", text:meta(it) + (isClash ? "  overlap" : "") }),
       h("span", { class:"pl-grip", "aria-hidden":"true", text:"≡" }),
       h("span", { class:"pl-rs", "aria-hidden":"true" })
     ]);
@@ -849,7 +1141,7 @@ function mount(ctx){
   }
 
   // ----- templates (day and week) -----
-  function blocksOf(list){ return list.map(function(it){ var f = {}; setFields(f, it); delete f.due; return f; }); }
+  function blocksOf(list){ return list.filter(function(it){ return !it.to; }).map(function(it){ var f = {}; setFields(f, it); delete f.due; return f; }); }
   function applyBlocks(date, blocks){
     var have = itemsOn(date), n = 0;
     blocks.forEach(function(b){
@@ -861,14 +1153,18 @@ function mount(ctx){
   }
   function templateRow(kind, date){
     var list = P.templates.filter(function(t){ return t.kind === kind; });
-    var mon = monday(date);
+    var mon = wkStart(date);
     var kids = [];
     if(u.tplSave){
       var name = h("input", { type:"text", class:"pl-in", placeholder:"template name, e.g. office day", maxlength:"40",
         onkeydown:function(e){ if(e.key === "Enter"){ e.preventDefault(); saveTpl(); } if(e.key === "Escape"){ u.tplSave = false; draw(); } } });
       var saveTpl = function(){
         if(!name.value.trim()){ name.focus(); return; }
-        var days = kind === "day" ? [blocksOf(itemsOn(date))] : [0, 1, 2, 3, 4, 5, 6].map(function(k){ return blocksOf(itemsOn(addDays(mon, k))); });
+        var days = [blocksOf(itemsOn(date))];
+        if(kind === "week"){
+          days = [[], [], [], [], [], [], []];
+          for(var k = 0; k < 7; k++){ var dk = addDays(mon, k); days[wd(dk)] = blocksOf(itemsOn(dk)); }
+        }
         P.templates.push({ id:rid(), name:name.value.trim().slice(0, 40), kind:kind, days:days });
         u.tplSave = false; u.flash = "saved template “" + name.value.trim() + "”"; commit();
       };
@@ -884,16 +1180,16 @@ function mount(ctx){
           if(!tp) return;
           var n = 0;
           if(kind === "day") n = applyBlocks(date, tp.days[0]);
-          else tp.days.forEach(function(b, k){ n += applyBlocks(addDays(mon, k), b); });
+          else for(var k = 0; k < 7; k++){ var dk = addDays(mon, k); n += applyBlocks(dk, tp.days[wd(dk)]); }
           u.flash = "added " + n + " from “" + tp.name + "”"; commit();
-        } }, [ h("option", { value:"", text:"apply a " + kind + " template…" }) ].concat(list.map(function(t){ return h("option", { value:t.id, text:t.name }); })));
+        } }, [ h("option", { value:"", text:kind + " template…" }) ].concat(list.map(function(t){ return h("option", { value:t.id, text:t.name }); })));
         row.push(s);
       }
-      row.push(h("button", { type:"button", class:"pl-btn pl-ghost", text:"save this " + kind + " as template", onclick:function(){ u.tplSave = true; u.flash = ""; draw(); } }));
-      kids.push(h("div", { class:"pl-qrow" }, row));
+      row.push(h("button", { type:"button", class:"pl-btn pl-ghost", text:"save as template", onclick:function(){ u.tplSave = true; u.flash = ""; draw(); } }));
+      kids = kids.concat(row);
     }
-    if(u.flash) kids.push(h("p", { class:"pl-hint", text:u.flash }));
-    return section(kind + " templates", kids);
+    if(u.flash) kids.push(h("span", { class:"pl-hint", text:u.flash }));
+    return h("span", { class:"pl-tpl" }, kids);
   }
   // reflection / review: optional questions saved as you type
   function textBox(title, store, key, qs){
@@ -916,7 +1212,7 @@ function mount(ctx){
   // ===== WEEK VIEW =====
   var dragKey = null;
   function weekView(){
-    var mon = monday(u.date), t = today(), w = weekStats(mon);
+    var mon = wkStart(u.date), t = today(), w = weekStats(mon);
     var cols = [];
     for(var k = 0; k < 7; k++) cols.push(dayCol(addDays(mon, k), w.days[k], t));
     body.appendChild(h("div", { class:"pl-week" }, cols));
@@ -930,7 +1226,7 @@ function mount(ctx){
         var from = addDays(prevMon, i);
         n += applyBlocks(addDays(mon, i), blocksOf((byDate[from] || []).filter(function(a){ return !a.ruleId; })));
       }
-      u.flash = "copied " + n + " from last week (repeating ones show up on their own)"; commit();
+      u.flash = "copied " + n; commit();
     }));
     body.appendChild(h("div", { class:"pl-wactions" }, acts.concat([ templateRow("week", mon) ])));
     body.appendChild(scorecard(w, mon));
@@ -945,25 +1241,26 @@ function mount(ctx){
         e.preventDefault(); col.classList.remove("dropping");
         var it = findItem(dragKey); dragKey = null;
         if(!it || it.date === d) return;
-        var a = materialize(it); a.date = d; commit();
+        var a = materialize(it);
+        if(a.to){ a.to = addDays(a.to, Math.round((pd(d) - pd(a.date)) / 864e5)); }
+        a.date = d; commit();
       } }, [
       h("button", { type:"button", class:"pl-colhead", title:"open this day", onclick:function(){ u.view = "day"; u.date = d; draw(); } }, [
         h("b", { text:DOW[wd(d)] + " " + +d.slice(8, 10) }),
-        h("small", null, [ st.total ? st.done + "/" + st.total + " · " + hrs(st.sched) : (P.rest[d] ? "rest" : "free"),
+        h("small", null, [ st.total ? st.done + "/" + st.total : (P.rest[d] ? "rest" : ""),
           counts(d) ? h("b", { class:"pl-streak", title:"counts for the streak", text:" ✓" }) : null ])
       ]),
       st.total ? pbar(st.done / st.total) : null
     ]);
     if(P.rest[d]) col.appendChild(h("div", { class:"pl-restlab", text:"rest day" }));
-    items.forEach(function(it){
-      var row = h("div", { class:"pl-wi a-" + it.area + (it.done ? " done" : "") + (isFlex(it) ? " flex" : ""), draggable:"true",
-        title:(it.start != null ? hm(it.start) + "–" + hm(it.end) + " " : "") + it.title + (meta(it) ? " · " + meta(it) : ""),
+    items.filter(function(it){ return !isFlex(it); }).forEach(function(it){
+      var row = h("div", { class:"pl-wi a-" + it.area + (it.done ? " done" : "") + (it.allDay ? " allday" : ""), draggable:"true", title:tip(it),
         onclick:function(){ openEdit(it); },
         ondragstart:function(e){ dragKey = keyOf(it); e.dataTransfer.effectAllowed = "move"; try{ e.dataTransfer.setData("text/plain", it.title); }catch(err){} },
         ondragend:function(){ dragKey = null; } }, [
         chk(it),
-        h("span", { class:"pl-wtime", text:it.start != null ? hm(it.start) : "task" }),
-        h("span", { class:"pl-wtitle", text:isFlex(it) ? "flex time" : it.title })
+        h("span", { class:"pl-wtime", text:it.allDay ? "all day" : it.start != null ? hm(it.start) : "" }),
+        h("span", { class:"pl-wtitle", text:it.title })
       ]);
       col.appendChild(row);
     });
@@ -982,7 +1279,7 @@ function mount(ctx){
         h("td", { class:"num", text:A.target ? fmtVal(a, A.target) : "—" }),
         h("td", { class:"num", text:fmtVal(a, sch) }),
         h("td", { class:"num" }, [ h("b", { text:fmtVal(a, act) }) ]),
-        h("td", { class:"num" + (pct != null && pct < 50 && mon < monday(today()) ? " pl-red" : ""), text:pct == null ? "—" : pct + "%" })
+        h("td", { class:"num" + (pct != null && pct < 50 && mon < wkStart(today()) ? " pl-red" : ""), text:pct == null ? "—" : pct + "%" })
       ]);
     });
     return section("weekly scorecard", [
@@ -990,18 +1287,17 @@ function mount(ctx){
         h("thead", null, [ h("tr", null, ["metric", "target", "scheduled", "actual", "vs target"].map(function(c, i){ return h("th", { class:i ? "num" : "", text:c }); })) ]),
         h("tbody", null, rows)
       ]) ]),
-      h("p", { class:"pl-hint", text:"actual counts only what you ticked: hours from finished timed blocks, gym as days with a finished session. filling the calendar earns nothing." })
     ]);
   }
 
   // ===== FOCUS AREAS =====
   function focusView(){
-    var mon = monday(u.date), w = weekStats(mon), t = today();
+    var mon = wkStart(u.date), w = weekStats(mon), t = today();
     var subLabels = { work:"by type", gym:"by type", cwes:"study by type", side:"time by type" };
     body.appendChild(h("div", { class:"pl-focus" }, FOCUS.map(function(a){
       var A = P.areas[a], W = w.area[a], act = actual(w, a);
       var list = [];
-      for(var k = 0; k < 7; k++) itemsOn(addDays(mon, k)).forEach(function(it){ if(it.area === a && !isFlex(it)) list.push(it); });
+      for(var k = 0; k < 7; k++) itemsOn(addDays(mon, k)).forEach(function(it){ if(it.area === a && !notTask(it) && it.date === addDays(mon, k)) list.push(it); });
       var kids = [
         h("div", { class:"pl-fprog" }, [ h("b", { text:fmtVal(a, act) + (A.target ? " / " + fmtVal(a, A.target) : "") }),
           h("small", { text:(A.unit === "sessions" ? " sessions" : "") + " done · " + fmtVal(a, scheduled(w, a)) + " scheduled" }) ]),
@@ -1016,8 +1312,7 @@ function mount(ctx){
       }
       if(a === "side" && W.done){
         var money = 0; MONEY_SUBS.forEach(function(s){ money += W.subs[s] || 0; });
-        kids.push(h("p", { class:"pl-fline" + (money ? "" : " pl-red"), text:"money-facing (marketing + monetize): " + hrs(money) + " of " + hrs(W.done) +
-          (money ? "" : ". building is good, but someone has to pay.") }));
+        kids.push(h("p", { class:"pl-fline" + (money ? "" : " pl-red"), text:"marketing + monetize: " + hrs(money) + " of " + hrs(W.done) }));
       }
       kids.push(h("div", { class:"pl-flist" }, list.length ? list.map(function(it){
         return h("div", { class:"pl-task a-" + a + (it.done ? " done" : ""), onclick:function(){ u.view = "day"; u.date = it.date; openEdit(it); } }, [
@@ -1082,6 +1377,12 @@ function mount(ctx){
       return h("label", null, [ label, s ]);
     }
     body.appendChild(section("day", [ h("div", { class:"pl-srow" }, [
+      (function(){
+        var ws = h("select", { class:"pl-in", "aria-label":"week starts on", onchange:function(e){ P.settings.weekStart = +e.target.value; commit(); } },
+          DAYNAME.map(function(n, i){ return h("option", { value:String(i), text:n.toLowerCase() }); }));
+        ws.value = String(P.settings.weekStart);
+        return h("label", null, [ "week starts on", ws ]);
+      })(),
       hourSel("dayStart", "timeline starts"), hourSel("dayEnd", "timeline ends"),
       h("label", null, [ "warn above (hours planned)", h("input", { class:"pl-in pl-num", type:"number", min:"1", max:"24", step:"1", value:String(P.settings.maxHours),
         onchange:function(e){ var v = Math.round(+e.target.value); if(v >= 1 && v <= 24){ P.settings.maxHours = v; } commit(); } }) ])
@@ -1131,41 +1432,45 @@ function mount(ctx){
 // ---------- styles ----------
 var css = `
 .pl{margin-top:.5rem;}
-.pl .a-work{--ac:#8a8a8a;} .pl .a-gym{--ac:#e5484b;} .pl .a-cwes{--ac:#4f8fe8;} .pl .a-side{--ac:#cc6f16;} .pl .a-personal{--ac:#5e5e5e;}
+.pl .a-work{--ac:#8a8a8a;} .pl .a-gym{--ac:#e5484b;} .pl .a-cwes{--ac:#4f8fe8;} .pl .a-side{--ac:#cc6f16;} .pl .a-personal{--ac:#4a4a4a;}
+/* header: the tracker's count, bar and boxes */
+.pl-dash{margin-bottom:1.6rem;}
+.pl-stats{margin-bottom:1rem;}
+.pl-cnt{font-size:.75rem; color:var(--muted); letter-spacing:.08em; margin-left:.6rem;}
+.pl-dbar{margin-bottom:1rem;}
+.pl-wk{display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:.4rem; margin-bottom:1rem;}
+.pl-wkc{aspect-ratio:auto; height:3.2rem; flex-direction:column; gap:.15rem; font-size:.66rem;}
+.pl-wkc b{font-size:.66rem; letter-spacing:.1em;}
+.pl-wkc.done span{color:var(--accent-ink);}
+.pl-next{display:flex; flex-wrap:wrap; align-items:center; gap:.4rem 1.2rem; font-size:.75rem;}
+.pl-nlab{font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);}
+.pl-qprev:empty{display:none;}
+.pl-warns{margin:-.2rem 0 .8rem;}
+.pl-warns p{margin:0 0 .2rem; font-size:.72rem; color:var(--accent);}
+.pl-foot{display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; border-top:2px solid var(--line); padding-top:1rem; margin-top:1.4rem;}
+.pl-tpl{display:inline-flex; align-items:center; gap:.4rem; flex-wrap:wrap;}
+.pl-tpl select.pl-in{width:auto; font-size:.72rem; padding:.42rem .4rem;}
+.pl-tpl .pl-hint{margin:0;}
+.pl-foot + .pl-refl{margin-top:1rem;}
 .pl-sec{margin-bottom:1.4rem; min-width:0;}
 .pl-shead{display:flex; justify-content:space-between; align-items:baseline; gap:1rem; margin-bottom:.55rem;}
 .pl-h{display:flex; align-items:center; gap:.4rem; margin:0; font-size:.64rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);}
 .pl-hint{margin:.4rem 0 0; font-size:.66rem; color:var(--muted); letter-spacing:.03em; line-height:1.55;}
 .pl-red{color:var(--accent) !important;}
-.pl-sw{display:inline-block; width:9px; height:9px; flex:0 0 9px; background:var(--ac);}
+.pl-sw{display:none; width:9px; height:9px; flex:0 0 9px; background:var(--ac);}
+.pl-arow .pl-sw, .pl-rrow .pl-sw{display:inline-block;}
 .pl-lmuted{color:var(--muted);}
-/* dashboard */
-.pl-dash{border:2px solid var(--line); padding:.8rem; margin-bottom:1.1rem;}
-.pl-tiles{display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:.5rem;}
-.pl-tile{border:2px solid var(--line); padding:.6rem .7rem; min-width:0;}
-.pl-tlabel{display:flex; align-items:center; gap:.35rem; font-size:.56rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); white-space:nowrap; overflow:hidden;}
-.pl-tval{font-size:1.1rem; font-weight:700; margin:.25rem 0 .35rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums;}
-.pl-tsub{margin-top:.3rem; font-size:.58rem; letter-spacing:.05em; color:var(--muted); line-height:1.45;}
 .pl-pbar{display:block; height:10px; border:2px solid var(--line); position:relative;}
-.pl-pbar i{position:absolute; left:0; top:0; bottom:0; background:var(--ac, var(--fg));}
-.pl-strip{display:flex; gap:2px; height:22px; align-items:stretch;}
-.pl-sday{flex:1 1 0; border:2px solid var(--line); position:relative;}
-.pl-sday.now{border-color:var(--fg);}
-.pl-sday i{position:absolute; left:0; right:0; bottom:0; background:var(--fg);}
-.pl-dist{margin-top:.7rem;}
-.pl-distbar{display:flex; gap:2px; height:12px;}
-.pl-distbar i{display:block; flex:1 1 0; min-width:3px; background:var(--ac);}
-.pl-legend{display:flex; flex-wrap:wrap; gap:.3rem 1rem; margin-top:.45rem; font-size:.6rem; letter-spacing:.06em;}
-.pl-legend span{display:inline-flex; align-items:center; gap:.35rem;}
-.pl-legend small{color:var(--muted); font-size:inherit;}
-.pl-legend .pl-lmuted{margin-left:auto;}
+.pl-pbar i{position:absolute; left:0; top:0; bottom:0; background:var(--accent);}
 .pl-next{display:flex; flex-wrap:wrap; align-items:center; gap:.4rem .9rem; margin-top:.6rem; font-size:.7rem;}
 .pl-nextit{display:inline-flex; align-items:center; gap:.4rem; background:transparent; border:none; color:var(--fg); font:inherit; padding:0; cursor:pointer;}
 .pl-nextit:hover{color:var(--accent);}
 /* toolbar */
-.pl-bar{display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:.8rem;}
+.pl-bar{display:flex; align-items:flex-end; gap:.4rem 1.2rem; flex-wrap:wrap; border-bottom:2px solid var(--fg); margin-bottom:1.2rem;}
+.pl-bar .pl-navrow{padding-bottom:.45rem;}
+.pl-bar .pl-addbtn{margin-left:auto; margin-bottom:.45rem;}
 .pl-navrow{display:flex; align-items:center; gap:.6rem;}
-.pl-navlabel{font-size:1rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; min-width:10.5rem; text-align:center;}
+.pl-navlabel{font-size:1rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; min-width:8.5rem; text-align:center;}
 .pl-navlabel.now{color:var(--accent);}
 .pl-nav{background:transparent; border:2px solid var(--line); color:var(--fg); font:inherit; width:2rem; height:2rem; cursor:pointer; line-height:1;}
 .pl-nav:hover{border-color:var(--fg);}
@@ -1178,7 +1483,7 @@ var css = `
 .pl-btn.pl-primary:hover{background:var(--accent); color:var(--accent-ink);}
 .pl-btn.pl-ghost{color:var(--muted);}
 .pl-btn.armed{border-color:var(--accent); color:var(--accent);}
-.pl-tabs{display:flex; border-bottom:2px solid var(--fg); margin-bottom:1.2rem; overflow-x:auto; scrollbar-width:none;}
+.pl-tabs{display:flex; overflow-x:auto; scrollbar-width:none;}
 .pl-tabs::-webkit-scrollbar{display:none;}
 .pl-tab{background:transparent; border:2px solid transparent; border-bottom:none; color:var(--muted); font:inherit; font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; padding:.55rem .85rem; cursor:pointer; white-space:nowrap;}
 .pl-tab:hover{color:var(--fg);}
@@ -1213,7 +1518,7 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 .pl-dstat{font-size:.64rem; color:var(--muted); letter-spacing:.05em;}
 .pl-dhead .pl-link{margin-left:auto;}
 .pl-tasks{display:flex; flex-direction:column; gap:.3rem; margin-bottom:.8rem;}
-.pl-task{display:flex; align-items:center; gap:.5rem; border:2px solid var(--line); border-left:4px solid var(--ac); padding:.3rem .5rem; font-size:.74rem; cursor:pointer; min-width:0;}
+.pl-task{display:flex; align-items:center; gap:.5rem; border:2px solid var(--line); border-left:3px solid var(--ac); padding:.3rem .5rem; font-size:.74rem; cursor:pointer; min-width:0;}
 .pl-task:hover{border-color:var(--fg); border-left-color:var(--ac);}
 .pl-task small{margin-left:auto; color:var(--muted); font-size:.6rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto;}
 .pl-ttitle{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto; min-width:0;}
@@ -1222,7 +1527,7 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 .pl-qrow > .pl-in{flex:1 1 9rem; width:auto;}
 .pl-qrow .pl-qarea{flex:0 0 8.5rem;}
 .pl-chk{flex:0 0 auto; width:16px; height:16px; padding:0; border:2px solid var(--fg); background:transparent; color:var(--accent-ink); font:inherit; font-size:.62rem; line-height:12px; cursor:pointer; text-align:center;}
-.pl-chk.on{background:var(--ac, var(--fg)); border-color:var(--ac, var(--fg));}
+.pl-chk.on{background:var(--accent); border-color:var(--accent);}
 .pl-gridwrap{border:2px solid var(--line); padding:.5rem .5rem .5rem 0;}
 .pl-grid{position:relative; --g0:3.4rem; --g1:1.2rem; cursor:copy;}
 .pl-hour{position:absolute; left:0; right:0; height:0; border-top:2px solid #1c1c1c;}
@@ -1234,7 +1539,7 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 .pl-flex:hover{border-color:var(--muted);}
 .pl-blk{position:absolute; box-sizing:border-box; cursor:pointer; overflow:hidden; touch-action:auto; user-select:none;
   left:calc(var(--g0) + (100% - var(--g0) - var(--g1)) * var(--l) / var(--n)); width:calc((100% - var(--g0) - var(--g1)) / var(--n) - 3px);
-  background:#161616; border:2px solid var(--line); border-left:4px solid var(--ac); padding:.2rem .4rem .2rem 1.6rem; font-size:.66rem; line-height:1.3;}
+  background:#141414; border:2px solid var(--line); border-left:3px solid var(--ac); padding:.2rem .4rem .2rem 1.6rem; font-size:.66rem; line-height:1.3;}
 .pl-blk:hover, .pl-blk:focus-visible{border-color:var(--fg); border-left-color:var(--ac); outline:none; z-index:3;}
 .pl-blk.drag{z-index:5; box-shadow:4px 4px 0 var(--line); opacity:.9;}
 .pl-blk.over{border-style:dashed; border-color:var(--accent); border-left:4px solid var(--ac);}
@@ -1281,13 +1586,13 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 /* week view */
 .pl-week{display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:.4rem; margin-bottom:1rem;}
 .pl-col{border:2px solid var(--line); padding:.4rem; display:flex; flex-direction:column; gap:.25rem; min-width:0; min-height:9rem;}
-.pl-col.now{border-color:var(--accent);}
+.pl-col.now{box-shadow:inset 0 0 0 2px var(--fg); border-color:var(--fg);}
 .pl-col.past{opacity:.75;}
 .pl-col.rest{background:repeating-linear-gradient(135deg, transparent 0 8px, #151515 8px 10px);}
 .pl-col.dropping{border-color:var(--fg); border-style:dashed;}
 .pl-colhead{display:flex; justify-content:space-between; align-items:baseline; gap:.3rem; background:transparent; border:none; color:var(--fg); font:inherit; padding:0 0 .2rem; cursor:pointer; text-align:left;}
 .pl-colhead b{font-size:.7rem; letter-spacing:.08em;}
-.pl-col.now .pl-colhead b{color:var(--accent);}
+
 .pl-colhead small{font-size:.56rem; color:var(--muted); white-space:nowrap;}
 .pl-colhead:hover b{text-decoration:underline;}
 .pl-col > .pl-pbar{height:6px; border-width:1px; margin-bottom:.2rem;}
@@ -1300,8 +1605,7 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 .pl-wtitle{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
 .pl-wadd{margin-top:auto; background:transparent; border:2px dashed var(--line); color:var(--muted); font:inherit; font-size:.8rem; padding:.1rem 0; cursor:pointer;}
 .pl-wadd:hover{border-color:var(--fg); color:var(--fg);}
-.pl-wactions{display:grid; grid-template-columns:auto 1fr; gap:1rem; align-items:start;}
-.pl-wactions > .pl-btn{margin-top:1.2rem;}
+.pl-wactions{display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; border-top:2px solid var(--line); padding-top:1rem; margin-bottom:1.8rem;}
 .pl-twrap{overflow-x:auto;}
 .pl-table{width:100%; border-collapse:collapse; font-size:.74rem;}
 .pl-table th{text-align:left; border-bottom:2px solid var(--fg); padding:.4rem .5rem; font-size:.58rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:400;}
@@ -1310,7 +1614,7 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 .pl-table .num{text-align:right; font-variant-numeric:tabular-nums;}
 /* focus areas */
 .pl-focus{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:.8rem;}
-.pl-fcard{border:2px solid var(--line); border-top:4px solid var(--ac); padding:.75rem .8rem; display:flex; flex-direction:column; gap:.45rem; min-width:0;}
+.pl-fcard{border:2px solid var(--line); border-left:3px solid var(--ac); padding:.75rem .8rem; display:flex; flex-direction:column; gap:.45rem; min-width:0;}
 .pl-fcard .pl-shead{margin-bottom:0;}
 .pl-fprog b{font-size:1.15rem; font-variant-numeric:tabular-nums;}
 .pl-fprog small{color:var(--muted); font-size:.62rem;}
@@ -1320,35 +1624,72 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 .pl-arows{display:flex; flex-direction:column; gap:.35rem; max-width:34rem;}
 .pl-arow{display:grid; grid-template-columns:auto minmax(0, 1fr) 5.5rem 9.5rem; gap:.4rem; align-items:center;}
 .pl-num{text-align:right;}
-.pl-srow{display:grid; grid-template-columns:repeat(3, minmax(0, 11rem)); gap:.6rem;}
+.pl-srow{display:grid; grid-template-columns:repeat(4, minmax(0, 11rem)); gap:.6rem;}
 .pl-rrow{display:flex; align-items:center; gap:.5rem; border-bottom:2px solid var(--line); padding:.3rem 0; font-size:.72rem; max-width:40rem;}
 .pl-rrow > .pl-in{flex:1 1 auto; width:auto; padding:.3rem .45rem;}
 .pl-rtitle{flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .pl-rrow small{flex:1 1 auto; color:var(--muted); font-size:.6rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .pl-sec > .pl-btn{margin-top:.6rem;}
 .pl-streak{color:var(--accent); font-weight:700;}
+/* quick log + timer */
+.pl-quick{margin-bottom:1rem;}
+.pl-quick .pl-qrow > .pl-in{flex:1 1 14rem;}
+.pl-qin{font-size:.85rem; padding:.6rem .7rem; border-color:var(--fg);}
+.pl-qprev{min-height:1.2em; margin-top:.4rem; font-size:.66rem; color:var(--muted); line-height:1.5;}
+.pl-qprev b{color:var(--fg);}
+.pl-timer{display:flex; align-items:center; gap:.4rem .8rem; flex-wrap:wrap; border:2px solid var(--accent); padding:.5rem .7rem; margin-bottom:.5rem;}
+.pl-tdot{display:inline-block; width:10px; height:10px; background:var(--accent);}
+.pl-tclock{font-size:1.25rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:.04em;}
+.pl-tttl{flex:1 1 10rem; min-width:0; font-size:.74rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.pl-nextwrap{display:inline-flex; align-items:center; gap:.4rem;}
+.pl-modes{margin:0;}
+.pl-bmeta:empty, .pl-task small:empty{display:none;}
+.pl-atime{flex:0 0 auto; min-width:5.7rem; font-size:.62rem; color:var(--muted); font-variant-numeric:tabular-nums;}
+.pl-task.now{border-color:var(--accent); border-left-color:var(--ac);}
+.pl-task.over{border-style:dashed; border-color:var(--accent); border-left:4px solid var(--ac);}
+.pl-task.flex{background:repeating-linear-gradient(45deg, transparent 0 6px, #1b1b1b 6px 8px); color:var(--muted);}
+.pl-nochk{border-color:transparent;}
+.pl-allday{display:flex; align-items:baseline; gap:.7rem; border:2px solid var(--fg); border-left:3px solid var(--ac); padding:.45rem .6rem; margin-bottom:.4rem; cursor:pointer; font-size:.78rem; min-width:0;}
+.pl-allday:hover{border-color:var(--accent); border-left-color:var(--ac);}
+.pl-adlab{flex:0 0 auto; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted);}
+.pl-adt{flex:1 1 auto; font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.pl-allday small{color:var(--muted); font-size:.62rem; white-space:nowrap;}
+.pl-wi.allday{background:transparent; border:1px solid var(--fg); border-left:3px solid var(--ac);}
+.pl-wi.allday .pl-wtime{text-transform:uppercase; letter-spacing:.06em; font-size:.5rem;}
+.pl-dhead .pl-planlink{margin-left:auto;}
+.pl-dhead .pl-planlink + .pl-link{margin-left:0;}
+.pl-planbox{border:2px solid var(--fg); padding:.7rem; margin-bottom:1rem; display:flex; flex-direction:column; gap:.6rem;}
+.pl-plan{font-size:.8rem; line-height:1.6; min-height:9rem;}
+.pl-planprev{display:flex; flex-direction:column; gap:.25rem;}
+.pl-planprev:empty{display:none;}
+.pl-pprow{display:flex; align-items:center; gap:.5rem; border-left:3px solid var(--ac); padding:.2rem .5rem; font-size:.72rem; background:#141414;}
+.pl-pprow small{margin-left:auto; color:var(--muted); font-size:.6rem; white-space:nowrap;}
+.pl-pprow.over{outline:2px dashed var(--accent); outline-offset:-2px;}
+.pl-pprow.over small{color:var(--accent);}
+.pl-frow .pl-hint{align-self:center; margin:0 0 0 .4rem;}
+.pl-check{flex-direction:row !important; align-items:center; gap:.4rem !important; align-self:end; padding-bottom:.55rem; cursor:pointer;}
+.pl-check input{accent-color:var(--accent); width:14px; height:14px; margin:0;}
+.pl-btn:disabled{opacity:.4; cursor:default;}
 @media (max-width:1100px){
-  .pl-tiles{grid-template-columns:repeat(3, minmax(0, 1fr));}
   .pl-day{grid-template-columns:minmax(0, 1fr);}
   .pl-week{grid-template-columns:repeat(4, minmax(0, 1fr));}
 }
 @media (max-width:640px){
-  .pl-dash{padding:.55rem;}
-  .pl-tiles{grid-template-columns:repeat(2, minmax(0, 1fr));}
-  .pl-tval{font-size:.95rem;}
-  .pl-legend .pl-lmuted{margin-left:0;}
+  .pl-wk{gap:.25rem;}
+  .pl-wkc{height:2.8rem; font-size:.6rem;}
+  .pl-stats{flex-direction:column; align-items:flex-start; gap:.4rem;}
   .pl-fgrid{grid-template-columns:repeat(2, minmax(0, 1fr));}
   .pl-navlabel{min-width:0; font-size:.85rem;}
   .pl-week{grid-template-columns:minmax(0, 1fr);}
   .pl-col{min-height:0;}
   .pl-wi{font-size:.7rem; padding:.35rem .4rem;}
   .pl-focus{grid-template-columns:minmax(0, 1fr);}
-  .pl-wactions{grid-template-columns:minmax(0, 1fr);}
-  .pl-wactions > .pl-btn{margin-top:0;}
   .pl-arow{grid-template-columns:auto minmax(0, 1fr) 4.5rem; }
   .pl-arow select{grid-column:2 / -1;}
   .pl-srow{grid-template-columns:repeat(2, minmax(0, 1fr));}
   .pl-grid{--g0:2.9rem; --g1:.9rem;}
+  .pl-agenda .pl-task small{display:none;}
+  .pl-atime{min-width:5.2rem;}
 }
 `;
 var style = document.createElement("style");
@@ -1362,5 +1703,5 @@ function show(pageId, date){
 }
 window.Planner = { normalize:normalize, fresh:fresh, mount:mount, countDays:countDays, daySummary:daySummary, show:show,
   // exposed for tests
-  _test:{ addDays:addDays, monday:monday, wd:wd, parseHm:parseHm } };
+  _test:{ addDays:addDays, monday:monday, wd:wd, parseHm:parseHm, parseQuick:parseQuick } };
 })();

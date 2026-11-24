@@ -183,19 +183,39 @@ linked from anywhere.
     an `input` event (`window.event`), so clicks and form submits are always
     their own step.
 - Command Center pages (`planner.js`): a day and week planner around four
-  focus areas (work, gym, cwes study, side hustle) plus personal, under a
-  compact dashboard (today's progress, gym/study/side hustle against weekly
-  targets, the week's planned hours by area, what's next). Tabs: day, week,
-  focus areas, settings. `planner` is `{ v:1, areas, settings, acts, rules,
-  streak, reflect, reviews, rest, templates }`.
+  focus areas (work, gym, cwes study, side hustle) plus personal. Its header
+  is the tracker's own (it reuses the global `.stats`, `.count`, `.bar` and
+  `.cell` classes): today's `done / total`, gym/cwes/side against weekly
+  targets and the streak inline, a red bar, the week as seven boxes that
+  fill red once a day is done, and what's next. Keep it that plain: one
+  red accent for progress and done, area colors only as a thin left edge,
+  no tiles, legends or explanatory copy. Rows show only time, title,
+  priority and due date; area, type and "repeats" live in the tooltip
+  (`tip()`), and week columns leave out flex windows. One toolbar row holds
+  the day/week nav, the tabs (day, week, areas, settings) and `+ add`. `planner` is `{ v:1, areas, settings, acts, rules,
+  streak, timer, reflect, reviews, rest, templates }`.
   - Dates are local `YYYY-MM-DD` strings and times are minutes from
     midnight (`start`/`end`, both null for a task with no time), so nothing
-    shifts with timezones. Weeks start on Monday.
+    shifts with timezones. The week starts on the day picked in settings
+    (`settings.weekStart`, 0 = Monday to 6 = Sunday, via `wkStart()`); it
+    decides the week view, the dashboard boxes, weekly targets and the
+    scorecard. Rule `days` and week templates stay indexed Monday first,
+    so they keep their weekdays whatever the start.
   - An activity (`acts`) is `{ id, date, done, createdAt, title, area, sub,
     start, end, prio (0..3), notes, due? }`. `sub` is the type within the
     area (work: core, meeting, flex; cwes: theory, lab, revision; side:
     idea, build, research, marketing, monetize; gym: strength, cardio,
     mobility).
+  - All-day items (`allDay: true`, no times, optionally `to`: a last date
+    up to 60 days on, e.g. a trip) sit as a bar above the day and on top of
+    each week column. Like flex windows they are context, not tasks
+    (`notTask()`): no checkbox, never counted as done, overdue or for the
+    streak. Dragging one in the week view moves both ends.
+  - "plan day" (day view) opens a box for planning a whole day at once: one
+    line per activity, read by `parseQuick()` in plan mode (never marked
+    done unless the line says `done`; a bare length like `cwes 2h` starts
+    where the line before it ended), previewed with clashes in red, added in
+    one save so one Ctrl+Z removes the whole plan.
   - Work `flex` blocks are windows "if work allows": drawn hatched behind
     other blocks, never counted as work, as done or as a task, and study or
     side hustle blocks can sit inside them. Work inside work (a meeting
@@ -211,9 +231,24 @@ linked from anywhere.
   - Actual numbers count only ticked work: hours from finished timed blocks,
     gym as days with a finished session. Filling the calendar earns nothing.
     A target of 0 means none.
-  - Day view: tasks without a time, a 15 minute snapping timeline (drag a
+  - Quick log: one line on every tab (`parseQuick()`, no AI) turns text
+    like `gym 1h`, `cwes lab 18:00-19:30 sqli`, `side 45m landing page`,
+    `6-7pm` (1 to 6 without am/pm read as pm) or `email boss` into an
+    activity, with a live preview of what will be saved. Area keys (work,
+    gym, cwes, side, personal, an area's own name) leave the title; hint
+    words (study, run, client...) pick the area but stay in it. A length
+    alone means "just did it" (done, ending now); a range that has started
+    is a log, a future one a plan, no time a task; `done`/`plan` force it.
+    Logging something done ticks an unticked planned block of the same
+    area that day (`matchPlanned()`: overlapping when a time was typed)
+    instead of adding a copy, so the streak still counts.
+  - Timer: `▶ timer` starts `planner.timer` (`{ title, area, sub, at }`, so
+    it survives a refresh and syncs); `stop & log` saves the real minutes
+    through the same matching, `discard` takes two clicks.
+  - Day view: a timeline or list toggle (`settings.dayMode`), tasks without
+    a time, a 15 minute snapping timeline (drag a
     block to move it, its bottom edge to resize; on touch only the `≡` grip
-    and the edge drag), warnings (over `maxHours`, overlaps), free time,
+    and the edge drag; times typed in the form can be any minute), warnings (over `maxHours`, overlaps), free time,
     overdue one-offs (move to today), deadlines in the next 7 days, carry
     unfinished to tomorrow (two clicks), day templates and an optional
     daily reflection. Week view: 7 columns (drag between days), rest days,
