@@ -10,8 +10,9 @@ linked from anywhere.
 
 - `index.html` is the site: a static page with inline CSS and JS, no
   framework, no Jekyll layout. The Finance page type lives in `finance.js`
-  (loaded by a plain script tag before the app; bump its `?v=` when it
-  changes so browsers don't keep an old copy). It works like a small Notion: a
+  and the Command Center (planner) in `planner.js`, each loaded by a plain
+  script tag before the app; bump its `?v=` when it changes so browsers
+  don't keep an old copy. It works like a small Notion: a
   left sidebar lists pages, the first being the home tracker, and
   `+ new page` adds either a document page or a day tracker of any length
   (presets 7 to 365, or a custom number up to 1000). A tracker is a grid of
@@ -116,8 +117,13 @@ linked from anywhere.
   items }` plus either document fields (`kind:"doc"`, `title`, `label` (the
   subtitle under the title, same style as a tracker's), `blocks`, using the
   same block editor and slash menu as notes) or the tracker fields
-  above (`kind:"tracker"`), or `kind:"finance"` with a `finance` object.
+  above (`kind:"tracker"`), or `kind:"finance"` with a `finance` object, or
+  `kind:"planner"` with a `planner` object.
   Pages saved before trackers existed have no `kind` and load as documents.
+  A page whose kind this copy can't read (an older copy of the site, or its
+  script failed to load) is kept exactly as saved and shows a "refresh"
+  notice; it must never be turned into a document, or the next save would
+  wipe its data.
   The open page lives in the URL hash (`#p/<id>`, none for home) so back and
   forward work; `cur()` returns the open page (the state object for home) and
   `renderPage()` shows `#homeView` (any tracker) or `#docView`, calls
@@ -176,6 +182,56 @@ linked from anywhere.
     cover finance too. Undo groups typing only when the save happens inside
     an `input` event (`window.event`), so clicks and form submits are always
     their own step.
+- Command Center pages (`planner.js`): a day and week planner around four
+  focus areas (work, gym, cwes study, side hustle) plus personal, under a
+  compact dashboard (today's progress, gym/study/side hustle against weekly
+  targets, the week's planned hours by area, what's next). Tabs: day, week,
+  focus areas, settings. `planner` is `{ v:1, areas, settings, acts, rules,
+  streak, reflect, reviews, rest, templates }`.
+  - Dates are local `YYYY-MM-DD` strings and times are minutes from
+    midnight (`start`/`end`, both null for a task with no time), so nothing
+    shifts with timezones. Weeks start on Monday.
+  - An activity (`acts`) is `{ id, date, done, createdAt, title, area, sub,
+    start, end, prio (0..3), notes, due? }`. `sub` is the type within the
+    area (work: core, meeting, flex; cwes: theory, lab, revision; side:
+    idea, build, research, marketing, monetize; gym: strength, cardio,
+    mobility).
+  - Work `flex` blocks are windows "if work allows": drawn hatched behind
+    other blocks, never counted as work, as done or as a task, and study or
+    side hustle blocks can sit inside them. Work inside work (a meeting
+    during core work) is not an overlap; any other overlap is flagged.
+  - Repeating activities are stored once in `rules` (`days` is 7 booleans
+    from Monday, `from`, optional `until`, `skip` dates) and expanded when
+    drawn. Ticking, moving or editing one occurrence saves an activity with
+    `ruleId` + `ruleDate` (an override), so finished history never changes
+    when the series is edited. "This day only" edits make an override;
+    deleting one day adds a `skip`; "delete series from here" sets `until`
+    and drops unfinished overrides after it; deleting a rule keeps ticked
+    days. `normalize()` drops duplicate ids and duplicate overrides.
+  - Actual numbers count only ticked work: hours from finished timed blocks,
+    gym as days with a finished session. Filling the calendar earns nothing.
+    A target of 0 means none.
+  - Day view: tasks without a time, a 15 minute snapping timeline (drag a
+    block to move it, its bottom edge to resize; on touch only the `≡` grip
+    and the edge drag), warnings (over `maxHours`, overlaps), free time,
+    overdue one-offs (move to today), deadlines in the next 7 days, carry
+    unfinished to tomorrow (two clicks), day templates and an optional
+    daily reflection. Week view: 7 columns (drag between days), rest days,
+    copy last week's one-off activities (skips ones already there), week
+    templates, the weekly scorecard and an optional weekly review.
+  - `streak` is `{ page, rule, pct }`: `page` is "home" or a tracker page id.
+    On every planner save index.html's `linkStreaks()` ticks that tracker's
+    box for each day up to today that counts (`Planner.countDays`: something
+    was planned and everything, or `pct`%, of it is done; flex excluded),
+    in the same save so undo and sync treat it as one change. It never
+    unticks a box. Linking gives a tracker without a start date today's
+    date. The tracker's status line says "kept by <page>" and its Day card
+    shows `Planner.daySummary()` with an "open in planner" link
+    (`Planner.show()`).
+  - index.html calls `Planner.normalize()` when loading, `Planner.fresh()` for
+    a new page and `Planner.mount({ root, page, save, trackers, streakOf })`
+    from `renderPage()`; like finance, everything saves through the app's
+    `save()`.
 - Icons: every page can have an icon, `{ emoji }` or `{ src }` (a picture
   shrunk to 256px), plus `bw: true` for black and white (a grayscale filter
   on the page icon and the sidebar; a new icon keeps the setting), picked

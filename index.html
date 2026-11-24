@@ -125,6 +125,9 @@
   .card-hint{margin:-.3rem 0 .4rem; font-size:.62rem; letter-spacing:.1em;
     text-transform:uppercase; color:var(--line);}
   .card-date{color:var(--muted);}
+  .card-plan{color:var(--muted); display:flex; gap:.6rem; align-items:baseline; flex-wrap:wrap;}
+  .card-plan button{background:transparent; border:none; padding:0; font:inherit; color:var(--muted); text-decoration:underline; cursor:pointer;}
+  .card-plan button:hover{color:var(--accent);}
   .ttl-input{
     flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none;
     font:inherit; font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
@@ -383,6 +386,7 @@
   .np-doc:hover{border-color:var(--accent);}
   .np-doc b{display:block; font-size:.75rem; letter-spacing:.06em;}
   .np-doc small{color:var(--muted); font-size:.6rem; letter-spacing:.06em;}
+  .kind-missing{border:2px solid var(--accent); padding:1rem; font-size:.8rem; color:var(--accent);}
   .np-head{margin:.6rem 0 .35rem; font-size:.62rem; letter-spacing:.14em;
     text-transform:uppercase; color:var(--muted);}
   .np-presets{display:grid; grid-template-columns:repeat(4, 1fr); gap:4px;}
@@ -590,12 +594,14 @@
       <div class="doc-tail" id="docTail"></div>
     </div>
     <div class="fin" id="finView" hidden></div>
+    <div class="pl" id="plView" hidden></div>
   </div>
   </div>
   </div>
 
-<!-- the Finance page type lives in its own file (see finance.js) -->
+<!-- the Finance and Command Center page types live in their own files -->
 <script src="finance.js?v=2"></script>
+<script src="planner.js?v=1"></script>
 <script>
 // ---------- storage ----------
 // Everything is saved to IndexedDB, which has room for photos and covers
@@ -772,6 +778,15 @@ function app(BOOT){
       }else if(p.kind === "finance" && window.Finance){
         o = normFont({ kind:"finance", title:String(p.title || ""), label:String(p.label || "") }, p);
         o.finance = Finance.normalize(p.finance);
+      }else if(p.kind === "planner" && window.Planner){
+        o = normFont({ kind:"planner", title:String(p.title || ""), label:String(p.label || "") }, p);
+        o.planner = Planner.normalize(p.planner);
+      }else if(p.kind && p.kind !== "doc"){
+        // a page type this copy can't read (an older copy of the site, or its
+        // script failed to load): keep it exactly as saved instead of turning
+        // it into an empty document that the next save would write over
+        o = JSON.parse(JSON.stringify(p));
+        o.title = String(p.title || ""); o.label = String(p.label || "");
       }else{
         o = normFont({ kind:"doc", title:String(p.title || ""), label:String(p.label || ""),
               blocks:normBlocks(p.blocks) || [mkBlock("text","",false)] }, p);
@@ -1039,6 +1054,8 @@ function app(BOOT){
     }else{
       statusEl.appendChild(document.createTextNode(t < T.n ? "on track" : "perfect run"));
     }
+    var pl = plannerFor(T);
+    if(pl) statusEl.appendChild(document.createTextNode(" · kept by " + (pl.title || "command center")));
   }
   function dayHasContent(idx){
     var a = T.dayNotes[idx];
@@ -1384,7 +1401,7 @@ function app(BOOT){
   }
 
   // ---------- Day card ----------
-  var dayCk, dayTitle, dayDate, dayProg, dayList, dayOpts, dayBlocks;
+  var dayCk, dayTitle, dayDate, dayPlan, dayProg, dayList, dayOpts, dayBlocks;
   function navBtn(text, label, step){
     var b = document.createElement("button");
     b.type = "button"; b.className = "nav"; b.textContent = text;
@@ -1412,6 +1429,9 @@ function app(BOOT){
     dayDate = document.createElement("p");
     dayDate.className = "card-hint card-date";
     panel.appendChild(dayDate);
+    dayPlan = document.createElement("p");
+    dayPlan.className = "card-hint card-plan";
+    panel.appendChild(dayPlan);
 
     dayOpts = {
       listEl:null,
@@ -1447,6 +1467,18 @@ function app(BOOT){
     dayTitle.classList.toggle("done", on);
     var p = todoProgress(dayBlocks || []);
     dayProg.textContent = p.total ? p.done + "/" + p.total : "";
+    // a linked Command Center: what was planned and done that day
+    dayPlan.innerHTML = "";
+    var pl = plannerFor(T);
+    dayPlan.hidden = !(pl && d);
+    if(pl && d){
+      var date = iso(d), line = Planner.daySummary(pl.planner, date);
+      dayPlan.appendChild(document.createTextNode("planner: " + (line || "nothing planned")));
+      var open = document.createElement("button");
+      open.type = "button"; open.textContent = "open in planner";
+      open.addEventListener("click", function(){ Planner.show(pl.id, date); go(pl.id); });
+      dayPlan.appendChild(open);
+    }
   }
   function refreshDayBody(){
     dayBlocks = blocksFor(sel);
@@ -1692,6 +1724,7 @@ function app(BOOT){
   // ---------- start date ----------
   startEl.addEventListener("change", function(){
     T.start = parseDate(startEl.value) ? startEl.value : "";
+    linkStreaks(); startEl.value = T.start;
     save(); renderGrid(); refreshDayHead();
   });
 
@@ -1756,6 +1789,7 @@ function app(BOOT){
   var homeHead = document.getElementById("homeHead");
   var docView  = document.getElementById("docView");
   var finView  = document.getElementById("finView");
+  var plView   = document.getElementById("plView");
   var docTitle = document.getElementById("docTitle");
   var docBody  = document.getElementById("docBody");
   var docTail  = document.getElementById("docTail");
@@ -1764,6 +1798,47 @@ function app(BOOT){
   var addIcon  = document.getElementById("addIcon");
 
   function pageById(id){ return state.pages.filter(function(p){ return p.id === id; })[0] || null; }
+
+  // ---- a Command Center page can keep one tracker's streak ----
+  // planner.streak.page is "home" or a tracker page id. Every planner save
+  // ticks that tracker's box for each day that counts (never unticks), in the
+  // same save, so undo and sync treat it as one change.
+  function trackerKey(t){ return t === state ? "home" : t.id; }
+  function trackerByKey(k){
+    if(k === "home") return state;
+    var p = pageById(k);
+    return p && p.kind === "tracker" ? p : null;
+  }
+  function trackerList(){
+    return [state].concat(state.pages.filter(function(p){ return p.kind === "tracker"; }))
+      .map(function(t){ return { id:trackerKey(t), title:t.title }; });
+  }
+  function plannerFor(t){
+    if(!window.Planner) return null;
+    var k = trackerKey(t);
+    return state.pages.filter(function(p){ return p.kind === "planner" && p.planner && p.planner.streak && p.planner.streak.page === k; })[0] || null;
+  }
+  function linkStreaks(){
+    if(!window.Planner) return;
+    state.pages.forEach(function(p){
+      if(p.kind !== "planner" || !p.planner || !p.planner.streak || !p.planner.streak.page) return;
+      var t = trackerByKey(p.planner.streak.page);
+      if(!t) return;
+      if(!parseDate(t.start)) t.start = iso(todayDate());     // a linked streak needs dated boxes
+      var s = parseDate(t.start), dates = [];
+      var upto = Math.min(Math.round((todayDate() - s) / 86400000), t.n - 1);
+      for(var i = 0; i <= upto; i++) dates.push(iso(new Date(s.getFullYear(), s.getMonth(), s.getDate() + i)));
+      Planner.countDays(p.planner, dates).forEach(function(c, i){ if(c && !t.days[i]) t.days[i] = true; });
+    });
+  }
+  function streakOf(k){
+    var t = trackerByKey(k);
+    if(!t) return null;
+    var keep = T; T = t;                  // streaks() reads the tracker on screen
+    var r = streaks();
+    T = keep;
+    return { title:t.title || "untitled", cur:r.cur, best:r.best };
+  }
   function cur(){
     var m = /^#p\/(.+)$/.exec(location.hash);
     return (m && pageById(decodeURIComponent(m[1]))) || state;
@@ -1890,7 +1965,7 @@ function app(BOOT){
       row.setAttribute("role","link"); row.tabIndex = 0;
       var ico = document.createElement("span");
       ico.className = "sb-ico";
-      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : "·";
+      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : p.kind === "planner" ? "▦" : "·";
       var name = p.title || "";
       var t = document.createElement("span");
       t.className = "sb-title" + (name ? "" : " empty");
@@ -1936,6 +2011,10 @@ function app(BOOT){
     addNewPage({ kind:"finance", id:uid(), title:"money", label:"", icon:null, cover:null,
                  items:[], finance:Finance.fresh() });
   }
+  function newPlanner(){
+    addNewPage({ kind:"planner", id:uid(), title:"command center", label:"", icon:null, cover:null,
+                 items:[], planner:Planner.fresh() });
+  }
   function newDoc(){
     addNewPage({ kind:"doc", id:uid(), title:"", label:"", icon:null, cover:null,
                  blocks:[mkBlock("text","",false)], items:[] });
@@ -1961,6 +2040,13 @@ function app(BOOT){
       fin.innerHTML = "<b>finance</b><small>income, expenses, monthly overview</small>";
       fin.addEventListener("click", newFinance);
       pop.appendChild(fin);
+    }
+    if(window.Planner){
+      var pln = document.createElement("button");
+      pln.type = "button"; pln.className = "np-doc";
+      pln.innerHTML = "<b>command center</b><small>day and week planner, focus areas, review</small>";
+      pln.addEventListener("click", newPlanner);
+      pop.appendChild(pln);
     }
     var head = document.createElement("div");
     head.className = "np-head"; head.textContent = "day tracker";
@@ -2077,16 +2163,34 @@ function app(BOOT){
   function renderPage(){
     var p = cur(), tk = isTracker(p);
     slashClose(); closeIconPop(); closePageMenu(); closeNewPop();
-    var fin = p.kind === "finance";
+    // finance, planner, or a kind this copy can't read: none of them are documents
+    var special = !tk && !!p.kind && p.kind !== "doc";
+    var fin = special && p.kind === "finance" && !!window.Finance;
+    var pl = special && !fin;
     homeView.hidden = !tk; homeHead.hidden = !tk;
-    docView.hidden = tk || fin; docHead.hidden = tk; finView.hidden = !fin;
-    if(tk){ if(T !== p) loadTracker(p); }
+    docView.hidden = tk || special; docHead.hidden = tk; finView.hidden = !fin; plView.hidden = !pl;
+    if(tk){
+      if(T !== p) loadTracker(p);
+      else{ startEl.value = T.start; renderGrid(); refreshDayHead(); }
+    }
     else{
       docTitle.value = p.title; docSub.value = p.label || "";
+      if(special) applyFont(docHead, p, true);
       if(fin){ finView.innerHTML = ""; Finance.mount({ root:finView, page:p, save:save }); }
+      else if(pl){
+        plView.innerHTML = "";
+        if(p.kind === "planner" && window.Planner) Planner.mount({ root:plView, page:p,
+          save:function(){ linkStreaks(); return save(); }, trackers:trackerList, streakOf:streakOf });
+        else{
+          var msg = document.createElement("p");
+          msg.className = "kind-missing";
+          msg.textContent = "this page's code didn't load, so it is kept exactly as saved. refresh the page to open it.";
+          plView.appendChild(msg);
+        }
+      }
       else{ buildDoc(p); paintDocFont(); }
     }
-    docFontBtn.hidden = tk || fin; closeFontPop();
+    docFontBtn.hidden = tk || special; closeFontPop();
     renderCover(); renderIcon(); renderItems(); renderSidebar(); paintSub();
     document.title = p.title || "untitled";
     window.scrollTo(0, 0);
