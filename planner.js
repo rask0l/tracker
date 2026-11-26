@@ -37,6 +37,7 @@ var DAYNAME = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday
 var MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 var PRIO = ["", "!", "!!", "!!!"];
 var PRIO_NAME = ["none", "low", "medium", "high"];
+var DAWN = 240;         // 4:00: a block starting after midnight but before this is late night, not early
 var PX = 0.8;          // day grid: px per minute (48px an hour)
 var SNAP = 15;         // drag and resize snap, minutes
 var REFLECT = [["did", "what did I accomplish today?"], ["missed", "what did I fail to complete?"],
@@ -74,6 +75,8 @@ function dayLabel(s){
     (s.slice(0, 4) !== today().slice(0, 4) ? " " + s.slice(0, 4) : "");
 }
 function short(s){ return +s.slice(8, 10) + " " + MON[+s.slice(5, 7) - 1]; }
+// "45m", "2h", "4h 45m": exact, for planned time
+function hm2(min){ min = Math.round(min); var h0 = Math.floor(min / 60), m0 = min % 60; return h0 ? h0 + "h" + (m0 ? " " + m0 + "m" : "") : m0 ? m0 + "m" : "0h"; }
 function hrs(min){ var x = Math.round(min / 6) / 10; return (x % 1 ? x.toFixed(1) : String(x)) + "h"; }
 function num(x){ x = Math.round(x * 10) / 10; return x % 1 ? x.toFixed(1) : String(x); }
 function mins(it){ return it.start == null ? 0 : it.end - it.start; }
@@ -210,13 +213,19 @@ function normGame(gIn){
   o.claims = arr(g.claims).filter(function(c){ return c && typeof c.name === "string" && okCost(c.cost) && isDate(c.date); })
     .slice(-500).map(function(c){ return { id:str(c.id || rid(), 40), name:str(c.name, 60), cost:c.cost, date:c.date }; });
   Object.keys(obj(g.seen)).forEach(function(k){ if(/^[a-z0-9_]{1,30}$/.test(k) && isDate(g.seen[k])) o.seen[k] = g.seen[k]; });
-  Object.keys(obj(g.quests)).filter(isDate).sort().slice(-60).forEach(function(d){
+  // every day's picks are kept: past quest XP is worked out from them, so trimming would take XP away
+  Object.keys(obj(g.quests)).filter(isDate).sort().slice(-3000).forEach(function(d){
     if(Array.isArray(g.quests[d])) o.quests[d] = g.quests[d].filter(function(q){ return typeof q === "string" && /^[a-z0-9_.:]{1,48}$/.test(q); }).slice(0, 3);
   });
   // weekly quests, by the week's first day
   o.wquests = {};
-  Object.keys(obj(g.wquests)).filter(isDate).sort().slice(-30).forEach(function(d){
+  Object.keys(obj(g.wquests)).filter(isDate).sort().slice(-500).forEach(function(d){
     if(Array.isArray(g.wquests[d])) o.wquests[d] = g.wquests[d].filter(function(q){ return typeof q === "string" && /^[a-z0-9_.:]{1,48}$/.test(q); }).slice(0, 3);
+  });
+  // quests that more work could undo ("clear the day") stay won once won: { date:[ids] }
+  o.qwon = {};
+  Object.keys(obj(g.qwon)).filter(isDate).sort().slice(-3000).forEach(function(d){
+    if(Array.isArray(g.qwon[d])) o.qwon[d] = g.qwon[d].filter(function(q){ return typeof q === "string" && /^[a-z0-9_.:]{1,48}$/.test(q); }).slice(0, 6);
   });
   return o;
 }
@@ -451,6 +460,47 @@ var uiState = {};     // view state per page id; survives redraws and undo
 var timerTick = null; // the running timer's 1s repaint
 var nowTick = null;   // the NOW panel's countdown, refreshed every 30s
 var activePl = null;  // the planner on screen gets the single-key shortcuts
+// the quests last drawn while today's weren't saved yet: the first change saves exactly these,
+// so making a change never swaps the quests you were looking at
+var SHOWN = { date:"", sig:"", daily:null, mon:"", weekly:null };
+function noteShown(G){
+  if(!G || !G.todayQ) return;
+  var ids = function(l){ return l.map(function(q){ return q.id; }); };
+  SHOWN = { date:today(), sig:G.qSig || "", daily:G.qFresh && G.qFresh.daily && G.todayQ.length ? ids(G.todayQ) : null,
+    mon:G.thisMon || "", weekly:G.qFresh && G.qFresh.weekly && G.weekQ.length ? ids(G.weekQ) : null };
+}
+// save today's and this week's picks into the game record, and remember kept wins.
+// Returns { picks, any }: picks = the saved quest ids changed (scores must be redone)
+function lockQuests(g, G){
+  var r = { picks:false, any:false };
+  if(!g || !G || !G.todayQ) return r;
+  var t = today(), same = SHOWN.date === t && SHOWN.sig === (G.qSig || "");
+  if(!g.quests) g.quests = {};
+  if(!g.wquests) g.wquests = {};
+  if(!g.qwon) g.qwon = {};
+  if(!g.quests[t] || (G.qFresh && G.qFresh.daily)){
+    var ids = same && SHOWN.daily ? SHOWN.daily : G.todayQ.map(function(q){ return q.id; });
+    if(ids.length && String(g.quests[t] || "") !== String(ids)){ g.quests[t] = ids.slice(); r.picks = r.any = true; }
+  }
+  var wm = G.thisMon;
+  if(wm && (!g.wquests[wm] || (G.qFresh && G.qFresh.weekly)) && G.weekQ.length){
+    var w = same && SHOWN.mon === wm && SHOWN.weekly ? SHOWN.weekly : G.weekQ.map(function(q){ return q.id; });
+    if(String(g.wquests[wm] || "") !== String(w)){ g.wquests[wm] = w.slice(); r.picks = r.any = true; }
+  }
+  if(!r.picks) G.todayQ.forEach(function(q){
+    if(!q.keep || !q.live) return;
+    var l = g.qwon[t] || (g.qwon[t] = []);
+    if(l.indexOf(q.id) < 0){ l.push(q.id); r.any = true; }
+  });
+  return r;
+}
+// does the game record still need today's picks (or a kept win) saved? cheap, no scoring
+function needsLock(g){
+  if(!g || g.off) return false;
+  var t = today(), ids = (g.quests || {})[t];
+  if(!ids) return true;
+  return ids.some(function(id){ return /^(clear|e_bigday|[de]:clear:day|[de]:prio:all)$/.test(id) && !((g.qwon || {})[t] || []).some(function(x){ return x === id; }); });
+}
 document.addEventListener("keydown", function(e){
   if(!activePl || !activePl.root.isConnected || activePl.root.offsetParent === null) return;
   if(e.ctrlKey || e.metaKey || e.altKey) return;
@@ -837,7 +887,7 @@ function mount(ctx){
     side60:{ label:"1h on the side hustle", ok:function(c){ return c.planMin.side >= 60; }, done:function(c){ return c.doneMin.side >= 60; } },
     money:{ label:"30m of marketing or selling", ok:function(c){ return c.planN.side > 0; }, done:function(c){ return c.money >= 30; } },
     early:{ label:"finish something before 9:00", ok:function(c){ return c.earlyPlan; }, done:function(c){ return c.earlyDone; } },
-    clear:{ label:"clear the day", ok:function(c){ return c.total > 0; }, done:function(c){ return c.total > 0 && c.done === c.total; } },
+    clear:{ keep:true, label:"clear the day", ok:function(c){ return c.total > 0; }, done:function(c){ return c.total > 0 && c.done === c.total; } },
     prio:{ label:"finish a !!! task", ok:function(c){ return c.prio3 > 0; }, done:function(c){ return c.prio3Done > 0; } },
     refl:{ label:"write today's reflection", ok:function(){ return true; }, done:function(c){ return !!P.reflect[c.date]; } },
     plan:{ label:"plan tomorrow", ok:function(){ return true; }, done:function(c){ return (byDate[addDays(c.date, 1)] || []).length > 0; } },
@@ -847,31 +897,52 @@ function mount(ctx){
     e_deep:{ elite:true, xp:60, label:"4h of deep work (CWES + side)", ok:function(c){ return c.planMin.cwes + c.planMin.side >= 120; }, done:function(c){ return c.doneMin.cwes + c.doneMin.side >= 240; } },
     e_gymstudy:{ elite:true, xp:60, label:"gym and 1h of CWES on the same day", ok:function(c){ return c.planN.gym > 0 && c.planN.cwes > 0; }, done:function(c){ return c.doneN.gym > 0 && c.doneMin.cwes >= 60; } },
     e_early2:{ elite:true, xp:60, label:"finish 2 things before 9:00", ok:function(c){ return c.earlyPlanN >= 2; }, done:function(c){ return c.earlyDoneN >= 2; } },
-    e_bigday:{ elite:true, xp:60, label:"clear a 6h+ day", ok:function(c){ return c.planTotal >= 360; }, done:function(c){ return c.total > 0 && c.done === c.total; } },
+    e_bigday:{ keep:true, elite:true, xp:60, label:"clear a 6h+ day", ok:function(c){ return c.planTotal >= 360; }, done:function(c){ return c.total > 0 && c.done === c.total; } },
     e_money60:{ elite:true, xp:60, label:"1h of marketing or selling", ok:function(c){ return c.planN.side > 0; }, done:function(c){ return c.money >= 60; } }
   };
+  // caches tied to the current index (a new index after every change starts them fresh)
+  var memo = { ix:null, day:{}, cwes:null, early:null };
+  function fresh_(){ if(memo.ix !== ix) memo = { ix:ix, day:{}, cwes:null, early:null }; }
+  function cwesDone(){
+    fresh_();
+    if(!memo.cwes){
+      memo.cwes = {}; memo.early = {};
+      P.acts.forEach(function(a){
+        if(!a.done || a.area !== "cwes" || notTask(a)) return;
+        memo.cwes[a.date] = (memo.cwes[a.date] || 0) + mins(a);
+        if(a.start != null && a.start >= DAWN && a.start < 540) memo.early[a.date] = 1;
+      });
+    }
+    return memo.cwes;
+  }
   function dayCtx(d){
+    fresh_();
+    return memo.day[d] || (memo.day[d] = dayCtx0(d));
+  }
+  function dayCtx0(d){
     var c = { date:d, total:0, done:0, planN:{}, planMin:{}, doneN:{}, doneMin:{}, money:0, earlyPlan:false, earlyDone:false, prio3:0, prio3Done:0,
-              earlyPlanN:0, earlyDoneN:0, planTotal:0, subN:{}, subPlan:{}, topicN:{}, topicMin:{}, cwesStarts:[], maxBlock:{}, planMax:{},
-              prio2:0, prio2Done:0, long90:0, reflN:0, tomN:0, tomCwes:0 };
+              earlyPlanN:0, earlyDoneN:0, planTotal:0, subN:{}, subPlan:{}, topicN:{}, topicMin:{}, cwesStarts:[], cwesPlanStarts:[], maxBlock:{}, planMax:{},
+              prio2:0, prio2Done:0, long90:0, reflN:0, tomN:0, tomCwes:0, yCwes:0, notesN:0 };
     AREAS.forEach(function(a){ c.planN[a] = 0; c.planMin[a] = 0; c.doneN[a] = 0; c.doneMin[a] = 0; });
     itemsOn(d).forEach(function(it){
       if(notTask(it)) return;
       var m = mins(it);
       c.total++; c.planN[it.area]++; c.planMin[it.area] += m; c.planTotal += m;
-      if(it.start != null && it.start < 540){ c.earlyPlan = true; c.earlyPlanN++; if(it.done){ c.earlyDone = true; c.earlyDoneN++; } }
+      if(it.start != null && it.start >= DAWN && it.start < 540){ c.earlyPlan = true; c.earlyPlanN++; if(it.done){ c.earlyDone = true; c.earlyDoneN++; } }
       if(it.prio === 3){ c.prio3++; if(it.done) c.prio3Done++; }
       if(it.prio >= 2){ c.prio2++; if(it.done) c.prio2Done++; }
       var sk = it.area + "." + (it.sub || "");
       c.subPlan[sk] = (c.subPlan[sk] || 0) + 1;
+      if(it.area === "cwes" && it.start != null && it.start >= DAWN) c.cwesPlanStarts.push(it.start);
       c.planMax[it.area] = Math.max(c.planMax[it.area] || 0, m);
       if(it.done){
         c.done++; c.doneN[it.area]++; c.doneMin[it.area] += m; if(it.area === "side" && MONEY_SUBS.indexOf(it.sub) >= 0) c.money += m;
         c.subN[sk] = (c.subN[sk] || 0) + 1;
         c.maxBlock[it.area] = Math.max(c.maxBlock[it.area] || 0, m);
         if(it.area === "cwes"){
-          if(it.start != null) c.cwesStarts.push(it.start);
+          if(it.start != null && it.start >= DAWN) c.cwesStarts.push(it.start);
           if(m >= 90) c.long90++;
+          if((it.notes || "").trim().length >= 10) c.notesN++;
           // topic quests count blocks with the topic's word in their title or notes
           var txt = (it.title + " " + (it.notes || "")).toLowerCase();
           TOPICS.forEach(function(T){ if(txt.indexOf(T[1]) >= 0){ c.topicN[T[0]] = (c.topicN[T[0]] || 0) + 1; c.topicMin[T[0]] = (c.topicMin[T[0]] || 0) + m; } });
@@ -879,13 +950,15 @@ function mount(ctx){
       }
     });
     var refl = P.reflect[d]; c.reflN = refl ? Object.keys(refl).length : 0;
+    // finished work is always a saved activity (ticking a repeat saves it), so P.acts has all of it
+    c.yCwes = cwesDone()[addDays(d, -1)] || 0;
     var tom = byDate[addDays(d, 1)] || [];
     c.tomN = tom.length; c.tomCwes = tom.filter(function(a){ return a.area === "cwes"; }).length;
     return c;
   }
   // the week so far, for weekly quests
   function weekCtx(mon){
-    var t = today(), w = { min:{}, cwesDays:0, sub:{}, revDays:0, topicN:{}, long90:0, earlyDays:0, cwes60:0, gymDays:0, cleared:0, moneyDays:0, reflDays:0 };
+    var t = today(), w = { min:{}, cwesDays:0, sub:{}, revDays:0, topicN:{}, long90:0, earlyDays:0, cwes60:0, gymDays:0, cleared:0, moneyDays:0, reflDays:0, notesDays:0, lastCwes:0 };
     AREAS.forEach(function(a){ w.min[a] = 0; });
     for(var k = 0; k < 7; k++){
       var d = addDays(mon, k);
@@ -899,6 +972,7 @@ function mount(ctx){
       w.long90 += c.long90;
       if(c.cwesStarts.some(function(x){ return x < 540; })) w.earlyDays++;
       if(c.doneMin.cwes >= 60) w.cwes60++;
+      if(c.notesN > 0) w.notesDays++;
       if(c.doneN.gym > 0) w.gymDays++;
       if(!P.rest[d] && c.total > 0 && c.done === c.total) w.cleared++;
       if(finDays && finDays[d]) w.moneyDays++;
@@ -906,6 +980,14 @@ function mount(ctx){
     }
     var B = bossOf(mon, weekStats(mon));
     w.bossDead = B.dead; w.bossMax = B.max;
+    var cd = cwesDone();
+    for(var j = -7; j < 0; j++) w.lastCwes += cd[addDays(mon, j)] || 0;
+    // mornings you actually study: days in the last four weeks with a finished CWES block before 9:00
+    w.earlyHabit = 0;
+    for(var j2 = -28; j2 <= 6; j2++){ var dj = addDays(mon, j2); if(dj <= t && memo.early[dj]) w.earlyHabit++; }
+    // days still to come this week, today included (a week drawn mid-week never asks for more days than are left)
+    var last = addDays(mon, 6);
+    w.daysLeft = last < t ? 0 : Math.round((Date.parse(last) - Date.parse(mon > t ? mon : t)) / 864e5) + 1;
     return w;
   }
 
@@ -929,35 +1011,47 @@ function mount(ctx){
   function fmtM(m){ m = Math.round(m); return m >= 60 ? (m % 60 ? Math.round(m / 6) / 10 : m / 60) + "h" : m + "m"; }
   function pl(n, one, many){ return n === 1 ? one : n + " " + many; }
   var DT = {
-    cwesmin:{ area:"cwes", params:[30, 45, 60, 90, 120, 150, 180],
+    cwesmin:{ family:"time", area:"cwes", params:[30, 45, 60, 90, 120, 150, 180],
       make:function(p){ var m = +p; return { label:fmtM(m) + " of CWES", xp:Math.round(15 + m / 3), unit:"m",
         prog:function(c){ return [c.doneMin.cwes, m]; }, ok:function(c){ return m <= 60 || c.planMin.cwes >= m * .75; } }; } },
     cwessub:{ area:"cwes", structured:true, params:["lab.1", "theory.1", "revision.1", "lab.2", "theory.2", "lab.3"],
       tier:function(p){ return +p.split(".")[1] - 1; },
       make:function(p){ var x = p.split("."), n = +x[1]; return { label:"finish " + pl(n, "a CWES " + x[0] + " block", "CWES " + x[0] + " blocks"), xp:20 + 15 * n,
         prog:function(c){ return [c.subN["cwes." + x[0]] || 0, n]; }, ok:function(c){ return n === 1 || (c.subPlan["cwes." + x[0]] || 0) >= n; } }; } },
-    topic:{ area:"cwes", structured:true, params:topicParams(["block", "hour"]), tier:function(p){ return /hour$/.test(p) ? 2 : 1; },
+    topic:{ family:"time", area:"cwes", structured:true, params:topicParams(["block", "hour"]), tier:function(p){ return /hour$/.test(p) ? 2 : 1; },
       make:function(p){ var x = p.split("."), T = topicBy(x[0]); if(!T) return null; var hr = x[1] === "hour";
         return { label:(hr ? "1h of CWES on " : "a CWES block on ") + T[2], tip:"counts CWES blocks with “" + T[1] + "” in the title or notes", xp:hr ? 60 : 40, unit:hr ? "m" : "",
           prog:function(c){ return hr ? [c.topicMin[T[0]] || 0, 60] : [c.topicN[T[0]] || 0, 1]; } }; } },
     early:{ area:"cwes", params:[10, 9, 8, 7],
       make:function(p){ var hh = +p; return { label:"a CWES block that starts before " + pad(hh) + ":00", xp:25 + (10 - hh) * 10,
-        prog:function(c){ return [c.cwesStarts.filter(function(x){ return x < hh * 60; }).length, 1]; }, ok:function(c){ return hh >= 9 || c.planN.cwes > 0; } }; } },
-    deep:{ area:"cwes", structured:true, params:[60, 90, 120],
+        tip:"a CWES block you finish that starts between 04:00 and " + pad(hh) + ":00", late:hh * 60,
+        prog:function(c){ return [c.cwesStarts.filter(function(x){ return x < hh * 60; }).length, 1]; },
+        // only offered on days whose plan already has a morning CWES block: it never tells you when to study
+        ok:function(c){ return c.cwesPlanStarts.some(function(x){ return x < hh * 60; }); } }; } },
+    deep:{ family:"time", area:"cwes", structured:true, params:[60, 90, 120],
       make:function(p){ var m = +p; return { label:"one CWES block of " + fmtM(m) + " or longer", xp:Math.round(20 + m / 3), unit:"m",
         prog:function(c){ return [c.maxBlock.cwes || 0, m]; }, ok:function(c){ return m === 60 || (c.planMax.cwes || 0) >= m; } }; } },
-    focusmin:{ area:"cwes", params:[60, 120, 180, 240],
+    focusmin:{ family:"time", area:"cwes", params:[60, 120, 180, 240],
       make:function(p){ var m = +p; return { label:fmtM(m) + " of focused work", tip:"CWES and side hustle time both count", xp:Math.round(15 + m / 4), unit:"m",
         prog:function(c){ return [c.doneMin.cwes + c.doneMin.side, m]; }, ok:function(c){ return m <= 120 || c.planMin.cwes + c.planMin.side >= m * .75; } }; } },
+    beat:{ family:"time", area:"cwes", params:["yday"],
+      make:function(){ return { label:"beat yesterday's CWES time", tip:"more CWES time than yesterday", xp:40, unit:"m",
+        prog:function(c){ return [c.doneMin.cwes, c.yCwes + 5]; }, ok:function(c){ return c.yCwes >= 30; } }; } },
+    cwesall:{ area:"cwes", params:["all"],
+      make:function(){ return { label:"finish every CWES block you planned", xp:35,
+        prog:function(c){ return [c.doneN.cwes, c.planN.cwes]; }, ok:function(c){ return c.planN.cwes > 0; } }; } },
+    notes:{ area:"cwes", params:["one"],
+      make:function(){ return { label:"note what you learned in a CWES block", tip:"a finished CWES block with a line or more in its notes", xp:25,
+        prog:function(c){ return [c.notesN > 0 ? 1 : 0, 1]; }, ok:function(c){ return c.planN.cwes > 0; } }; } },
     things:{ area:"any", params:[3, 4, 5, 6, 8],
       make:function(p){ var n = +p; return { label:"finish " + n + " things today", xp:10 + n * 6,
         prog:function(c){ return [c.done, n]; }, ok:function(c){ return c.total >= n; } }; } },
     clear:{ area:"any", params:["day"],
-      make:function(){ return { label:"clear the day", xp:30, prog:function(c){ return [c.total > 0 && c.done === c.total ? 1 : 0, 1]; }, ok:function(c){ return c.total > 0; } }; } },
+      make:function(){ return { label:"clear the day", keep:true, xp:30, prog:function(c){ return [c.total > 0 && c.done === c.total ? 1 : 0, 1]; }, ok:function(c){ return c.total > 0; } }; } },
     gym:{ area:"gym", params:["go", "cwes30", "cwes60"],
       make:function(p){ var m = p === "go" ? 0 : +p.slice(4); return { label:m ? "gym and " + fmtM(m) + " of CWES" : "hit the gym", xp:m ? 30 + m / 2 : 30,
         prog:function(c){ return m ? [(c.doneN.gym > 0 ? 1 : 0) + (c.doneMin.cwes >= m ? 1 : 0), 2] : [c.doneN.gym > 0 ? 1 : 0, 1]; }, ok:function(c){ return c.planN.gym > 0; } }; } },
-    side:{ area:"side", params:[30, 60, 90],
+    side:{ family:"time", area:"side", params:[30, 60, 90],
       make:function(p){ var m = +p; return { label:fmtM(m) + " on the side hustle", xp:Math.round(15 + m / 3), unit:"m",
         prog:function(c){ return [c.doneMin.side, m]; }, ok:function(c){ return c.planMin.side >= m * .75; } }; } },
     money:{ area:"any", params:["log"],
@@ -969,17 +1063,17 @@ function mount(ctx){
       make:function(p){ var all = p === "all"; return { label:all ? "answer all 4 reflection questions" : "write today's reflection", xp:all ? 40 : 25,
         prog:function(c){ return [Math.min(c.reflN, all ? 4 : 1), all ? 4 : 1]; } }; } },
     prio:{ area:"any", params:["one", "all"],
-      make:function(p){ var all = p === "all"; return { label:all ? "finish every !! and !!! task" : "finish a !!! task", xp:all ? 50 : 35,
+      make:function(p){ var all = p === "all"; return { label:all ? "finish every !! and !!! task" : "finish a !!! task", keep:all, xp:all ? 50 : 35,
         prog:function(c){ return all ? [c.prio2Done, c.prio2] : [c.prio3Done > 0 ? 1 : 0, 1]; }, ok:function(c){ return all ? c.prio2 > 1 : c.prio3 > 0; } }; } }
   };
   var WT = {
-    cwesh:{ area:"cwes", params:[3, 5, 7, 10, 12, 15, 20],
+    cwesh:{ family:"wtime", area:"cwes", params:[3, 5, 7, 10, 12, 15, 20],
       make:function(p){ var n = +p; return { label:n + "h of CWES this week", xp:40 + n * 12, unit:"h", prog:function(w){ return [w.min.cwes / 60, n]; } }; } },
-    cwesdays:{ area:"cwes", params:[3, 4, 5, 6, 7],
+    cwesdays:{ family:"wdays", area:"cwes", perDay:true, params:[3, 4, 5, 6, 7],
       make:function(p){ var n = +p; return { label:"study CWES on " + n + " days", xp:40 + n * 15, prog:function(w){ return [w.cwesDays, n]; } }; } },
     labs:{ area:"cwes", structured:true, params:[2, 3, 5, 8, 10],
       make:function(p){ var n = +p; return { label:"finish " + n + " CWES labs", xp:40 + n * 15, prog:function(w){ return [w.sub["cwes.lab"] || 0, n]; } }; } },
-    rev:{ area:"cwes", structured:true, params:[2, 3, 4],
+    rev:{ perDay:true, area:"cwes", structured:true, params:[2, 3, 4],
       make:function(p){ var n = +p; return { label:"revise CWES on " + n + " days", xp:50 + n * 15, prog:function(w){ return [w.revDays, n]; } }; } },
     topicw:{ area:"cwes", structured:true, params:topicParams(["2", "3"]), tier:function(p){ return /3$/.test(p) ? 2 : 1; },
       make:function(p){ var x = p.split("."), T = topicBy(x[0]), n = +x[1]; if(!T) return null;
@@ -987,17 +1081,24 @@ function mount(ctx){
           prog:function(w){ return [w.topicN[T[0]] || 0, n]; } }; } },
     deepw:{ area:"cwes", structured:true, params:[2, 3, 5],
       make:function(p){ var n = +p; return { label:n + " CWES blocks of 90m or longer", xp:60 + n * 25, prog:function(w){ return [w.long90, n]; } }; } },
-    earlyw:{ area:"cwes", params:[2, 3, 5],
-      make:function(p){ var n = +p; return { label:"start CWES before 9:00 on " + n + " days", xp:50 + n * 20, prog:function(w){ return [w.earlyDays, n]; } }; } },
-    nozerow:{ area:"cwes", params:[3, 5, 7],
+    beatw:{ family:"wtime", area:"cwes", params:["lastweek"],
+      make:function(){ return { label:"beat last week's CWES hours", tip:"more CWES time than last week", xp:120, unit:"h",
+        prog:function(w){ return [w.min.cwes / 60, Math.floor(w.lastCwes / 6 + 1) / 10]; }, ok:function(w){ return w.lastCwes >= 120; } }; } },
+    notesw:{ perDay:true, area:"cwes", params:[3, 5],
+      make:function(p){ var n = +p; return { label:"note what you learned on " + n + " days", tip:"days with a finished CWES block that has a line or more in its notes", xp:50 + n * 15,
+        prog:function(w){ return [w.notesDays, n]; } }; } },
+    earlyw:{ area:"cwes", params:[2, 3, 5], perDay:true, lateDay:540,
+      make:function(p){ var n = +p; return { label:"start CWES before 9:00 on " + n + " days", tip:"CWES blocks you finish that start between 04:00 and 09:00", xp:50 + n * 20,
+        prog:function(w){ return [w.earlyDays, n]; }, ok:function(w){ return w.earlyHabit >= Math.min(n, 2); } }; } },
+    nozerow:{ family:"wdays", area:"cwes", perDay:true, params:[3, 5, 7],
       make:function(p){ var n = +p; return { label:"1h+ of CWES on " + n + " days", xp:60 + n * 20, prog:function(w){ return [w.cwes60, n]; } }; } },
-    gymw:{ area:"gym", params:[2, 3, 4, 5],
+    gymw:{ perDay:true, area:"gym", params:[2, 3, 4, 5],
       make:function(p){ var n = +p; return { label:n + " gym sessions", xp:40 + n * 20, prog:function(w){ return [w.gymDays, n]; } }; } },
-    clearw:{ area:"any", params:[3, 4, 5, 6, 7],
+    clearw:{ perDay:true, area:"any", params:[3, 4, 5, 6, 7],
       make:function(p){ var n = +p; return { label:"clear " + n + " days", xp:40 + n * 20, prog:function(w){ return [w.cleared, n]; } }; } },
-    moneyw:{ area:"any", params:[5, 7],
+    moneyw:{ perDay:true, area:"any", params:[5, 7],
       make:function(p){ var n = +p; return { label:"log money on " + n + " days", xp:50 + n * 10, prog:function(w){ return [w.moneyDays, n]; }, ok:function(){ return !!finDays; } }; } },
-    reflw:{ area:"any", params:[3, 5, 7],
+    reflw:{ perDay:true, area:"any", params:[3, 5, 7],
       make:function(p){ var n = +p; return { label:"write " + n + " reflections", xp:40 + n * 12, prog:function(w){ return [w.reflDays, n]; } }; } },
     boss:{ area:"any", params:["beat"],
       make:function(){ return { label:"beat this week's boss", xp:150, prog:function(w){ return [w.bossDead ? 1 : 0, 1]; }, ok:function(w){ return w.bossMax > 0; } }; } },
@@ -1028,11 +1129,12 @@ function mount(ctx){
       D.params.forEach(function(pp, i){
         var q = D.make(String(pp));
         if(!q || (q.ok && !q.ok(ctxv))) return;
+        if(D.perDay && ctxv && ctxv.daysLeft != null){ var pr0 = q.prog(ctxv); if(Math.floor(pr0[0]) + ctxv.daysLeft < pr0[1]) return; }
         var tr = D.tier ? D.tier(String(pp)) : (D.params.length > 1 ? Math.round(i / (D.params.length - 1) * 3) : 1);
         if(tr > tmax + 1) return;
         opts.push({ p:String(pp), w:tr === tmax ? 3 : tr === tmax + 1 ? 1 : tr === tmax - 1 ? 1.5 : .5 });
       });
-      return { k:k, area:D.area, opts:opts, w:areaW(D.area, focus) };
+      return { k:k, area:D.area, fam:D.family || "", opts:opts, w:areaW(D.area, focus) };
     }).filter(function(g){ return g.opts.length; });
     var out = [];
     for(var i = 0; i < n && groups.length; i++){
@@ -1040,7 +1142,7 @@ function mount(ctx){
       if(i < (firstN || 0) && focus !== "balanced"){ var f = groups.filter(function(g){ return g.area === focus; }); if(f.length) pool = f; }
       var g = wpick(pool, R), o = wpick(g.opts, R);
       out.push({ id:prefix + g.k + ":" + o.p, k:g.k });
-      groups = groups.filter(function(x){ return x !== g; });
+      groups = groups.filter(function(x){ return x !== g && !(g.fam && x.fam === g.fam); });
     }
     return out;
   }
@@ -1048,7 +1150,8 @@ function mount(ctx){
   function pickDaily(d, c){
     var picks = pickGen(DT, "d:", "D" + d, c, 3, 1);
     if((GM.level || 0) >= 10 && picks.length >= 3){
-      var ex = {}; picks.slice(0, 2).forEach(function(q){ ex[q.k] = 1; });
+      var ex = {}; picks.slice(0, 2).forEach(function(q){ ex[q.k] = 1; var f = DT[q.k] && DT[q.k].family;
+        if(f) Object.keys(DT).forEach(function(k){ if(DT[k].family === f) ex[k] = 1; }); });
       var el = pickGen(DT, "e:", "E" + d, c, 1, 1, ex);
       if(el.length) picks[2] = el[0];
     }
@@ -1057,15 +1160,18 @@ function mount(ctx){
   function pickWeekly(mon, w){ return pickGen(WT, "w:", "W" + mon, w, 3, 2).map(function(q){ return q.id; }); }
   // any quest id, old or generated, as { label, xp, elite, weekly, unit, tip, prog(ctx) }
   function resolveQ(id){
-    if(QDEF[id]){ var L = QDEF[id]; return { id:id, label:L.label, xp:L.xp || 30, elite:!!L.elite, unit:"", prog:function(c){ return [L.done(c) ? 1 : 0, 1]; } }; }
+    if(QDEF[id]){ var L = QDEF[id]; return { id:id, label:L.label, xp:L.xp || 30, elite:!!L.elite, keep:!!L.keep, unit:"", late:id === "early" || id === "e_early2" ? 540 : 0,
+      prog:function(c){ return [L.done(c) ? 1 : 0, 1]; } }; }
     var m = /^([dew]):([a-z0-9]+):(.+)$/.exec(id);
     if(!m) return null;
     var D = (m[1] === "w" ? WT : DT)[m[2]];
     if(!D) return null;
     var q = D.make(m[3]);
     if(!q) return null;
-    return { id:id, label:q.label, xp:m[1] === "e" ? q.xp * 2 : q.xp, elite:m[1] === "e", weekly:m[1] === "w", unit:q.unit || "", tip:q.tip || "", prog:q.prog };
+    return { id:id, label:q.label, xp:m[1] === "e" ? q.xp * 2 : q.xp, elite:m[1] === "e", weekly:m[1] === "w", unit:q.unit || "", tip:q.tip || "", prog:q.prog,
+      keep:!!q.keep, late:q.late || 0, perDay:!!D.perDay, lateDay:D.lateDay || 0 };
   }
+  function wonQ(d, id){ return !!(GM.qwon && GM.qwon[d] && GM.qwon[d].indexOf(id) >= 0); }
   function misfit(ids, done){
     if((P.settings.questStyle || "flexible") === "structured" || done) return false;
     return ids.some(function(id){ var m = /^[dew]:([a-z0-9]+):/.exec(id); if(!m) return false; var D = DT[m[1]] || WT[m[1]]; return !!(D && D.structured); });
@@ -1305,14 +1411,14 @@ function mount(ctx){
       if(crit) xp *= 2;
       if(a.area === "cwes") S.cwes += m;
       if(a.area === "side"){ S.side += m; if(MONEY_SUBS.indexOf(a.sub) >= 0) S.money += m; }
-      if(a.start != null && a.start < 420) S.early++;
+      if(a.start != null && a.start >= DAWN && a.start < 420) S.early++;
       if(a.area === "cwes" && a.sub === "lab") S.labN++;
       if(a.area === "cwes" && a.sub === "revision") S.revN++;
       if(a.area === "side" && a.sub === "idea") S.ideaN++;
       if(crit) S.critN++;
       if(a.area === "cwes" || a.area === "side") focusDay[a.date] = (focusDay[a.date] || 0) + m;
       if(a.area === "side"){ var mk = a.date.slice(0, 7); sideMonth[mk] = (sideMonth[mk] || 0) + m; }
-      if(a.start != null && a.start < 330) early530[a.date] = 1;
+      if(a.start != null && a.start >= DAWN && a.start < 330) early530[a.date] = 1;
       events.push({ key:"a:" + a.id, date:a.date, xp:xp, label:a.title, crit:crit });
     });
     var out = { events:events, S:S, focusDay:focusDay, sideMonth:sideMonth, early530:early530,
@@ -1345,9 +1451,11 @@ function mount(ctx){
       if(!ids){ ids = pickDaily(d, c); if(d === t) qFresh.daily = true; }
       ids.forEach(function(id){
         var Q = resolveQ(id); if(!Q) return;
-        var pr = Q.prog(c), ok = pr[0] >= pr[1];
+        var pr = Q.prog(c), live = pr[0] >= pr[1], ok = live || (Q.keep && wonQ(d, id));
+        if(ok && !live) pr = [pr[1], pr[1]];
         if(ok) events.push({ key:"q:" + d + ":" + id, date:d, xp:Q.xp, label:(Q.elite ? "elite quest: " : "quest: ") + Q.label, elite:Q.elite });
-        if(d === t) todayQ.push({ id:id, label:Q.label, done:ok, elite:Q.elite, xp:Q.xp, have:pr[0], need:pr[1], unit:Q.unit, tip:Q.tip });
+        if(d === t) todayQ.push({ id:id, label:Q.label, done:ok, live:live, keep:Q.keep, elite:Q.elite, xp:Q.xp, have:pr[0], need:pr[1], unit:Q.unit, tip:Q.tip,
+          missed:!ok && Q.late > 0 && nowMin() >= Q.late });
       });
     });
     // weekly quests: stored picks for past weeks, this week's live until the first change saves them
@@ -1359,12 +1467,16 @@ function mount(ctx){
       if(ids && mon === thisMon && misfit(ids, ids.some(function(id){ var Q = resolveQ(id); if(!Q) return false; var pr = Q.prog(wc); return pr[0] >= pr[1]; }))) ids = null;
       if(!ids){ ids = mon === thisMon ? pickWeekly(mon, wc) : []; if(mon === thisMon) qFresh.weekly = true; }
       var endD = addDays(mon, 6) < t ? addDays(mon, 6) : t, all = ids.length >= 3;
+      var daysLeft = mon === thisMon ? Math.round((Date.parse(addDays(mon, 6)) - Date.parse(t)) / 864e5) + 1 : 0;
       ids.forEach(function(id){
         var Q = resolveQ(id); if(!Q) return;
         var pr = Q.prog(wc), ok = pr[0] >= pr[1];
         if(!ok) all = false;
         if(ok) events.push({ key:"W:" + mon + ":" + id, date:endD, xp:Q.xp, label:"weekly quest: " + Q.label, weekly:true });
-        if(mon === thisMon) weekQ.push({ id:id, label:Q.label, done:ok, xp:Q.xp, have:pr[0], need:pr[1], unit:Q.unit, tip:Q.tip });
+        // a "on n days" quest is missed once the days left can't make it
+        var left = daysLeft - (Q.lateDay && nowMin() >= Q.lateDay ? 1 : 0);
+        if(mon === thisMon) weekQ.push({ id:id, label:Q.label, done:ok, xp:Q.xp, have:pr[0], need:pr[1], unit:Q.unit, tip:Q.tip,
+          missed:!ok && Q.perDay && Math.floor(pr[0]) + left < pr[1] });
       });
       if(all) events.push({ key:"S:" + mon, date:endD, xp:100, label:"weekly sweep: all 3 weekly quests", sweep:true });
     });
@@ -1389,6 +1501,7 @@ function mount(ctx){
       if(mon === curMon) boss = B;
     }
     out.main = { cleared:cleared, run:run, best:best, clearN:clearN, comeback:comeback, bestNZ:bestNZ, todayQ:todayQ, weekQ:weekQ, qFresh:qFresh, boss:boss,
+      thisMon:thisMon, qDate:t, qSig:(P.settings.questStyle || "flexible") + "/" + (P.settings.focus || "cwes"),
       bosses:bosses, raids:raids, flawless:flawless, bossRun:bossRun, gymRun:gymRun, gymWeeks:gymWeeks, fullWeeks:fullWeeks };
     return out;
   }
@@ -1436,7 +1549,7 @@ function mount(ctx){
       .sort(function(x, y){ return y.have / y.need - x.have / x.need; })[0] || null;
     var rank = rankOf(level);
     return { xp:xp, level:level, base:lvlBase(level), next:lvlBase(level + 1), rank:rank, rankR:rankRarity(RANKS.indexOf(rank)), events:events, keys:keys, S:S, ach:ach,
-             todayQ:M.todayQ, weekQ:M.weekQ || [], qFresh:M.qFresh || {}, boss:M.boss, streak:M.run, best:M.best, cleared:M.cleared, nextBadge:nextBadge,
+             todayQ:M.todayQ, weekQ:M.weekQ || [], qFresh:M.qFresh || {}, thisMon:M.thisMon, qDate:M.qDate, qSig:M.qSig, boss:M.boss, streak:M.run, best:M.best, cleared:M.cleared, nextBadge:nextBadge,
              earned:Math.floor(xp / 10) + badgeCoins, spent:spent, coins:Math.floor(xp / 10) + badgeCoins - spent };
   }
   // the whole site's game (index.html passes ctx.score); on its own a planner scores just itself
@@ -1455,12 +1568,14 @@ function mount(ctx){
   function gameStep(){
     buildIndex();
     var before = curG, G = computeGame(), g = GM, t = today();
-    if(!g.quests[t] || G.qFresh.daily) g.quests[t] = G.todayQ.map(function(q){ return q.id; });
-    if(!g.wquests) g.wquests = {};
-    var wm = wkStart(t);
-    if((!g.wquests[wm] || G.qFresh.weekly) && G.weekQ.length) g.wquests[wm] = G.weekQ.map(function(q){ return q.id; });
-    Object.keys(g.wquests).sort().slice(0, -30).forEach(function(d){ delete g.wquests[d]; });
-    Object.keys(g.quests).sort().slice(0, -60).forEach(function(d){ delete g.quests[d]; });
+    var lk = lockQuests(g, G);
+    // a kept quest that was already won before this change stays won, whatever the change did
+    if(before && before.qDate === t && before.todayQ){
+      var saved = g.quests[t] || [], wl = g.qwon[t] || [];
+      before.todayQ.forEach(function(q){ if(q.keep && q.live && saved.indexOf(q.id) >= 0 && wl.indexOf(q.id) < 0){ wl.push(q.id); lk.picks = true; } });
+      if(wl.length) g.qwon[t] = wl;
+    }
+    if(lk.picks){ G = computeGame(); lockQuests(g, G); }
     var fresh = !g.level;
     if(!fresh && !g.off && before){
       var gain = 0, crit = false, labels = [], big = null, quests = [], wqs = [], sweep = null;
@@ -1574,8 +1689,8 @@ function mount(ctx){
     if(!G.todayQ.length) return null;
     return h("div", { class:"pl-next pl-quests" }, [ h("span", { class:"pl-nlab", text:"quests" }) ].concat(G.todayQ.map(function(q){
       var A = questAction(q);
-      return h(A ? "button" : "span", { type:A ? "button" : null, class:"pl-quest" + (q.done ? " on" : "") + (q.elite ? " elite" : "") + (A ? " go" : ""),
-        title:(q.tip ? q.tip + "\n" : "") + (A ? "click: " + A.label.replace("▶ ", "") : ""), onclick:A ? function(){ A.run(); } : null }, [ h("i", { text:q.done ? "✓" : "" }), q.label,
+      return h(A ? "button" : "span", { type:A ? "button" : null, class:"pl-quest" + (q.done ? " on" : "") + (q.elite ? " elite" : "") + (q.missed ? " missed" : "") + (A ? " go" : ""),
+        title:(q.tip ? q.tip + "\n" : "") + (q.missed ? "missed: can't be done any more today" : A ? "click: " + A.label.replace("▶ ", "") : ""), onclick:A ? function(){ A.run(); } : null }, [ h("i", { text:q.done ? "✓" : "" }), q.label,
         !q.done && q.need > 1 ? h("small", { class:"pl-qprog", text:progText(q) }) : null, q.elite ? h("b", { class:"pl-etag", text:"elite" }) : null ]);
     })).concat(G.weekQ.length ? [ h("span", { class:"pl-qweek", title:G.weekQ.map(function(q){ return (q.done ? "✓ " : "· ") + q.label + " " + progText(q); }).join("\n") },
       [ "week " + G.weekQ.filter(function(q){ return q.done; }).length + "/" + G.weekQ.length ]) ] : []));
@@ -1648,11 +1763,12 @@ function mount(ctx){
   // what pressing ▶ on a quest does: activity quests start the timer (stopping it logs the real
   // minutes, which then count), the rest open the place where they get done
   var CWES_Q = { cwesmin:1, cwessub:1, topic:1, early:1, deep:1, focusmin:1, cwesh:1, cwesdays:1, labs:1, rev:1, topicw:1, deepw:1, earlyw:1, nozerow:1,
-                 cwes1:1, cwes60:1, e_cwes120:1, e_deep:1, e_early2:1 };
+                 cwes1:1, cwes60:1, e_cwes120:1, e_deep:1, e_early2:1, beat:1, cwesall:1, beatw:1 };
   function questKey(id){ var m = /^[dew]:([a-z0-9]+):(.*)$/.exec(id); return m ? [m[1], m[2]] : [id, ""]; }
   function questAction(q){
     var k = questKey(q.id), key = k[0], arg = k[1];
-    if(q.done) return null;
+    if(q.done || q.missed) return null;
+    var running = function(area){ return P.timer && P.timer.area === area ? { label:"timer on", run:function(){ u.view = "day"; u.date = today(); toPlanner(); } } : null; };
     if(CWES_Q[key]){
       var sub = "", title = "CWES study";
       if(key === "cwessub"){ sub = arg.split(".")[0]; title = "CWES " + sub; }
@@ -1660,10 +1776,10 @@ function mount(ctx){
       if(key === "rev"){ sub = "revision"; title = "CWES revision"; }
       if(key === "topic" || key === "topicw"){ var T = topicBy(arg.split(".")[0]); if(T) title = "CWES: " + T[2]; }
       if(key === "deep" || key === "deepw" || key === "e_deep") title = "CWES deep work";
-      return { label:"▶ start", run:function(){ startQuestTimer(title, "cwes", sub); } };
+      return running("cwes") || { label:"▶ start", run:function(){ startQuestTimer(title, "cwes", sub); } };
     }
-    if(key === "gym" || key === "gymw") return { label:"▶ start", run:function(){ startQuestTimer("gym", "gym", ""); } };
-    if(key === "side" || key === "sidew") return { label:"▶ start", run:function(){ startQuestTimer("side hustle", "side", ""); } };
+    if(key === "gym" || key === "gymw") return running("gym") || { label:"▶ start", run:function(){ startQuestTimer("gym", "gym", ""); } };
+    if(key === "side" || key === "sidew") return running("side") || { label:"▶ start", run:function(){ startQuestTimer("side hustle", "side", ""); } };
     if(key === "money" || key === "moneyw") return ctx.openFinance ? { label:"open money", run:function(){ ctx.openFinance(); } } : null;
     if(key === "plan") return { label:arg === "cwes" ? "plan it" : "plan tomorrow", run:function(){
       if(arg === "cwes"){ u.view = "day"; u.date = addDays(today(), 1); var dr = blankDraft(u.date); dr.area = "cwes"; u.form = { key:null, d:dr };
@@ -1687,12 +1803,16 @@ function mount(ctx){
   }
   // one quest as a row: tick, name, progress bar, xp
   function questLine(q){
-    return h("div", { class:"pl-quest pl-qline" + (q.done ? " on" : "") + (q.elite ? " elite" : ""), title:q.tip || null }, [
+    var A = questAction(q);
+    return h("div", { class:"pl-quest pl-qline" + (q.done ? " on" : "") + (q.elite ? " elite" : "") + (q.missed ? " missed" : "") + (A ? " go" : ""),
+      title:(q.tip || "") + (q.missed ? (q.tip ? "\n" : "") + "can't be done any more this " + (q.id.charAt(0) === "w" ? "week" : "day") : "") || null,
+      onclick:A ? function(){ A.run(); } : null }, [
       h("i", { text:q.done ? "✓" : "" }), h("span", { class:"pl-qlabel", text:q.label }), q.elite ? h("b", { class:"pl-etag", text:"elite" }) : null,
       q.need > 1 || q.unit ? h("span", { class:"pl-qbar" }, [ h("i", { style:"width:" + Math.round(Math.min(1, q.have / q.need) * 100) + "%" }) ]) : null,
       q.need > 1 || q.unit ? h("small", { class:"pl-qprog", text:progText(q) }) : null,
       h("small", { text:"+" + q.xp + " xp" }),
-      (function(){ var A = questAction(q); return A ? h("button", { type:"button", class:"pl-qgo", text:A.label, onclick:function(e){ e.stopPropagation(); A.run(); } }) : h("span", { class:"pl-qgo pl-qdone", text:q.done ? "done" : "" }); })() ]);
+      A ? h("button", { type:"button", class:"pl-qgo", text:A.label, onclick:function(e){ e.stopPropagation(); A.run(); } })
+        : h("span", { class:"pl-qgo pl-qdone" + (q.missed ? " pl-qmiss" : ""), text:q.done ? "done" : q.missed ? "missed" : "" }) ]);
   }
   function gameSettings(){
     return section("game settings", [ h("label", { class:"pl-check pl-gamesw" }, [ h("input", { type:"checkbox", checked:GM.off ? null : true,
@@ -1731,7 +1851,7 @@ function mount(ctx){
         h("span", { text:Math.floor(G.nextBadge.have) + "/" + G.nextBadge.need + G.nextBadge.unit + " · " + G.nextBadge.desc }) ]) : null ]));
     var bc = bossCard(G.boss); if(bc) body.appendChild(section("this week", [ bc ]));
     if(G.todayQ.length) body.appendChild(section("today's quests", [ h("p", { class:"pl-hint pl-qhow",
-      text:"quests tick themselves from what you finish in your Command Center. ▶ start runs the timer: stop it when you're done and the time counts." }) ]
+      text:"quests tick themselves from what you finish in your Command Center. ▶ start runs the timer: stop it when you're done and the time counts. once done, a quest stays done." }) ]
       .concat(G.todayQ.map(questLine))));
     if(G.weekQ.length) body.appendChild(section("this week's quests · all 3 = +100 bonus", G.weekQ.map(questLine)));
     body.appendChild(shop(G));
@@ -1796,11 +1916,26 @@ function mount(ctx){
 
   // ----- draw -----
   var body = null;
+  var drawnOn = "";
+  // a new day while the page is open: redraw (unless you're typing), so quests and "today" move on
+  function dayTurned(){
+    if(today() === drawnOn || (document.activeElement && root.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))) return false;
+    if(u.date === drawnOn) u.date = today();
+    draw();
+    return true;
+  }
   function draw(){
     buildIndex();
     curG = computeGame();
+    drawnOn = today();
+    if(!GM.off) noteShown(curG);
     if(ctx.gameOnly){
       if(timerTick){ clearInterval(timerTick); timerTick = null; }
+      if(nowTick){ clearInterval(nowTick); nowTick = null; }
+      nowTick = setInterval(function(){
+        if(!root.isConnected){ clearInterval(nowTick); nowTick = null; return; }
+        dayTurned();
+      }, 60000);
       root.innerHTML = "";
       body = h("div", { class:"pl-body pl-gamepage" });
       root.appendChild(body);
@@ -1813,7 +1948,7 @@ function mount(ctx){
     if(nowTick){ clearInterval(nowTick); nowTick = null; }
     nowTick = setInterval(function(){
       if(!root.isConnected){ clearInterval(nowTick); nowTick = null; return; }
-      if(root.offsetParent !== null) repaintDash();
+      if(root.offsetParent !== null && !dayTurned()) repaintDash();
     }, 30000);
     root.appendChild(dashboard());
     root.appendChild(quickBar());
@@ -2117,11 +2252,13 @@ function mount(ctx){
       return h("button", { type:"button", class:"pl-tog" + (d.scope === s[0] ? " on" : ""), text:s[1], onclick:function(){ d.scope = s[0]; draw(); } });
     })) : null;
     var head = h("div", { class:"pl-fhead" }, [
-      h("h3", { class:"pl-h", text:ruleMode ? "edit repeating activity" : F.key ? "edit activity" : "new activity" }), scope ]);
+      h("h3", { class:"pl-h", text:ruleMode ? "edit repeating activity" : F.copied ? "copy made: adjust it" : F.key ? "edit activity" : "new activity" }), scope ]);
     var buttons = [
       h("button", { type:"submit", class:"pl-btn pl-primary", text:"save" }),
       h("button", { type:"button", class:"pl-btn pl-ghost", text:"cancel", onclick:function(){ u.form = null; draw(); } })
     ];
+    if(it) buttons.push(h("button", { type:"button", class:"pl-btn pl-ghost", text:"duplicate", title:"a one-off copy right after this one, opened for editing",
+      onclick:function(){ duplicate(it); } }));
     if(F.key){
       var delLabel = ruleMode ? "delete series" : rule ? (d.scope === "series" ? "delete series from here" : "delete this day") : "delete";
       buttons.push(armed(h("button", { type:"button", class:"pl-btn pl-ghost pl-del", text:delLabel }), "confirm?", function(){
@@ -2181,6 +2318,17 @@ function mount(ctx){
     if(u.view === "day" || u.view === "week") u.date = d.date;
     u.form = null; commit();
     return "";
+  }
+  // a one-off copy (never part of a series, not done) placed right after the original when it fits
+  // before midnight, then opened so its time or date can be changed; one save, so one Ctrl+Z
+  function duplicate(it){
+    var a = { id:rid(), date:it.date, done:false, createdAt:Date.now() };
+    setFields(a, it);
+    if(it.to) a.to = it.to;
+    if(!it.allDay && it.start != null){ var len = it.end - it.start; if(it.end + len <= 1440){ a.start = it.end; a.end = it.end + len; } }
+    P.acts.push(a);
+    u.form = { key:a.id, d:draftOf(a, a.date), copied:true };
+    commit(); focusTitle();
   }
   function deleteItem(it, scope){
     var r = liveRule(it);
@@ -2286,6 +2434,19 @@ function mount(ctx){
       h("button", { type:"button", class:"pl-link" + (P.rest[d] ? " on" : ""), text:P.rest[d] ? "rest day ✓" : "rest day",
         onclick:function(){ if(P.rest[d]) delete P.rest[d]; else P.rest[d] = true; commit(); } })
     ]));
+    // time per area for the day: done / planned (flex windows and all-day items aren't time)
+    var perArea = {};
+    items.forEach(function(it){
+      if(notTask(it) || it.start == null) return;
+      var pa = perArea[it.area] || (perArea[it.area] = { plan:0, done:0 });
+      pa.plan += mins(it); if(it.done) pa.done += mins(it);
+    });
+    var sumAreas = AREAS.filter(function(a){ return perArea[a] && perArea[a].plan > 0; });
+    if(sumAreas.length) left.appendChild(h("div", { class:"pl-dsum", title:"done / planned today" }, sumAreas.map(function(a){
+      var pa = perArea[a], all = pa.done >= pa.plan;
+      return h("span", { class:"a-" + a + (all ? " on" : "") }, [ areaName(a) + " ",
+        h("b", { text:all ? hm2(pa.plan) + " ✓" : hm2(pa.done) }), all ? null : " / " + hm2(pa.plan) ]);
+    })));
     if(u.planDay) left.appendChild(planPanel(d));
     else if(!items.length) left.appendChild(h("div", { class:"pl-emptyday" }, [
       h("b", { text:"nothing planned" + (d === t ? " today" : "") }),
@@ -2354,7 +2515,7 @@ function mount(ctx){
     if(st.sched > P.settings.maxHours * 60) warns.push(hrs(st.sched) + " planned, over your " + P.settings.maxHours + "h limit");
     if(st.total > 14) warns.push(st.total + " things in one day");
     overlaps.forEach(function(it){ warns.push("overlap " + hm(it.start) + "–" + hm(it.end) + " " + it.title); });
-    if(warns.length) left.insertBefore(h("div", { class:"pl-warns" }, warns.map(function(w){ return h("p", { text:w }); })), left.children[1]);
+    if(warns.length) left.insertBefore(h("div", { class:"pl-warns" }, warns.map(function(w){ return h("p", { text:w }); })), left.children[sumAreas.length ? 2 : 1]);
 
     // footer, like the tracker's: day tools on the left, reflection on the right
     var tools = [];
@@ -2967,6 +3128,10 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 .pl-del{margin-left:auto;}
 /* day view */
 .pl-day{display:grid; grid-template-columns:minmax(0, 1fr) 17rem; gap:1.4rem; align-items:start;}
+.pl-dsum{display:flex; flex-wrap:wrap; gap:.3rem 1.4rem; margin:-.15rem 0 .75rem; font-size:.72rem; color:var(--muted);}
+.pl-dsum span{border-left:2px solid var(--ac); padding-left:.5rem;}
+.pl-dsum b{color:var(--fg); font-weight:700;}
+.pl-dsum .on b{color:var(--accent);}
 .pl-dhead{display:flex; align-items:baseline; gap:.4rem 1rem; flex-wrap:wrap; margin-bottom:.6rem;}
 .pl-dtitle{margin:0; font-size:.95rem; letter-spacing:.08em; text-transform:uppercase;}
 .pl-dtitle.now::after{content:" · today"; color:var(--accent);}
@@ -3177,6 +3342,11 @@ textarea.pl-in{resize:vertical; min-height:2.4rem; line-height:1.45;}
 .pl-qhow{margin:-.2rem 0 .5rem;}
 button.pl-quest{background:transparent; border:none; padding:0; font:inherit; color:var(--muted); cursor:pointer; text-align:left;}
 button.pl-quest:hover{color:var(--accent);}
+.pl-qline.go{cursor:pointer;}
+.pl-qline.go:hover .pl-qlabel{color:var(--accent);}
+.pl-quest.missed{opacity:.45;}
+.pl-quest.missed i{border-style:dashed;}
+.pl-qmiss{color:var(--muted);}
 .pl-qprog{margin-left:.35rem; font-size:.58rem; color:var(--muted); font-variant-numeric:tabular-nums;}
 .pl-qweek{margin-left:auto; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); cursor:help;}
 .pl-qline .pl-qlabel{flex:1 1 auto; min-width:0;}
@@ -3392,7 +3562,7 @@ function show(pageId, date){
   var u = uiState[pageId] || (uiState[pageId] = { view:"day", date:today(), form:null, tplSave:false, flash:"", qarea:"personal" });
   u.view = "day"; if(isDate(date)) u.date = date; u.form = null;
 }
-window.Planner = { normalize:normalize, fresh:fresh, mount:mount, countDays:countDays, daySummary:daySummary, show:show,
+window.Planner = { lockQuests:lockQuests, needsLock:needsLock, normalize:normalize, fresh:fresh, mount:mount, countDays:countDays, daySummary:daySummary, show:show,
   dayItems:dayItems, tick:tick, score:score, normGame:normGame, mergeGames:mergeGames, medalHTML:medalHTML, mountGame:function(ctx){ var c = {}; Object.keys(ctx).forEach(function(k){ c[k] = ctx[k]; }); c.gameOnly = true; return mount(c); },
   // exposed for tests
   _test:{ addDays:addDays, monday:monday, wd:wd, parseHm:parseHm, parseQuick:parseQuick } };

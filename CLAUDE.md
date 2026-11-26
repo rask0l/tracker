@@ -207,6 +207,11 @@ linked from anywhere.
     area (work: core, meeting, flex; cwes: theory, lab, revision; side:
     idea, build, research, marketing, monetize; gym: strength, cardio,
     mobility).
+  - The edit form has `duplicate` (`duplicate()`): a one-off copy (never
+    part of a series, not done; title, area, type, priority, notes and
+    deadline kept) placed right after the original when it fits before
+    midnight, otherwise at the same time, then opened as "copy made:
+    adjust it". One save, so one Ctrl+Z removes it.
   - All-day items (`allDay: true`, no times, optionally `to`: a last date
     up to 60 days on, e.g. a trip) sit as a bar above the day and on top of
     each week column. Like flex windows they are context, not tasks
@@ -248,7 +253,10 @@ linked from anywhere.
     through the same matching, `discard` takes two clicks. A session that
     runs past midnight is saved as two blocks: the part before midnight on
     the day it started, the rest on today.
-  - Day view: a timeline or list toggle (`settings.dayMode`), tasks without
+  - Day view: under the timeline/list toggle, one line per area with time
+    planned that day, done / planned (`cwes study 2h / 4h 45m`, `hm2()`
+    for exact hours and minutes; `1h ✓` in red once all of it is done;
+    flex windows, all-day items and untimed tasks left out). A timeline or list toggle (`settings.dayMode`), tasks without
     a time, a 15 minute snapping timeline (drag a
     block to move it, its bottom edge to resize; on touch only the `≡` grip
     and the edge drag; times typed in the form can be any minute), warnings (over `maxHours`, overlaps), free time,
@@ -356,8 +364,8 @@ linked from anywhere.
     its own full-screen card, and so does a badge when nothing bigger
     happened in the same change.
   - Quests are generated (`DT` daily and `WT` weekly templates x amounts x
-    40 CWES web topics in `TOPICS`): 123 daily, their 123 elite versions
-    and 127 weekly, 373 in all. A seeded draw per date or week
+    40 CWES web topics in `TOPICS`): 126 daily, their 126 elite versions
+    and 130 weekly, 382 in all. A seeded draw per date or week
     (`pickGen()`, `rng()`) always gives the same picks; it never repeats a
     template in one draw, leans toward the main planner's
     `settings.focus` (main priority: CWES by default; the first daily
@@ -390,7 +398,41 @@ linked from anywhere.
     Finance page (`ctx.openFinance`); anything else opens today. From the
     game page this goes through `ctx.openPlanner(then)`; UI flags live in
     `uiState` by page id, so the planner mount picks them up. Header quest
-    chips are buttons doing the same.
+    chips and whole quest rows do the same. With a timer already running
+    in that area the button says "timer on" and only opens the planner.
+  - Quest saving: the quests on screen are the ones saved. `noteShown()`
+    keeps what was last drawn while today's picks weren't saved yet
+    (`SHOWN`, with the quest style and focus as `qSig`), and
+    `lockQuests(game, G)` saves those, so a change never swaps the
+    quests you were looking at. The planner calls it in `gameStep`; on
+    every other real change (a tracker tick, finance, a Day card tick)
+    index.html's `save()` calls it when `Planner.needsLock()` says
+    today's picks are missing. History is never trimmed: past quest XP
+    is worked out from `game.quests`/`game.wquests`, so trimming took XP
+    away (it used to cut after 60 days and 30 weeks).
+  - Kept quests (`keep: true`: clear the day, every !!/!!! task, clear a
+    6h+ day) stay won once won, even if more is added later; the win is
+    saved in `game.qwon[date]`, so Ctrl+Z still takes it back. Other
+    quests follow the live state.
+  - Draws never hold two quests measuring the same thing (`family`: CWES
+    time vs focused time vs side time, weekly hours, "on n days"), and a
+    weekly "on n days" quest is never drawn when the days left can't make
+    it (`perDay`, `daysLeft`). A quest that can't be done any more is
+    shown as missed with no button: daily early quests after their hour
+    (`late`), weekly per-day quests once the days left fall short.
+  - Early means morning: nothing starting before 04:00 (`DAWN`) counts as
+    early, for quests and for the early bird and 5am club badges. Early
+    quests are only drawn when they fit you: daily ones when the day
+    already has a CWES block planned before that hour, weekly ones after
+    2+ early CWES mornings in the last four weeks.
+  - Outcome-only quests added for variety: beat yesterday's CWES time,
+    finish every CWES block you planned, note what you learned in a CWES
+    block (a finished block with notes), and weekly: beat last week's
+    CWES hours, note what you learned on n days.
+  - An open planner or game page redraws when the date changes (checked
+    every 30s or 60s, not while you're typing), so quests and "today"
+    move on at midnight. Day contexts and finished CWES minutes are cached
+    per index (`memo`), so scoring years of quests stays fast.
   - Hardcore layer: a "hardcore" badge group (consistency and intensity:
     no zero days = 1h+ of CWES or side hustle a day, deep work = 4h+ in a
     day, flawless weeks = boss beaten and every day cleared, boss and gym
