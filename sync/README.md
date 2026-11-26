@@ -37,6 +37,17 @@ secret you set yourself.
    key, and press `connect`. Do the same on every other device and choose
    "use the cloud copy" there.
 
+## When two devices both changed
+
+Each upload says which cloud copy it grew from (`?base=`). If the cloud has
+changed since, the worker refuses it (409) instead of overwriting, and the
+site pauses sync and asks which copy should stay. The one you don't pick is
+kept in that browser as a safety copy (sidebar: "safety copies").
+
+After changing `worker.js`, deploy again (`npx wrangler deploy`). Until
+then the old worker ignores `?base=`; the site still checks on open, but
+the worker can't refuse a stale upload.
+
 ## What it stores
 
 - `state.json`: the latest state, with photos swapped for `blob:<sha256>` refs

@@ -851,7 +851,7 @@ function mount(ctx){
 
     function catList(kind){
       var list = f.categories.filter(function(c){ return c.kind === kind; });
-      var add = h("input", { type:"text", class:"fin-in", maxlength:"40", placeholder:"+ add a category" });
+      var add = h("input", { type:"text", class:"fin-in", maxlength:"40", placeholder:"+ add a category", "data-native-undo":"1" });
       add.addEventListener("keydown", function(e){
         if(e.key !== "Enter") return;
         var nm = add.value.trim();
@@ -897,7 +897,7 @@ function mount(ctx){
       kids.push(add);
       return h("div", { class:"fin-slist" }, kids);
     }
-    var addM = h("input", { type:"text", class:"fin-in", maxlength:"30", placeholder:"+ add a method" });
+    var addM = h("input", { type:"text", class:"fin-in", maxlength:"30", placeholder:"+ add a method", "data-native-undo":"1" });
     addM.addEventListener("keydown", function(e){
       if(e.key !== "Enter") return;
       var v = addM.value.trim();

@@ -494,12 +494,12 @@ function lockQuests(g, G){
   });
   return r;
 }
-// does the game record still need today's picks (or a kept win) saved? cheap, no scoring
+// does the game record still need today's picks saved? cheap, no scoring. index.html asks
+// on every save, so this must stay cheap: it only says yes for the first change of the day.
+// Kept quest wins are saved where planner items change (the planner's gameStep, the Day card).
 function needsLock(g){
   if(!g || g.off) return false;
-  var t = today(), ids = (g.quests || {})[t];
-  if(!ids) return true;
-  return ids.some(function(id){ return /^(clear|e_bigday|[de]:clear:day|[de]:prio:all)$/.test(id) && !((g.qwon || {})[t] || []).some(function(x){ return x === id; }); });
+  return !(g.quests || {})[today()];
 }
 document.addEventListener("keydown", function(e){
   if(!activePl || !activePl.root.isConnected || activePl.root.offsetParent === null) return;
@@ -507,6 +507,8 @@ document.addEventListener("keydown", function(e){
   var tg = e.target;
   if(tg && (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA" || tg.tagName === "SELECT" || tg.isContentEditable)) return;
   if(document.querySelector(".pl-cele:not([hidden])")) return;
+  // the site's menus and popups (the "/" page menu filters as you type) own the keys while open
+  if(document.querySelector(".page-menu, .slash, .new-pop, .icon-pop, .sync-pop, .font-pop")) return;
   activePl.key(e);
 });
 // --- pixel emblems: 8x8 icons drawn as SVG in currentColor, so they use the site's colours ---
@@ -1724,9 +1726,9 @@ function mount(ctx){
           GM.rewards.splice(GM.rewards.indexOf(r), 1); commit(); })
       ]);
     });
-    var nm = h("input", { class:"pl-in", type:"text", placeholder:"add a reward you actually want", maxlength:"60", "aria-label":"new reward",
+    var nm = h("input", { class:"pl-in", type:"text", placeholder:"add a reward you actually want", maxlength:"60", "aria-label":"new reward", "data-native-undo":"1",
       onkeydown:function(e){ if(e.key === "Enter"){ e.preventDefault(); addR(); } } });
-    var pr = h("input", { class:"pl-in pl-num", type:"number", min:"1", max:"100000", step:"10", placeholder:"price", "aria-label":"price in coins",
+    var pr = h("input", { class:"pl-in pl-num", type:"number", min:"1", max:"100000", step:"10", placeholder:"price", "aria-label":"price in coins", "data-native-undo":"1",
       onkeydown:function(e){ if(e.key === "Enter"){ e.preventDefault(); addR(); } } });
     function addR(){
       var v = nm.value.trim(), c = Math.round(+pr.value);
@@ -2779,6 +2781,7 @@ function mount(ctx){
     return h("span", { class:"pl-tpl" }, kids);
   }
   // reflection / review: optional questions saved as you type
+  var reflT = null;
   function textBox(title, store, key, qs, live){
     var cur = store[key] || {}, filled = qs.filter(function(q){ return cur[q[0]]; }).length;
     var det = h("details", { class:"pl-sec pl-refl" });
@@ -2790,9 +2793,12 @@ function mount(ctx){
           var o = store[key] || (store[key] = {});
           if(e.target.value.trim()) o[q[0]] = e.target.value; else delete o[q[0]];
           if(!Object.keys(o).length) delete store[key];
-          var moved = live ? gameStep() : false;
           ctx.save();
-          if(moved) repaintDash();
+          // scoring the whole game on every keystroke gets slow with history: wait for a pause
+          if(live){
+            clearTimeout(reflT);
+            reflT = setTimeout(function(){ if(!root.isConnected) return; if(gameStep()) repaintDash(); ctx.save(); }, 700);
+          }
         } }) ]));
     });
     return det;

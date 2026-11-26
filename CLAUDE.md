@@ -37,12 +37,31 @@ linked from anywhere.
   saves failed, and refreshing brought back old or default data. The app is
   `app(BOOT)`, started once IndexedDB has been read (it falls back to
   localStorage only if IndexedDB fails or takes over 5s, and then never
-  writes to IndexedDB that session); it fires `app-ready` when done. `save()`
+  writes to IndexedDB that session); it fires `app-ready` when done. If
+  IndexedDB answers after the 5s, the page reloads once to use it (a
+  `hundred-late` sessionStorage flag stops a page that is always slow from
+  reloading forever). localStorage `hundred-idb` marks a browser where
+  IndexedDB has held the data: there, a session that can't open IndexedDB
+  is read-only (`storageLocked`, `lockWhy = "idb"`, a toast says to
+  reload), because its localStorage copy may be old and saving it would
+  replace the real data. `save()`
   queues writes in order and returns a promise (import waits on it before
   reloading). If saved data exists but nothing readable loads, the page
   shows a blank tracker but sets `storageLocked`, never saves over the
-  data, keeps an `unreadable-<time>` copy in IndexedDB, and says so in a
-  toast; importing a backup lifts the lock. `safeMap()` drops a single bad
+  data, keeps an `unreadable-<time>` copy in IndexedDB (only when it differs
+  from the last one), and says so in a toast; importing a backup lifts the
+  lock. Safety copies are full states kept in IndexedDB as `<kind>-<time>`
+  (`before-sync`, `cloud-before-upload`, `before-restore`, `unreadable`,
+  see `COPY_KINDS`) by `safetyCopy()`, which keeps only the newest
+  `COPY_KEEP` (6) of each kind so they never fill the storage. When any
+  exist, the sidebar shows `safety copies (N)`: a list to download one as
+  JSON or restore it (two clicks; what is there now becomes a
+  `before-restore` copy first).
+  Other tabs: each tab holds the whole state, so after every stored save a
+  tab announces its `savedAt` (`BroadcastChannel("hundred-tabs")`, or a
+  `hundred-ping` localStorage key where that is missing). A tab that hears
+  a newer one sets `staleTab`, stops saving and syncing, and reloads (at
+  once if on screen, otherwise when you come back to it). `safeMap()` drops a single bad
   page, item or note instead of failing the whole load. The saved shape is
   `{ n, title, days, label, dayNotes, stickies, start, lastExport, items, cover, icon, pages, sidebarHidden, game }`
   (`game` is the site-wide game record, see Command Center below).
@@ -71,7 +90,9 @@ linked from anywhere.
   uses, then reloads the page). There is deliberately no database: the JSON
   file is the backup. `lastExport` is the date of the last export; under the
   buttons the sidebar shows `last backup N days ago` and turns it red once
-  there is data and no export in over 7 days.
+  there is data and no export in over 7 days. "Data" (`hasData()`) is any
+  tracker tick or day note, written document, transaction, planner activity,
+  repeat or reflection, or page item; the line refreshes after every save.
 - Cloud sync (optional): `sync/` holds a Cloudflare Worker (`worker.js`,
   `wrangler.toml`, setup steps in `sync/README.md`) that stores the state in
   an R2 bucket behind a bearer `SYNC_TOKEN` secret. The site's sidebar `sync`
@@ -79,9 +100,23 @@ linked from anywhere.
   (`hundred-sync`, never in the state, the export or the repo). Photos are
   uploaded once as `blob:<sha256>` refs (`dehydrate`/`rehydrate`), so the
   synced state stays small; the worker keeps one snapshot per day under
-  `history/`. On open (`syncCheck`) the newer copy wins by `savedAt`: a newer
-  cloud copy replaces the local one after saving a `before-sync-<time>` copy
-  in IndexedDB, then reloads; a newer local copy uploads. Each change uploads
+  `history/`. localStorage `hundred-sync-base` is `sync.base`: the cloud's
+  `savedAt` this browser's copy last matched (set after an upload, a
+  download, or a check that found them equal). On open and whenever the tab
+  comes back (`syncCheck`): if only the cloud changed since `base`, the
+  cloud copy replaces the local one after a `before-sync` safety copy, then
+  reloads; if only this copy changed, it uploads; if both changed, nothing
+  is replaced: `sync.conflict` pauses syncing and the status line says so,
+  and the sync popover asks which copy stays ("use the cloud copy", or
+  "upload this browser's copy", which first keeps the cloud's data as a
+  `cloud-before-upload` safety copy and then uploads with `push(true)`).
+  Without a `base` (synced before this existed) the newer `savedAt` wins.
+  Uploads send `?base=` (a query string, so older workers ignore it and no
+  CORS preflight changes); the worker answers 409 if the cloud moved on,
+  which also pauses syncing. `adoptRemote()` reloads only once the cloud copy
+  is really stored, and `adoptOnce()` never downloads the same cloud copy
+  twice in a session (sessionStorage `hundred-adopt`), so a copy too big for
+  the storage can't cause a reload loop. Each change uploads
   about 2.5s after editing pauses (`schedulePush`), failures retry every
   30s, and hard limits keep it inside R2's free tier even if a bug loops: at
   most one sync per 10s and 1000 per day per device (`SYNC_GAP`,
@@ -304,7 +339,7 @@ linked from anywhere.
     one. The planner itself has no game tab: its header keeps the level,
     XP bar and quests, and `g` opens the game page (`ctx.openGame`).
     A player card at the bottom of the sidebar
-    (`#sbGame`, `renderProfile()`, refreshed 250ms after each save) shows
+    (`#sbGame`, `renderProfile()`, refreshed 600ms after the last save) shows
     the rank medallion, level, coins and XP bar, flashes "+N xp" when XP
     goes up, and opens the game page.
   - Game (subtle, switchable in settings as `game.off`): XP, levels, three
@@ -334,7 +369,9 @@ linked from anywhere.
   - The game page has a 12-month heatmap of XP per day (absolute steps at
     100, 200 and 350 XP).
   - Single-key shortcuts while the planner is on screen and you aren't
-    typing (paused while a big card is open): `q` quick log, `n` new,
+    typing (paused while a big card or any site menu or popup is open,
+    including the `/` page menu, whose filter letters would otherwise fire
+    them): `q` quick log, `n` new,
     `p` plan day, `d w a g s` tabs, `[ ]` back/forward, `t` today, `?` list.
     The `keys` button next to `+ add` (or `?`) opens the same list as
     tappable buttons, one table (`KEYS`) for both, so it works on touch.
@@ -406,8 +443,14 @@ linked from anywhere.
     `lockQuests(game, G)` saves those, so a change never swaps the
     quests you were looking at. The planner calls it in `gameStep`; on
     every other real change (a tracker tick, finance, a Day card tick)
-    index.html's `save()` calls it when `Planner.needsLock()` says
-    today's picks are missing. History is never trimmed: past quest XP
+    index.html's `save()` calls it (`lockToday()`) when `Planner.needsLock()`
+    says today's picks are missing. `needsLock()` runs on every save, so it
+    must stay cheap: it only says yes for the first change of the day, never
+    for unwon kept quests (that used to score the whole game on every
+    keystroke). Kept wins are saved where planner items change: the
+    planner's `gameStep` and the Day card's plan ticks (`lockToday()` before
+    `save()`). The reflection box saves on each keystroke but runs
+    `gameStep` only after a 700ms pause. History is never trimmed: past quest XP
     is worked out from `game.quests`/`game.wquests`, so trimming took XP
     away (it used to cut after 60 days and 30 weeks).
   - Kept quests (`keep: true`: clear the day, every !!/!!! task, clear a
@@ -471,7 +514,11 @@ linked from anywhere.
   clicking away hides it again (`paintSub()`).
 - Undo/redo: Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes, anywhere
   on the page (app-level, so the browser's own text undo is replaced, except
-  inside the sync/icon/font/new-page popups). `save()` compares snapshots
+  inside the sync/icon/font/new-page popups and in forms whose typing isn't
+  saved yet: the finance and planner add/edit forms, quick log, plan day,
+  template name, the finance search, and inputs marked `data-native-undo`
+  such as "+ add a category" or a new reward; there the app's undo would take
+  back the last saved change instead of the typing). `save()` compares snapshots
   (`snapOf()`: the state as JSON without `savedAt`, photos swapped for
   `\u0000img:<n>` tokens kept once in `imgById`), which is also how it skips
   no-op saves. Each real change pushes the previous snapshot onto an undo
@@ -530,7 +577,8 @@ linked from anywhere.
   Photo items also get a `b&w` toggle (`bw: true`), a CSS grayscale filter,
   so the saved photo keeps its colour. Photos sit in a cropping `.pi-frame`:
   the corner handles set width and frame height (`h`), `crop` enters a mode
-  where dragging pans and scrolling zooms (`zoom` 1..4, `px`/`py` 0..1 pan),
+  where dragging pans and scrolling zooms (`zoom` 1..4, `px`/`py` 0..1 pan;
+  a zoom saves 400ms after the wheel stops, so it is one undo step),
   `fit` drops `h` and the crop to show the photo's own shape, and `done` or
   Esc leaves the mode. `layoutPhoto()` turns those into the img's size and
   offset. Like the cover, a quick second click on `done` is ignored. (The

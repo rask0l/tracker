@@ -378,6 +378,17 @@
   .sp-choice{margin-top:.6rem; display:flex; flex-direction:column; gap:.35rem;}
   .sp-choice[hidden]{display:none;}
   .sp-q{font-size:.66rem; color:var(--fg); line-height:1.5;}
+  #syncStatus.ask{cursor:pointer; text-decoration:underline;}
+  .copies-link{display:block; margin-top:.4rem; padding:0; background:transparent; border:none; color:var(--muted);
+    font:inherit; font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; text-align:left; cursor:pointer;}
+  .copies-link:hover{color:var(--accent);}
+  .copies-pop .sp-q{margin:0 0 .6rem; color:var(--muted);}
+  .cp-list{display:flex; flex-direction:column; gap:.35rem; max-height:50vh; overflow:auto;}
+  .cp-row{display:flex; align-items:center; gap:.4rem; border:2px solid var(--line); padding:.35rem .45rem;}
+  .cp-lab{flex:1 1 auto; min-width:0; font-size:.66rem; line-height:1.35;}
+  .cp-lab small{display:block; color:var(--muted); font-size:.6rem;}
+  .sync-pop .cp-row button{flex:0 0 auto; padding:.3rem .4rem; font-size:.56rem;}
+  .sync-pop .cp-row button.armed{border-color:var(--accent); background:var(--accent); color:var(--accent-ink);}
   .main{position:relative; margin-left:240px; min-height:100vh;}
   body.sb-hidden .sidebar{display:none;}
   body.sb-hidden .main{margin-left:0;}
@@ -558,6 +569,7 @@
       </div>
       <span class="hint backup" id="backup"></span>
       <span class="hint backup" id="syncStatus" hidden></span>
+      <button class="copies-link" id="copiesBtn" type="button" hidden title="copies kept before your data was replaced"></button>
     </div>
   </aside>
   <button class="sb-open" id="sbOpen" type="button" title="show sidebar" aria-label="show sidebar">&#9776;</button>
@@ -630,8 +642,8 @@
   </div>
 
 <!-- the Finance and Command Center page types live in their own files -->
-<script src="finance.js?v=2"></script>
-<script src="planner.js?v=27"></script>
+<script src="finance.js?v=3"></script>
+<script src="planner.js?v=28"></script>
 <script>
 // ---------- storage ----------
 // Everything is saved to IndexedDB, which has room for photos and covers
@@ -670,7 +682,23 @@ var STORE = (function(){
       tx.onabort = function(){ rej(tx.error || new Error("write aborted")); };
     }); });
   }
-  return { get:get, put:put };
+  function keys(){
+    return open().then(function(db){ return new Promise(function(res, rej){
+      var r = db.transaction("kv", "readonly").objectStore("kv").getAllKeys();
+      r.onsuccess = function(){ res(r.result || []); };
+      r.onerror = function(){ rej(r.error); };
+    }); });
+  }
+  function del(k){
+    return open().then(function(db){ return new Promise(function(res, rej){
+      var tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").delete(k);
+      tx.oncomplete = function(){ res(); };
+      tx.onerror = function(){ rej(tx.error); };
+      tx.onabort = function(){ rej(tx.error || new Error("delete aborted")); };
+    }); });
+  }
+  return { get:get, put:put, keys:keys, del:del };
 })();
 
 (function(){
@@ -678,12 +706,19 @@ var STORE = (function(){
   try{ ls = localStorage.getItem("hundred-v1"); }catch(e){}
   function go(idbRaw, idbOk){
     if(done) return; done = true; clearTimeout(timer);
+    if(idbOk){ try{ sessionStorage.removeItem("hundred-late"); }catch(e){} }
     app({ idb:idbRaw, ls:ls, idbOk:idbOk });
   }
-  // if IndexedDB never answers, run on localStorage alone and never write to
+  // if IndexedDB never answers, start on localStorage and never write to
   // IndexedDB this session (it might hold newer data we could not read)
   var timer = setTimeout(function(){ go(undefined, false); }, 5000);
-  STORE.get("hundred-v1").then(function(v){ go(v, true); }, function(){ go(undefined, false); });
+  STORE.get("hundred-v1").then(function(v){
+    if(!done){ go(v, true); return; }
+    // it answered after all (a slow or stuck first open): reload once to use it.
+    // The session flag stops a page that is always slow from reloading forever.
+    try{ if(sessionStorage.getItem("hundred-late")) return; sessionStorage.setItem("hundred-late", "1"); }catch(e){ return; }
+    location.reload();
+  }, function(){ go(undefined, false); });
 })();
 
 function app(BOOT){
@@ -910,6 +945,40 @@ function app(BOOT){
   }
 
   var storageLocked = false;     // set when saved data exists but can't be read
+  var lockWhy = "";              // "unreadable" | "idb" (main storage didn't open) | "sync"
+  // Safety copies: full states kept in IndexedDB under "<kind>-<time>" before
+  // anything replaces the data (a cloud copy, a restore), plus data that could
+  // not be read. Only the newest few of each kind are kept, so they never fill
+  // the storage; the sidebar's "safety copies" lists them to restore or download.
+  var COPY_KINDS = { "before-sync":"replaced by the cloud copy", "cloud-before-upload":"cloud copy before an upload",
+                     "before-restore":"before a restore", "unreadable":"unreadable data" };
+  var COPY_KEEP = 6;
+  function copyKind(k){
+    if(typeof k !== "string") return null;
+    var m = /^([a-z-]+)-(\d+)$/.exec(k);
+    return m && COPY_KINDS[m[1]] ? { key:k, kind:m[1], at:+m[2] } : null;
+  }
+  function listCopies(){
+    if(!BOOT.idbOk) return Promise.resolve([]);
+    return STORE.keys().then(function(ks){
+      return ks.map(copyKind).filter(Boolean).sort(function(a, b){ return b.at - a.at; });
+    });
+  }
+  function safetyCopy(kind, json){
+    if(!BOOT.idbOk) return Promise.resolve();
+    return STORE.put(kind + "-" + Date.now(), json).then(function(){
+      return listCopies().then(function(all){
+        return Promise.all(all.filter(function(c){ return c.kind === kind; }).slice(COPY_KEEP)
+          .map(function(c){ return STORE.del(c.key); }));
+      });
+    }).then(paintCopies, paintCopies);
+  }
+  var paintCopies = function(){};   // set up with the sidebar
+  // IndexedDB has held this site's data before: localStorage is then never
+  // trusted alone, since a big state is not mirrored there and would be stale
+  var IDB_MARK = "hundred-idb";
+  function idbKnown(){ try{ return localStorage.getItem(IDB_MARK) === "1"; }catch(e){ return false; } }
+  function markIdb(){ try{ if(localStorage.getItem(IDB_MARK) !== "1") localStorage.setItem(IDB_MARK, "1"); }catch(e){} }
   function load(){
     var best = null, bestAt = -1, unreadable = null;
     [BOOT.idb, BOOT.ls].forEach(function(raw){
@@ -921,14 +990,22 @@ function app(BOOT){
         if(at > bestAt){ best = st; bestAt = at; st.savedAt = at || undefined; }
       }catch(e){ unreadable = raw; }
     });
+    if(BOOT.idbOk && BOOT.idb) markIdb();
     if(unreadable && BOOT.idbOk){
-      // keep a copy of anything unreadable so it can still be recovered
-      STORE.put("unreadable-" + Date.now(), unreadable).catch(function(){});
+      // keep a copy of anything unreadable so it can still be recovered,
+      // but only once: not again on every load while it stays unreadable
+      listCopies().then(function(all){
+        var last = all.filter(function(c){ return c.kind === "unreadable"; })[0];
+        return last ? STORE.get(last.key) : null;
+      }).then(function(prev){ if(prev !== unreadable) return safetyCopy("unreadable", unreadable); }).catch(function(){});
     }
+    // main storage didn't open but has held data before: show what we have,
+    // read-only, so an old localStorage copy can never be saved over it
+    if(!BOOT.idbOk && idbKnown()){ storageLocked = true; lockWhy = "idb"; }
     if(best) return best;
     // saved data exists but none of it could be read: start a blank tracker
     // on screen, but never save it over the real data
-    if(unreadable) storageLocked = true;
+    if(unreadable && !storageLocked){ storageLocked = true; lockWhy = "unreadable"; }
     var st = newTracker(100);
     st.stickies = [ { id:uid(), title:"", pinned:false, done:false, check:false,
                       blocks:[mkBlock("text","",false)] } ];
@@ -944,16 +1021,17 @@ function app(BOOT){
     if(!t) return;
     t.textContent = msg || ""; t.hidden = !msg;
   }
-  var writing = false, pendingJson = null, waiters = [];
+  var writing = false, pendingJson = null, pendingAt = 0, waiters = [];
   function saved(ok, why){
     if(ok){ if(saveFailed){ saveFailed = false; toast(null); } }
     else{ saveFailed = true; toast("couldn't save (" + why + "). export a backup now so nothing is lost"); }
   }
   function flushWrite(){
-    var json = pendingJson, ws = waiters;
+    var json = pendingJson, at = pendingAt, ws = waiters;
     pendingJson = null; waiters = []; writing = true;
     STORE.put(KEY, json).then(function(){
-      writing = false; saved(true);
+      writing = false; saved(true); markIdb();
+      announce(at);                  // other tabs reload only once this copy is stored
       ws.forEach(function(w){ w(true); });
       if(pendingJson) flushWrite();
     }, function(err){
@@ -1000,15 +1078,38 @@ function app(BOOT){
     redoStack = [];
   }
   var sync = null, schedulePush = function(){};   // set up by the cloud sync section
+
+  // ---- other tabs ----
+  // Every tab holds the whole state in memory, so an older tab saving later
+  // would wipe what a newer one wrote. After each stored save a tab announces
+  // its savedAt; a tab that hears a newer one stops saving and reloads (at
+  // once if it's on screen, otherwise when you come back to it).
+  var staleTab = false, tabCh = null;
+  try{ if(window.BroadcastChannel){ tabCh = new BroadcastChannel("hundred-tabs"); tabCh.onmessage = function(e){ otherTab(e.data && e.data.at); }; } }catch(e){ tabCh = null; }
+  window.addEventListener("storage", function(e){
+    if(e.key === "hundred-ping" && e.newValue){ try{ otherTab(JSON.parse(e.newValue).at); }catch(_){} }
+  });
+  function announce(at){
+    if(!at) return;
+    if(tabCh){ try{ tabCh.postMessage({ at:at }); return; }catch(e){} }
+    try{ localStorage.setItem("hundred-ping", JSON.stringify({ at:at, r:Math.random() })); }catch(e){}
+  }
+  function otherTab(at){
+    if(staleTab || !state || !(+at > (state.savedAt || 0))) return;
+    staleTab = true; pendingJson = null;
+    if(!document.hidden){ toast("changed in another tab: reloading"); setTimeout(function(){ location.reload(); }, 800); }
+  }
+  document.addEventListener("visibilitychange", function(){ if(!document.hidden && staleTab) location.reload(); });
+
   // returns a promise that resolves once this state (or a newer one) is stored
   function save(){
-    if(storageLocked) return Promise.resolve(false);
+    if(storageLocked || staleTab) return Promise.resolve(false);
     var snap = snapOf(state);
     if(snap === curSnap) return Promise.resolve(true);   // nothing changed
-    // a real change: make sure today's quests (and kept wins) are saved with it, whichever page made it
-    if(!restoring && window.Planner && Planner.needsLock && Planner.needsLock(state.game)){
-      try{ var G0 = siteScore(); if(G0 && Planner.lockQuests(state.game, G0).any) snap = snapOf(state); }catch(e){}
-    }
+    // the first real change of the day saves today's quests with it, whichever page made it
+    // (cheap check; kept quest wins are saved where planner items change)
+    if(!restoring && window.Planner && Planner.needsLock && Planner.needsLock(state.game)) lockToday();
+    snap = snapOf(state);
     if(!restoring) recordUndo(curSnap);
     curSnap = snap;
     state.savedAt = Date.now();
@@ -1016,16 +1117,21 @@ function app(BOOT){
     schedulePush();
     scheduleProfile();
     if(!BOOT.idbOk){
-      try{ localStorage.setItem(KEY, json); saved(true); return Promise.resolve(true); }
+      try{ localStorage.setItem(KEY, json); saved(true); announce(state.savedAt); return Promise.resolve(true); }
       catch(e){ saved(false, "storage full"); return Promise.resolve(false); }
     }
     // small mirror: keeps the shared 5MB of localStorage free for big states
     if(json.length < 2000000){ try{ localStorage.setItem(KEY, json); }catch(e){} }
     return new Promise(function(res){
       waiters.push(res);
-      pendingJson = json;            // a newer state replaces one still waiting
+      pendingJson = json; pendingAt = state.savedAt;   // a newer state replaces one still waiting
       if(!writing) flushWrite();
     });
+  }
+  // save today's quest picks and any kept quest wins into the game record
+  function lockToday(){
+    if(!window.Planner || !Planner.lockQuests || !state.game) return;
+    try{ var G0 = siteScore(); if(G0) Planner.lockQuests(state.game, G0); }catch(e){}
   }
 
   var state = load();
@@ -1553,7 +1659,7 @@ function app(BOOT){
             ck.setAttribute("aria-label", (it.done ? "untick " : "tick ") + it.title);
             ck.addEventListener("click", function(){
               if(!Planner.tick(pl.planner, date, it.key)) return;
-              linkStreaks(); save(); renderGrid(); refreshDayHead();
+              linkStreaks(); lockToday(); save(); renderGrid(); refreshDayHead();
             });
             row.appendChild(ck);
           }
@@ -1823,12 +1929,20 @@ function app(BOOT){
   var exportBtn  = document.getElementById("export");
   var importBtn  = document.getElementById("import");
   var importFile = document.getElementById("importFile");
+  // is there anything worth losing? ticks and day notes, written documents,
+  // money, planner activities, or anything placed on a page
   function hasData(){
-    return [state].concat(state.pages.filter(function(p){ return p.kind === "tracker"; }))
-      .some(function(t){
-        return t.days.some(Boolean) ||
-               Object.keys(t.dayNotes).some(function(k){ return !isBlank(t.dayNotes[k]); });
-      });
+    var trackers = [state].concat(state.pages.filter(function(p){ return p.kind === "tracker"; }));
+    if(trackers.some(function(t){
+      return t.days.some(Boolean) || Object.keys(t.dayNotes).some(function(k){ return !isBlank(t.dayNotes[k]); });
+    })) return true;
+    return [state].concat(state.pages).some(function(p){
+      if(p.items && p.items.length) return true;
+      if(p.kind === "doc") return !isBlank(p.blocks);
+      if(p.kind === "finance") return !!(p.finance && p.finance.txns && p.finance.txns.length);
+      if(p.kind === "planner"){ var P = p.planner || {}; return !!((P.acts && P.acts.length) || (P.rules && P.rules.length) || (P.reflect && Object.keys(P.reflect).length)); }
+      return false;
+    });
   }
   function renderBackup(){
     var last = parseDate(state.lastExport);
@@ -1946,7 +2060,9 @@ function app(BOOT){
     return Planner.score(gameSources(), state.game);
   }
   var profTimer = null, lastXp = null;
-  function scheduleProfile(){ if(profTimer) clearTimeout(profTimer); profTimer = setTimeout(renderProfile, 250); }
+  // scoring the whole game isn't free: wait for a pause in typing before redrawing the card
+  // the backup reminder refreshes here too, so changes on any page can turn it red
+  function scheduleProfile(){ if(profTimer) clearTimeout(profTimer); profTimer = setTimeout(function(){ renderProfile(); renderBackup(); }, 600); }
   function renderProfile(){
     profTimer = null;
     var card = document.getElementById("sbGame");
@@ -2372,13 +2488,23 @@ function app(BOOT){
   // On open: if the cloud copy is newer it replaces this browser's copy (a
   // copy of the local one is kept in IndexedDB first); if this one is newer
   // it uploads. After each change it uploads a few seconds later.
+  // `base` is the cloud's savedAt this browser's copy grew from (saved in
+  // localStorage). If both sides changed since then, nothing is replaced
+  // automatically: sync pauses and the sync button asks which copy stays.
+  // Uploads send ?base= so the worker can refuse (409) when the cloud moved on.
   var SYNC_KEY = "hundred-sync";
   sync = { cfg:null, timer:null, retry:null, busy:false, again:false, lastOk:0, err:"",
-           remoteAt:0, known:{} };
+           remoteAt:0, known:{}, base:0, conflict:null };
   var syncStatusEl = document.getElementById("syncStatus");
   var syncBtn = document.getElementById("syncBtn");
   try{ sync.cfg = JSON.parse(localStorage.getItem(SYNC_KEY) || "null"); }catch(e){ sync.cfg = null; }
   try{ (JSON.parse(localStorage.getItem(SYNC_KEY + "-known") || "[]")).forEach(function(h){ sync.known[h] = 1; }); }catch(e){}
+  try{ sync.base = +localStorage.getItem(SYNC_KEY + "-base") || 0; }catch(e){}
+  function setBase(at){
+    sync.base = +at || 0;
+    try{ if(sync.base) localStorage.setItem(SYNC_KEY + "-base", String(sync.base)); else localStorage.removeItem(SYNC_KEY + "-base"); }catch(e){}
+  }
+  var CONFLICT_MSG = "paused: this browser and the cloud both changed. press sync to choose";
 
   function syncApi(path, opts){
     opts = opts || {};
@@ -2436,11 +2562,17 @@ function app(BOOT){
     if(bump){ c.n++; try{ localStorage.setItem(SYNC_KEY + "-count", JSON.stringify(c)); }catch(e){} }
     return c.n;
   }
-  function push(){
-    if(!sync.cfg || storageLocked) return Promise.resolve();
-    if(sync.busy){ sync.again = true; return Promise.resolve(); }
+  // force: upload even if the cloud moved on (the user chose this browser's copy)
+  function push(force){
+    force = force === true;
+    if(!sync.cfg || storageLocked || staleTab) return Promise.resolve();
+    if(sync.conflict && !force){ paintSync(); return Promise.resolve(); }
+    if(sync.busy){ sync.again = true; if(force) sync.againForce = true; return Promise.resolve(); }
     var wait = lastPushAt + SYNC_GAP - Date.now();
-    if(wait > 0){ clearTimeout(sync.timer); sync.timer = setTimeout(push, wait); return Promise.resolve(); }
+    if(wait > 0){
+      if(force) return new Promise(function(res){ setTimeout(function(){ res(push(true)); }, wait); });
+      clearTimeout(sync.timer); sync.timer = setTimeout(push, wait); return Promise.resolve();
+    }
     if(syncCount(false) >= SYNC_DAILY){
       sync.err = "daily sync limit reached; changes are saved here and sync resumes tomorrow";
       paintSync(); return Promise.resolve();
@@ -2461,26 +2593,35 @@ function app(BOOT){
           });
         });
       }, Promise.resolve()).then(function(){
-        return syncApi("/state", { method:"PUT", body:d.json, headers:{ "X-Saved-At":String(at), "Content-Type":"application/json" } });
+        // ?base= lets the worker refuse if the cloud changed since this copy last matched it
+        var q = !force && sync.base ? "?base=" + sync.base : "";
+        return syncApi("/state" + q, { method:"PUT", body:d.json, headers:{ "X-Saved-At":String(at), "Content-Type":"application/json" } });
       });
     }).then(function(r){
+      if(r.status === 409){ var ce = new Error("conflict"); ce.conflictAt = +r.headers.get("X-Saved-At") || 0; throw ce; }
       if(!r.ok) throw new Error("upload failed (" + r.status + ")");
-      sync.remoteAt = at; sync.lastOk = Date.now(); sync.err = "";
+      sync.remoteAt = at; setBase(at); sync.conflict = null; sync.lastOk = Date.now(); sync.err = "";
     }).catch(function(e){
+      if(e.conflictAt !== undefined){ sync.conflict = { at:e.conflictAt }; sync.remoteAt = e.conflictAt; sync.err = ""; return; }
       sync.err = e.message || "sync failed";
       sync.retry = setTimeout(push, 30000);          // keep trying in the background
     }).then(function(){
       sync.busy = false; paintSync();
-      if(sync.again){ sync.again = false; schedulePush(); }
+      if(sync.again){
+        var f = sync.againForce; sync.again = sync.againForce = false;
+        if(f) push(true); else schedulePush();
+      }
     });
   }
   schedulePush = function(){
-    if(!sync.cfg || storageLocked) return;
+    if(!sync.cfg || storageLocked || staleTab || sync.conflict) return;
     clearTimeout(sync.timer);
     sync.timer = setTimeout(push, 2500);
     paintSync();
   };
-  // replace this browser's copy with the cloud's, then reload
+  // replace this browser's copy with the cloud's, then reload. The cloud copy
+  // must really be stored first: reloading without it would load the old copy,
+  // see the cloud is newer, download again and reload forever.
   function adoptRemote(){
     return syncApi("/state").then(function(r){
       if(!r.ok) throw new Error("download failed (" + r.status + ")");
@@ -2489,28 +2630,62 @@ function app(BOOT){
         var st = normalize(JSON.parse(json));
         if(!st) throw new Error("the cloud copy isn't readable");
         st.savedAt = at;
+        var out = JSON.stringify(st), wasLocked = storageLocked;
         storageLocked = true;                       // nothing may save over it now
-        var mine = JSON.stringify(state);
-        return STORE.put("before-sync-" + Date.now(), mine).catch(function(){}).then(function(){
-          var out = JSON.stringify(st);
-          if(out.length < 2000000){ try{ localStorage.setItem(KEY, out); }catch(e){} }
-          return BOOT.idbOk ? STORE.put(KEY, out) : null;
-        }).then(function(){ location.reload(); });
+        return safetyCopy("before-sync", JSON.stringify(state)).then(function(){
+          if(BOOT.idbOk) return STORE.put(KEY, out).then(function(){
+            if(out.length < 2000000){ try{ localStorage.setItem(KEY, out); }catch(e){} }
+          });
+          // no IndexedDB this session: localStorage has to hold it, or nothing changes
+          if(out.length >= 2000000) throw new Error("the cloud copy is too big for this browser's storage");
+          try{ localStorage.setItem(KEY, out); }catch(e){ throw new Error("this browser's storage is full"); }
+        }).then(function(){
+          setBase(at); sync.conflict = null; announce(at);
+          try{ sessionStorage.setItem("hundred-adopt", String(at)); }catch(e){}
+          location.reload();
+        }, function(e){ storageLocked = wasLocked; throw e; });
       });
     });
   }
-  // compare with the cloud: take the newer copy
+  // never download the same cloud copy twice in one session: if it is still
+  // newer after a reload, storing it failed, and trying again would loop
+  function adoptOnce(at){
+    var tried = null;
+    try{ tried = sessionStorage.getItem("hundred-adopt"); }catch(e){}
+    if(tried === String(at)){ sync.err = "couldn't store the cloud copy in this browser"; paintSync(); return; }
+    return adoptRemote();
+  }
+  // compare with the cloud. Only one side changed since they last matched:
+  // take that side. Both changed: pause and ask (see the sync popover).
   function syncCheck(){
-    if(!sync.cfg || sync.busy || storageLocked) return Promise.resolve();
+    if(!sync.cfg || sync.busy || storageLocked || staleTab) return Promise.resolve();
     return syncApi("/state", { method:"HEAD" }).then(function(r){
       if(r.status === 404){ if(hasData()) return push(); return; }
       if(!r.ok) throw new Error("check failed (" + r.status + ")");
-      var at = +r.headers.get("X-Saved-At") || 0, mine = state.savedAt || 0;
-      if(at > mine) return adoptRemote();
+      var at = +r.headers.get("X-Saved-At") || 0, mine = state.savedAt || 0, base = sync.base;
       sync.remoteAt = at;
-      if(at < mine) return push();
-      sync.lastOk = Date.now(); sync.err = ""; paintSync();
+      if(at === mine){ setBase(at); sync.conflict = null; sync.lastOk = Date.now(); sync.err = ""; paintSync(); return; }
+      if(base){
+        var dirty = mine > base, moved = at !== base;
+        if(moved && dirty){ sync.conflict = { at:at }; sync.err = ""; paintSync(); return; }
+        if(moved) return adoptOnce(at);
+        sync.conflict = null;
+        if(dirty) return push();
+        if(at > mine) return adoptOnce(at);
+        sync.lastOk = Date.now(); sync.err = ""; paintSync(); return;
+      }
+      // no record of where this copy came from (it synced before this check existed): newer wins
+      if(at > mine) return adoptOnce(at);
+      return push();
     }).catch(function(e){ sync.err = e.message || "sync failed"; paintSync(); });
+  }
+  // before uploading over the cloud on purpose, keep its copy here as a safety copy
+  function keepCloudCopy(){
+    return syncApi("/state").then(function(r){
+      if(r.status === 404) return;
+      if(!r.ok) throw new Error("couldn't read the cloud copy first (" + r.status + ")");
+      return r.text().then(rehydrate).then(function(json){ return safetyCopy("cloud-before-upload", json); });
+    });
   }
   function ago(ms){
     var s = Math.round((Date.now() - ms) / 1000);
@@ -2523,14 +2698,18 @@ function app(BOOT){
     syncStatusEl.hidden = !on; backupEl.hidden = on;   // with sync on, the cloud is the backup
     syncBtn.classList.toggle("on", on);
     if(!on) return;
-    syncStatusEl.classList.toggle("stale", !!sync.err);
-    syncStatusEl.textContent = sync.err ? "sync: " + sync.err + (/limit/.test(sync.err) ? "" : " · retrying")
+    syncStatusEl.classList.toggle("stale", !!(sync.err || sync.conflict));
+    syncStatusEl.classList.toggle("ask", !!sync.conflict);
+    syncStatusEl.textContent = sync.conflict ? "sync " + CONFLICT_MSG
+      : sync.err ? "sync: " + sync.err + (/limit|couldn't store/.test(sync.err) ? "" : " · retrying")
       : (sync.busy || sync.timer && !sync.lastOk) ? "syncing..."
       : sync.lastOk ? "synced " + ago(sync.lastOk) : "sync on";
   }
   setInterval(paintSync, 20000);
+  // a paused sync: the status line opens the choice too
+  syncStatusEl.addEventListener("click", function(e){ if(sync.conflict){ e.stopPropagation(); syncBtn.click(); } });
   document.addEventListener("visibilitychange", function(){
-    if(document.hidden){ if(sync.cfg && state.savedAt > sync.remoteAt) push(); }
+    if(document.hidden){ if(sync.cfg && !sync.conflict && state.savedAt > sync.remoteAt) push(); }
     else syncCheck();
   });
 
@@ -2553,6 +2732,10 @@ function app(BOOT){
     var off = pop.querySelector(".sp-off"), choice = pop.querySelector(".sp-choice");
     if(sync.cfg){ url.value = sync.cfg.url; key.value = sync.cfg.token; } else off.hidden = true;
     function say(t, bad){ msg.textContent = t; msg.classList.toggle("bad", !!bad); }
+    function ask(text){ choice.hidden = false; pop.querySelector(".sp-q").textContent = text; }
+    if(sync.conflict) ask("this browser and the cloud both changed since they last matched (cloud saved " +
+      (sync.conflict.at ? ago(sync.conflict.at) : "recently") + ", this browser " + (state.savedAt ? ago(state.savedAt) : "a while ago") +
+      "). which one should stay? the other is kept here as a safety copy.");
     pop.querySelector(".sp-go").addEventListener("click", function(){
       var u = url.value.trim().replace(/\/+$/, ""), k = key.value.trim();
       if(!/^https?:\/\/\S+$/.test(u)){ say("enter the worker's address (https://...)", true); return; }
@@ -2560,23 +2743,28 @@ function app(BOOT){
       say("connecting...");
       var prev = sync.cfg; sync.cfg = { url:u, token:k };
       // a different worker means a different bucket: forget which photos were uploaded
-      if(!prev || prev.url !== u){ sync.known = {}; try{ localStorage.removeItem(SYNC_KEY + "-known"); }catch(e){} }
+      // and where this copy last matched the cloud
+      if(!prev || prev.url !== u){ sync.known = {}; setBase(0); sync.conflict = null; try{ localStorage.removeItem(SYNC_KEY + "-known"); }catch(e){} }
       syncApi("/state", { method:"HEAD" }).then(function(r){
         if(r.status !== 404 && !r.ok) throw new Error("the worker answered " + r.status);
         localStorage.setItem(SYNC_KEY, JSON.stringify(sync.cfg));
-        if(r.status === 404){ say("connected. uploading this browser's copy..."); return push().then(function(){ say(sync.err ? sync.err : "connected and synced", !!sync.err); }); }
+        if(r.status === 404){ say("connected. uploading this browser's copy..."); return push(true).then(function(){ say(sync.err ? sync.err : "connected and synced", !!sync.err); }); }
         var at = +r.headers.get("X-Saved-At") || 0;
-        choice.hidden = false;
-        pop.querySelector(".sp-q").textContent = "the cloud already has data (saved " + ago(at) + "). this browser's copy was saved " + (state.savedAt ? ago(state.savedAt) : "a while ago") + ". which one should stay?";
+        if(at && at === state.savedAt){ setBase(at); say("connected. this browser and the cloud already match"); paintSync(); return; }
+        ask("the cloud already has data (saved " + ago(at) + "). this browser's copy was saved " + (state.savedAt ? ago(state.savedAt) : "a while ago") + ". which one should stay? the other is kept here as a safety copy.");
         say("");
       }).catch(function(e){ sync.cfg = prev; say(e.message, true); });
     });
     pop.querySelector(".sp-cloud").addEventListener("click", function(){ say("downloading..."); adoptRemote().catch(function(e){ say(e.message, true); }); });
     pop.querySelector(".sp-here").addEventListener("click", function(){
-      say("uploading..."); push().then(function(){ say(sync.err ? sync.err : "uploaded. this browser's copy is in the cloud", !!sync.err); choice.hidden = !sync.err; });
+      say("keeping a copy of the cloud's data, then uploading...");
+      keepCloudCopy().then(function(){ return push(true); }).then(function(){
+        say(sync.err ? sync.err : "uploaded. this browser's copy is in the cloud", !!sync.err); choice.hidden = !sync.err;
+      }).catch(function(e){ say(e.message, true); });
     });
     off.addEventListener("click", function(){
       localStorage.removeItem(SYNC_KEY); sync.cfg = null; clearTimeout(sync.timer); clearTimeout(sync.retry);
+      setBase(0); sync.conflict = null;
       paintSync(); closeSyncPop();
     });
     document.body.appendChild(pop);
@@ -2587,6 +2775,77 @@ function app(BOOT){
   });
   document.addEventListener("click", function(e){ if(syncPop && !syncPop.contains(e.target)) closeSyncPop(); });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeSyncPop(); });
+
+  // ---------- safety copies: restore or download one ----------
+  var copiesBtn = document.getElementById("copiesBtn"), copiesPop = null;
+  function whenLabel(ms){ var d = new Date(ms); return fmt(d).toLowerCase() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function downloadText(name, text){
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type:"application/json" }));
+    a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  }
+  paintCopies = function(){
+    listCopies().then(function(all){
+      copiesBtn.hidden = !all.length;
+      copiesBtn.textContent = "safety copies (" + all.length + ")";
+    }, function(){ copiesBtn.hidden = true; });
+  };
+  function closeCopiesPop(){ if(copiesPop && copiesPop.parentNode) copiesPop.parentNode.removeChild(copiesPop); copiesPop = null; }
+  // restoring keeps what is there now as another safety copy, then reloads
+  function restoreCopy(c, say){
+    STORE.get(c.key).then(function(raw){
+      var s = null;
+      try{ s = normalize(JSON.parse(raw)); }catch(e){}
+      if(!s){ say("this copy can't be read by this version of the site. download it instead", true); return; }
+      say("restoring...");
+      return safetyCopy("before-restore", JSON.stringify(state)).then(function(){
+        state = s; storageLocked = false; lockWhy = "";
+        return save();
+      }).then(function(ok){ if(ok) location.reload(); else say("couldn't save the restored copy", true); });
+    }).catch(function(e){ say("couldn't restore: " + (e && e.message || "storage error"), true); });
+  }
+  copiesBtn.addEventListener("click", function(e){
+    e.stopPropagation();
+    if(copiesPop){ closeCopiesPop(); return; }
+    var pop = copiesPop = document.createElement("div");
+    pop.className = "sync-pop copies-pop";
+    pop.innerHTML = '<div class="sp-head">safety copies</div>' +
+      '<p class="sp-q">kept automatically before anything replaced your data. restoring one keeps what is here now as another copy.</p>' +
+      '<div class="cp-list"></div><div class="sp-msg"></div>';
+    var list = pop.querySelector(".cp-list"), msg = pop.querySelector(".sp-msg");
+    function say(t, bad){ msg.textContent = t; msg.classList.toggle("bad", !!bad); }
+    listCopies().then(function(all){
+      if(!all.length) list.textContent = "none yet";
+      all.forEach(function(c){
+        var row = document.createElement("div"); row.className = "cp-row";
+        var lab = document.createElement("span"); lab.className = "cp-lab"; lab.textContent = COPY_KINDS[c.kind];
+        var when = document.createElement("small"); when.textContent = whenLabel(c.at); lab.appendChild(when);
+        var dl = document.createElement("button"); dl.type = "button"; dl.textContent = "download";
+        dl.addEventListener("click", function(){
+          STORE.get(c.key).then(function(raw){ downloadText("100days-" + c.kind + "-" + iso(new Date(c.at)) + ".json", String(raw || "")); },
+            function(){ say("couldn't read that copy", true); });
+        });
+        var rs = document.createElement("button"); rs.type = "button"; rs.textContent = "restore";
+        var armT = null;
+        rs.addEventListener("click", function(){
+          if(!armT){ rs.textContent = "sure?"; rs.classList.add("armed");
+            armT = setTimeout(function(){ armT = null; rs.textContent = "restore"; rs.classList.remove("armed"); }, 3000); return; }
+          clearTimeout(armT); armT = null; restoreCopy(c, say);
+        });
+        row.appendChild(lab); row.appendChild(dl); row.appendChild(rs);
+        list.appendChild(row);
+      });
+    }, function(){ say("couldn't list the copies", true); });
+    document.body.appendChild(pop);
+    var r = copiesBtn.getBoundingClientRect();
+    pop.style.left = Math.max(8, r.left) + "px";
+    pop.style.bottom = Math.max(8, window.innerHeight - r.top + 6) + "px";
+  });
+  document.addEventListener("click", function(e){ if(copiesPop && !copiesPop.contains(e.target)) closeCopiesPop(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeCopiesPop(); });
+  paintCopies();
 
   // ask the browser not to clear this site's data when the disk fills up
   if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){});
@@ -2723,8 +2982,12 @@ function app(BOOT){
     var k = (e.key || "").toLowerCase();
     var isUndo = k === "z" && !e.shiftKey, isRedo = (k === "z" && e.shiftKey) || (k === "y" && !e.metaKey);
     if(!isUndo && !isRedo) return;
-    // popups for settings keep the browser's own text undo
-    if(e.target && e.target.closest && e.target.closest(".sync-pop, .icon-pop, .new-pop, .font-pop")) return;
+    // popups for settings, and forms whose typing isn't saved yet (the finance
+    // and planner add/edit forms, quick log, plan day, new reward or category),
+    // keep the browser's own text undo: the app's undo would take back your
+    // last saved change instead of what you just typed
+    if(e.target && e.target.closest && e.target.closest(".sync-pop, .icon-pop, .new-pop, .font-pop, " +
+       ".fin-form, .fin-search, .pl-form, .pl-quick, .pl-planbox, .pl-tpl, [data-native-undo]")) return;
     e.preventDefault(); e.stopPropagation();
     if(isUndo) undo(); else redo();
   }, true);
@@ -3000,11 +3263,14 @@ function app(BOOT){
       }
       frame.addEventListener("pointerup", endPan);
       frame.addEventListener("pointercancel", endPan);
+      // zoom saves once the wheel stops, so one zoom is one undo step (not dozens)
+      var zoomT = null;
       frame.addEventListener("wheel", function(e){
         if(!cropping) return;
         e.preventDefault();
         it.zoom = Math.min(Math.max((it.zoom || 1) * Math.exp(-e.deltaY * 0.0015), 1), 4);
-        layoutPhoto(); save();
+        layoutPhoto();
+        clearTimeout(zoomT); zoomT = setTimeout(save, 400);
       }, { passive:false });
     }
 
@@ -3215,7 +3481,9 @@ function app(BOOT){
   });
 
   renderGrid(); refreshDay();
-  if(storageLocked) toast("couldn't read your saved data, so nothing will be saved over it. import a backup, or ask for help before changing anything");
+  if(storageLocked) toast(lockWhy === "idb"
+    ? "this browser's storage didn't open, so this is an older read-only copy and nothing you change is saved. reload the page to try again"
+    : "couldn't read your saved data, so nothing will be saved over it. import a backup, or ask for help before changing anything");
   paintSync();
   if(sync.cfg) syncCheck();
   window.dispatchEvent(new Event("app-ready"));   // the app starts after saved data is read

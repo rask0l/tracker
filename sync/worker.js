@@ -1,7 +1,10 @@
 // Cloud sync for the tracker: a tiny Cloudflare Worker in front of one R2 bucket.
 //
 //   GET/HEAD /state        the latest saved state (JSON; photos replaced by blob refs)
-//   PUT      /state        store a new state; header X-Saved-At carries its timestamp
+//   PUT      /state        store a new state; header X-Saved-At carries its timestamp.
+//                          With ?base=<savedAt> (the cloud copy the upload grew from)
+//                          it is refused with 409 if the cloud has changed since, so
+//                          an out-of-date device can't wipe newer changes.
 //   GET/HEAD /blob/<sha>   a photo (its data URL as text), addressed by SHA-256
 //   PUT      /blob/<sha>   upload a photo; rejected unless the body hashes to <sha>
 //
@@ -56,7 +59,7 @@ export default {
       return reply("unauthorized", 401);
     }
 
-    const path = new URL(req.url).pathname;
+    const url = new URL(req.url), path = url.pathname;
 
     if (path === "/state") {
       if (req.method === "GET" || req.method === "HEAD") {
@@ -70,6 +73,15 @@ export default {
       if (req.method === "PUT") {
         const at = req.headers.get("X-Saved-At") || String(Date.now());
         if (!/^\d{1,16}$/.test(at)) return reply("bad X-Saved-At", 400);
+        const base = url.searchParams.get("base");
+        if (base !== null) {
+          if (!/^\d{1,16}$/.test(base)) return reply("bad base", 400);
+          const cur = await env.BUCKET.head("state.json");
+          const curAt = (cur && cur.customMetadata && cur.customMetadata.savedAt) || null;
+          if (curAt !== null && curAt !== base) {
+            return reply("the cloud copy changed since this one was based on it", 409, { "X-Saved-At": curAt });
+          }
+        }
         const body = await req.text();
         if (body.length > MAX_STATE) return reply("state too large", 413);
         try { JSON.parse(body); } catch (e) { return reply("not JSON", 400); }
