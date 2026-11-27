@@ -9,8 +9,9 @@ linked from anywhere.
 ## What it is
 
 - `index.html` is the site: a static page with inline CSS and JS, no
-  framework, no Jekyll layout. The Finance page type lives in `finance.js`
-  and the Command Center (planner) in `planner.js`, each loaded by a plain
+  framework, no Jekyll layout. The Finance page type lives in `finance.js`,
+  the Command Center (planner) in `planner.js` and the CWES notes vault in
+  `vault.js`, each loaded by a plain
   script tag before the app; bump its `?v=` when it changes so browsers
   don't keep an old copy. It works like a small Notion: a
   left sidebar lists pages, the first being the home tracker, and
@@ -92,7 +93,8 @@ linked from anywhere.
   buttons the sidebar shows `last backup N days ago` and turns it red once
   there is data and no export in over 7 days. "Data" (`hasData()`) is any
   tracker tick or day note, written document, transaction, planner activity,
-  repeat or reflection, or page item; the line refreshes after every save.
+  repeat or reflection, vault note you wrote (not the starter notes), card
+  review or module status, or page item; the line refreshes after every save.
 - Cloud sync (optional): `sync/` holds a Cloudflare Worker (`worker.js`,
   `wrangler.toml`, setup steps in `sync/README.md`) that stores the state in
   an R2 bucket behind a bearer `SYNC_TOKEN` secret. The site's sidebar `sync`
@@ -154,7 +156,8 @@ linked from anywhere.
   subtitle under the title, same style as a tracker's), `blocks`, using the
   same block editor and slash menu as notes) or the tracker fields
   above (`kind:"tracker"`), or `kind:"finance"` with a `finance` object, or
-  `kind:"planner"` with a `planner` object.
+  `kind:"planner"` with a `planner` object, or `kind:"vault"` with a `vault`
+  object.
   Pages saved before trackers existed have no `kind` and load as documents.
   A page whose kind this copy can't read (an older copy of the site, or its
   script failed to load) is kept exactly as saved and shows a "refresh"
@@ -320,9 +323,27 @@ linked from anywhere.
     `Planner.score(gameSources(), state.game)` adds up every planner page
     (the first in the sidebar is the main one: daily quests, the weekly
     boss and the cleared-day streak come from it; the others add XP and
-    hours), trackers no planner keeps (+20 xp a ticked, dated box) and
+    hours), trackers no planner keeps (+20 xp a ticked, dated box),
     Finance pages (+15 xp a day with money logged, a "log today's money"
-    quest, and the "money & trackers" badges). It scores other planners by
+    quest, and the "money & trackers" badges) and CWES notes pages
+    (`vaults`, read by `vaultScore()` in planner.js). The notes feed the
+    game outcomes only, never time or typing: a solved lab 40 to 130 xp by
+    difficulty (`LAB_XP`, dated by the lab's date), flashcards remembered
+    2 xp each up to 60 a day (from `act[date].ok`), a lab written up as a
+    technique note +40, a practice finding (#finding, 120+ words) +60, and
+    a module done or reviewed with your own notes and a solved lab +100.
+    Events are keyed by entry id, so toggling a lab never counts twice, and
+    seed entries earn nothing. Solved labs also hit the weekly boss (25
+    each, up to 75). Quests from it: daily "solve a lab", "review N
+    flashcards", "write up a solved lab"; weekly "solve N labs", "review
+    flashcards on N days", "write a practice finding" (all area cwes, so the
+    CWES priority draws them; `vtDays` holds the per-day counts like
+    `finDays`). Their buttons open the notes on a tab through
+    `ctx.openVault()` (index.html `openVaultPage()` → `Vault.show()`).
+    Badges (cwes group, ACH_VERSION 6): first flag, 10/50/100 labs,
+    write-up habit, report writer, total recall, spaced out, proven, exam
+    ready. "▶ study" on a roadmap module starts the main planner's timer
+    (`studyTimer()` in index.html) and marks the module learning. It scores other planners by
     mounting them headless (`mount({ page, headless:true, game })` returns
     `{ parts, finish }` before drawing anything). Each planner page gets
     `ctx.game` and `ctx.score`.
@@ -377,7 +398,7 @@ linked from anywhere.
     tappable buttons, one table (`KEYS`) for both, so it works on touch.
     A leading zero in a typed time means 24-hour (`06:00` is morning);
     without it, 1 to 6 reads as pm.
-  - Badges: 88 in nine groups (`ACH_GROUPS`: hardcore, streaks, cwes,
+  - Badges: 104 in nine groups (`ACH_GROUPS`: hardcore, streaks, cwes,
     side hustle, gym, quests & bosses, money & trackers, xp, life), each shown as a hexagon medallion
     (`medalSvg()`/`medal()`): an icon from game-icons.net on a dark plate,
     in the theme's colours only (no emoji). The icons (`GI`, path data only,
@@ -487,6 +508,24 @@ linked from anywhere.
     150% of every target and pays 500 xp. Elite quests: from level 10 the
     third daily quest is an elite one (`QDEF` entries with `elite`, worth
     60). Ranks go on to immortal (150) and godlike (200).
+  - Form and prestige (the honest pair; the owner asked for a rank reset
+    after losing streaks, and these were chosen instead of a penalty):
+    the level counts everything you've done and never drops, so `formOf()`
+    adds how you're doing now: the last 28 days of XP against your own best
+    28 days (floor 1,500 xp so a new player isn't "peak"), as peak / sharp
+    / steady / slipping / cold, with a 28-day strip, days with nothing
+    (today not counted) and the trend on the 4 weeks before. It shows on
+    the game page under the hero, as a chip in the planner header, and in
+    the sidebar card (red when slipping or cold). Prestige is a choice,
+    open from level 20 (`PRESTIGE_AT`), two clicks: `game.prestige` gets
+    `{ date, xp }` (lifetime xp then; kept in order, never going back) and
+    the shown level and rank count from the last one (`G.level`, `G.base`,
+    `G.next` include that offset; `G.life` is the lifetime level). Lifetime
+    xp, coins, history and every badge stay: level badges use the lifetime
+    level. ★ per prestige by the level; badges "second life" and "eternal
+    return" (ACH_VERSION 7). There is deliberately no reset as a penalty:
+    losing everything after a slip makes people quit, and broken runs and
+    falling form already tell the truth.
   - Coins and real rewards: 1 coin per 10 XP plus 25 per badge, minus what
     was spent. The
     reward shop (`game.rewards`, `{ id, name, cost }`, editable, three
@@ -503,6 +542,152 @@ linked from anywhere.
     a new page and `Planner.mount({ root, page, save, trackers, streakOf })`
     from `renderPage()`; like finance, everything saves through the app's
     `save()`.
+- CWES workspace pages (`vault.js`, `kind:"vault"`, sidebar icon `§`, made
+  from "+ new page" → cwes notes): a knowledge base for the HTB CWES path
+  and after. Ten tabs: home, inbox, notes, labs, http, payloads, methods,
+  review, roadmap, graph. `vault` is `{ v:2, modules, notes, vars, cards,
+  act, imgs }`; `normalize()` migrates v1 (notes without a type become
+  `note`). index.html calls `Vault.normalize()` when loading,
+  `Vault.fresh()` for a new page, `Vault.hasData()` for the backup
+  reminder, `Vault.mount({ root, page, save })` from `renderPage()` (which
+  also sets `body.vt-wide`, a 1240px column) and, once at start,
+  `Vault.attach({ page, save, go })` so Alt+C captures on every page into
+  the first vault page.
+  - Everything is an entry in `notes`: `{ id, type, title, body, mod, tags,
+    rels, pinned, createdAt, updatedAt, seed?, rev? }` with `type` note,
+    lab, payload, http, method or capture, plus `lab` (platform, diff,
+    date, status todo/in progress/solved/stuck, mins, url), `pay` (cat,
+    lang, code), `http` (raw req, raw res, `ann` notes keyed by `q:`/`b:`
+    param, `c:` cookie, `h:`/`r:` header, `s:` set-cookie) or `runs`
+    (methodology runs `{ id, target, date, ticks }`, ticks being
+    `itemKey()` hashes of checklist lines, so a run never edits the
+    checklist). One shape means links, backlinks, search, flashcards,
+    relations and the graph work across every type.
+  - `body` is markdown and the source of truth for what can be read from
+    it: `[[links]]`, `#tags` (merged with the explicit `tags`), code
+    blocks, flashcards, checklist items and headings come from `scan()`
+    (cached per body), never stored. `seed` marks the starter entries
+    `fresh()` makes (a guide, an SQLi exploit chain, a PortSwigger lab to
+    do, a captured request, five methodologies, eight payloads); it is
+    dropped on the first edit, and seeds count neither for `hasData()` nor
+    as evidence on home.
+  - `rels` are typed relations `{ t, id }`, read from the entry that holds
+    them (`REL`: leads to, root cause, exploited with, mitigated by,
+    practises, payload for, methodology for, related); the target shows the
+    inverse label. `leads` relations form the exploit chain drawn under
+    each entry (`chainOf()`: longest path both ways, cycle-safe).
+    Relations to deleted entries are dropped by `normalize()` and by
+    `removeEntry()`. Connecting is kept simple on purpose (the owner found
+    a type-first form too fiddly): under the title, `+ connect` opens a
+    search list (`connectPicker()`; a new title makes a note) and adds the
+    connection as "related" (or practises / payload for / methodology for
+    on a lab, payload or methodology, `defKind()`); the kind changes only by
+    clicking the chip's label (`kindMenu()`). Up to three suggested entries
+    (TF-IDF) sit under it as one-click chips, and "mentioned in" rows have
+    `+ connect` too. "+ note" makes a blank note at once; an empty note
+    shows the templates as a row of buttons instead of a menu first.
+  - Markdown: headings, lists (`- [ ]` ticks from the preview by source
+    line, or into the open methodology run), tables, quotes, callouts
+    (`> [!tip]`, `> [!warning]`...), fenced code, `**bold**`, `*italic*`,
+    `~~strike~~`, `==mark==`, `[[entry]]`/`[[entry|alias]]` (dashed when
+    missing; clicking makes it), `#tags`, `{{VAR}}` and images
+    `![alt](img:<id>)` or `![alt](https://…)`. `render()` escapes every
+    character first and only emits tags it builds itself: these notes and
+    the captured traffic hold XSS payloads and must show as text. Links
+    allow only http(s)/mailto, image refs only ids found in `imgs`. Keep
+    it that way.
+  - Screenshots are evidence for write-ups. Every entry has a "+ screenshot"
+    button above the text (several files at once), and Ctrl+V or dragging
+    onto the text or preview works too; quick capture takes one. Each is
+    inserted as `![screenshot N](img:<id>)` where N keeps counting up from
+    the highest number in that entry (so "screenshot 3" never changes
+    meaning), and the alt text renders as the caption under the picture.
+    In read mode it is appended at the end. Under the text an "evidence"
+    strip shows every screenshot of the entry as a thumbnail (click to
+    view, × to take it out, two clicks). The viewer (`lightbox(list, i)`)
+    shows the caption and steps with ← → through the entry's pictures.
+    Lab templates have an "evidence" section, carried into the technique
+    note. `readImage()` keeps PNG/JPEG/WebP up to about 900 KB exactly as
+    taken (text stays readable); bigger ones are scaled to 1920px, as PNG
+    when that stays under ~1.2 MB, else JPEG 0.9. They live in `imgs` as
+    standalone data URLs, so cloud sync uploads each once as a blob and
+    `snapOf()` tokenises them. `normalize()` keeps only real image data
+    URLs that some body still references.
+  - `hl()` highlights code with per-language regex tokenisers (no library).
+    Strings must close on their line and SQL strings hold no spaces, so a
+    payload like `' UNION SELECT ...-- -` keeps its keywords. Placeholders
+    are swapped out while highlighting so no keyword splits one.
+  - Target values: `vars` maps placeholder names (IP, PORT, URL, DOMAIN,
+    LHOST, LPORT and any `{{NAME}}` used) to values; the target bar fills
+    them live and every `copy` copies the filled-in text. In the editor
+    it only shows on entries whose text uses a placeholder (and always on
+    payloads and the payloads tab).
+  - Exports (one entry or "export all") replace `img:<id>` with the image's
+    data URL so the markdown keeps its screenshots elsewhere; importing
+    .md turns embedded data-URL images back into `imgs` entries.
+  - Raw HTTP request and response boxes keep up to 300 KB each, so one
+    huge page can't slow every save and sync.
+  - http tab: paste a raw request (and response) from Burp. `parseReq()` /
+    `parseRes()` read query, form, JSON and multipart params, cookies,
+    headers and Set-Cookie flags; `findings()` lists leads (reflected
+    params, unencoded reflection, Location reflection, cookie flags,
+    missing CSP/X-Frame-Options/nosniff, version headers, CORS echo, error
+    messages, numeric ids, URL/file/command-like params, POST forms without
+    a CSRF token, secrets in GET, JWTs, which are decoded). Parameter names
+    are split into words (`redirect_uri`, `returnTo`) and matched whole,
+    never as substrings ("ip" must not fire on "description"); a value
+    that is a URL or a file name counts too. Leads are things to test,
+    worded that way. It never sends requests.
+  - labs tab: journal with stats per platform and per practised entry. On
+    a lab, "→ technique note" builds a note from its sections (root cause,
+    steps, payloads, lessons, a link back) and adds `tech` relations from
+    what the lab practises; "→ payloads" saves its new code blocks as
+    payload entries (category from the language) related to the same
+    targets. Setting status solved dates it.
+  - payloads tab: the library (category chips, copy from the list) plus
+    every code block from notes and labs, searchable.
+  - methods tab: checklists; "start a run" against a target ticks a copy.
+  - inbox: captures (`type:"capture"`) from the inline form or Alt+C
+    (`captureForm()`/`captureBox()`, Ctrl+Enter saves). Each becomes a
+    note or payload (`fileCapture()`, same id) or is appended to an entry.
+  - Flashcards: `front :: back` (outside inline code) or a `Q:` line then
+    an `A:` line, also inside quotes and callouts; headings and table rows
+    never count. `cardFront()` strips list, task and `>` markers so
+    `scan()` (review) and `render()` (preview) agree on each card's id.
+    Card id = hash of entry id + front (`cardKey()`). `cards`
+    maps id to `{ b, due, n, l, f }` (box 0..7 over `BOX` days). Notes can
+    be put on revision (`rev`, same schedule): a revision session shows
+    each heading (`sections()`) as a question with its text hidden.
+    Grades again/hard/good/easy (`nextState()`), at most `NEW_PER_DAY` (20)
+    new cards a day, cram goes hardest first. Space shows, 1-4 grades.
+    `act[date]` is `{ e, r, ok }`: wrote that day, reviews, reviews graded
+    good or easy (the 30-day recall rate on home).
+  - home: "covered" = per module a quarter each for notes written, a
+    solved lab, the share of its cards known (box 4+) and confidence. The
+    module table shows that evidence with flags (keeps slipping, low
+    confidence, no practice yet, practised not written up, no flashcards,
+    rusty after 21 days). Also next up, struggling cards and tags (by
+    lapses), knowledge health (unconnected entries, likely duplicates,
+    untagged notes), recent entries and a 20-week heatmap.
+  - Under each entry: incoming connections, backlinks, possible duplicates
+    (72%+ similar, same type, by TF-IDF cosine over title, tags and text,
+    `buildIndex()`, rebuilt only when entries change) and unlinked
+    mentions with `+ connect`.
+    Renaming an entry rewrites `[[old]]` links elsewhere.
+  - roadmap: modules (`{ id, name, status, conf, topics }`) with subtopics
+    and the entries filed under each.
+  - graph: canvas force layout that zooms to fit (`fit()`) until you pan,
+    zoom or drag (`G.userView`). One plain row: everything / not connected
+    yet, find (rings matches, Enter centres), fit, and "more filters"
+    (types, line kinds, tag, module) kept hidden by default; a legend
+    under it says what squares and lines mean. Relations are red arrows
+    labelled on hover.
+  - Keys while a vault is on screen: Ctrl+K search (filters `type:lab`,
+    `#tag`, `mod:name`), Alt+N new entry, Alt+1..0 tabs, Alt+\ list pane,
+    Alt+M focus mode (hides the site sidebar), `?` the list; Alt+C works on
+    every page. List pane and focus mode are remembered in localStorage
+    `vault-layout`, not the state. Every text field in the vault uses
+    `data-native-undo`, so Ctrl+Z there is the browser's text undo.
 - Icons: every page can have an icon, `{ emoji }` or `{ src }` (a picture
   shrunk to 256px), plus `bw: true` for black and white (a grayscale filter
   on the page icon and the sidebar; a new icon keeps the setting), picked

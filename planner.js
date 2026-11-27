@@ -200,6 +200,36 @@ function hash(str){
 function levelOf(xp){ var L = 1; while(50 * L * (L + 1) <= xp) L++; return L; }
 function lvlBase(L){ return 50 * (L - 1) * L; }
 
+// FORM: how you're doing now, next to the level (what you've done in total).
+// The last 28 days of XP against your own best 28 days (at least 1,500 xp, so
+// a new player isn't at "peak" after one good day). It drops when you slip and
+// comes back when you do: the honest number a level that never falls can't be.
+var PRESTIGE_AT = 20;   // prestige opens from this level
+var FORM_TIERS = [[0.9, "peak"], [0.65, "sharp"], [0.4, "steady"], [0.15, "slipping"], [0, "cold"]];
+function formOf(perDay, t){
+  var cur = 0, prev = 0, dark = 0, strip = [];
+  for(var i = 27; i >= 0; i--){
+    var d = addDays(t, -i), x = perDay[d] || 0;
+    cur += x; strip.push({ d:d, xp:x });
+    if(!x && i > 0) dark++;                 // today isn't over, so it can't be a dark day yet
+    prev += perDay[addDays(t, -i - 28)] || 0;
+  }
+  // the best 28 days you've had, a sliding window over the last ~800 days
+  var dates = Object.keys(perDay).filter(function(d){ return d <= t; }).sort(), best = cur;
+  if(dates.length){
+    var start = dates[0] < addDays(t, -800) ? addDays(t, -800) : dates[0], win = 0, q = [];
+    for(var dd = start; dd <= t; dd = addDays(dd, 1)){
+      var v = perDay[dd] || 0; win += v; q.push(v);
+      if(q.length > 28) win -= q.shift();
+      if(win > best) best = win;
+    }
+  }
+  var ratio = cur / Math.max(best, 1500), tier = "cold";
+  for(var k = 0; k < FORM_TIERS.length; k++) if(ratio >= FORM_TIERS[k][0]){ tier = FORM_TIERS[k][1]; break; }
+  return { xp:cur, prev:prev, best:best, pct:Math.round(ratio * 100), tier:tier, dark:dark, strip:strip,
+           trend:prev ? Math.round((cur - prev) / prev * 100) : null };
+}
+
 // the game record (one for the whole site, on the root state; old copies on planner pages are kept but unused)
 function normGame(gIn){
   var g = obj(gIn);
@@ -213,6 +243,13 @@ function normGame(gIn){
   o.claims = arr(g.claims).filter(function(c){ return c && typeof c.name === "string" && okCost(c.cost) && isDate(c.date); })
     .slice(-500).map(function(c){ return { id:str(c.id || rid(), 40), name:str(c.name, 60), cost:c.cost, date:c.date }; });
   Object.keys(obj(g.seen)).forEach(function(k){ if(/^[a-z0-9_]{1,30}$/.test(k) && isDate(g.seen[k])) o.seen[k] = g.seen[k]; });
+  // prestige: each time you chose to start again at level 1, { date, xp } with your
+  // lifetime xp at that moment. Levels and ranks count from the last one; lifetime
+  // xp, coins, badges and history never change. Kept in order, never going back.
+  var px = -1;
+  o.prestige = arr(g.prestige).filter(function(p){ return p && isDate(p.date) && Number.isInteger(p.xp) && p.xp >= 0; })
+    .slice(0, 50).filter(function(p){ if(p.xp < px) return false; px = p.xp; return true; })
+    .map(function(p){ return { date:p.date, xp:p.xp }; });
   // every day's picks are kept: past quest XP is worked out from them, so trimming would take XP away
   Object.keys(obj(g.quests)).filter(isDate).sort().slice(-3000).forEach(function(d){
     if(Array.isArray(g.quests[d])) o.quests[d] = g.quests[d].filter(function(q){ return typeof q === "string" && /^[a-z0-9_.:]{1,48}$/.test(q); }).slice(0, 3);
@@ -960,7 +997,8 @@ function mount(ctx){
   }
   // the week so far, for weekly quests
   function weekCtx(mon){
-    var t = today(), w = { min:{}, cwesDays:0, sub:{}, revDays:0, topicN:{}, long90:0, earlyDays:0, cwes60:0, gymDays:0, cleared:0, moneyDays:0, reflDays:0, notesDays:0, lastCwes:0 };
+    var t = today(), w = { min:{}, cwesDays:0, sub:{}, revDays:0, topicN:{}, long90:0, earlyDays:0, cwes60:0, gymDays:0, cleared:0, moneyDays:0, reflDays:0, notesDays:0, lastCwes:0,
+      vLabs:0, vRevDays:0, vFind:0 };
     AREAS.forEach(function(a){ w.min[a] = 0; });
     for(var k = 0; k < 7; k++){
       var d = addDays(mon, k);
@@ -978,6 +1016,7 @@ function mount(ctx){
       if(c.doneN.gym > 0) w.gymDays++;
       if(!P.rest[d] && c.total > 0 && c.done === c.total) w.cleared++;
       if(finDays && finDays[d]) w.moneyDays++;
+      if(vtDays){ w.vLabs += vtDays.labs[d] || 0; if(vtDays.reviews[d]) w.vRevDays++; w.vFind += vtDays.findings[d] || 0; }
       if(P.reflect[d]) w.reflDays++;
     }
     var B = bossOf(mon, weekStats(mon));
@@ -1058,6 +1097,16 @@ function mount(ctx){
         prog:function(c){ return [c.doneMin.side, m]; }, ok:function(c){ return c.planMin.side >= m * .75; } }; } },
     money:{ area:"any", params:["log"],
       make:function(){ return { label:"log today's money", xp:25, prog:function(c){ return [finDays && finDays[c.date] ? 1 : 0, 1]; }, ok:function(){ return !!finDays; } }; } },
+    // outcomes from the CWES notes page: what you solved and remembered, not time spent
+    vlab:{ area:"cwes", params:["one"],
+      make:function(){ return { label:"solve a lab", tip:"a lab you mark solved today in your CWES notes", xp:50,
+        prog:function(c){ return [vtDays && vtDays.labs[c.date] ? 1 : 0, 1]; }, ok:function(){ return !!vtDays; } }; } },
+    vcards:{ area:"cwes", params:[10, 20, 30],
+      make:function(p){ var n = +p; return { label:"review " + n + " flashcards", tip:"in the review tab of your CWES notes", xp:15 + n,
+        prog:function(c){ return [vtDays ? vtDays.reviews[c.date] || 0 : 0, n]; }, ok:function(){ return !!vtDays && vtDays.cards >= n; } }; } },
+    vwrite:{ area:"cwes", params:["lab"],
+      make:function(){ return { label:"write up a solved lab", tip:"open a solved lab in your CWES notes and press → technique note", xp:40,
+        prog:function(c){ return [vtDays && vtDays.writeups[c.date] ? 1 : 0, 1]; }, ok:function(){ return !!vtDays && vtDays.pending > 0; } }; } },
     plan:{ area:"any", params:["tomorrow", "cwes"],
       make:function(p){ var cw = p === "cwes"; return { label:cw ? "plan a CWES block for tomorrow" : "plan tomorrow", xp:cw ? 30 : 20,
         prog:function(c){ return [(cw ? c.tomCwes : c.tomN) > 0 ? 1 : 0, 1]; } }; } },
@@ -1073,7 +1122,7 @@ function mount(ctx){
       make:function(p){ var n = +p; return { label:n + "h of CWES this week", xp:40 + n * 12, unit:"h", prog:function(w){ return [w.min.cwes / 60, n]; } }; } },
     cwesdays:{ family:"wdays", area:"cwes", perDay:true, params:[3, 4, 5, 6, 7],
       make:function(p){ var n = +p; return { label:"study CWES on " + n + " days", xp:40 + n * 15, prog:function(w){ return [w.cwesDays, n]; } }; } },
-    labs:{ area:"cwes", structured:true, params:[2, 3, 5, 8, 10],
+    labs:{ family:"wlabs", area:"cwes", structured:true, params:[2, 3, 5, 8, 10],
       make:function(p){ var n = +p; return { label:"finish " + n + " CWES labs", xp:40 + n * 15, prog:function(w){ return [w.sub["cwes.lab"] || 0, n]; } }; } },
     rev:{ perDay:true, area:"cwes", structured:true, params:[2, 3, 4],
       make:function(p){ var n = +p; return { label:"revise CWES on " + n + " days", xp:50 + n * 15, prog:function(w){ return [w.revDays, n]; } }; } },
@@ -1098,6 +1147,15 @@ function mount(ctx){
       make:function(p){ var n = +p; return { label:n + " gym sessions", xp:40 + n * 20, prog:function(w){ return [w.gymDays, n]; } }; } },
     clearw:{ perDay:true, area:"any", params:[3, 4, 5, 6, 7],
       make:function(p){ var n = +p; return { label:"clear " + n + " days", xp:40 + n * 20, prog:function(w){ return [w.cleared, n]; } }; } },
+    vlabw:{ family:"wlabs", area:"cwes", params:[2, 3, 5],
+      make:function(p){ var n = +p; return { label:"solve " + n + " labs this week", tip:"labs marked solved in your CWES notes", xp:50 + n * 20,
+        prog:function(w){ return [w.vLabs, n]; }, ok:function(){ return !!vtDays; } }; } },
+    vrevw:{ perDay:true, area:"cwes", params:[3, 5],
+      make:function(p){ var n = +p; return { label:"review flashcards on " + n + " days", tip:"in the review tab of your CWES notes", xp:40 + n * 15,
+        prog:function(w){ return [w.vRevDays, n]; }, ok:function(){ return !!vtDays && vtDays.cards >= 10; } }; } },
+    vfindw:{ area:"cwes", params:["one"],
+      make:function(){ return { label:"write a practice finding", tip:"a note tagged #finding in your CWES notes, written like the exam report (120+ words)", xp:90,
+        prog:function(w){ return [w.vFind, 1]; }, ok:function(){ return !!vtDays; } }; } },
     moneyw:{ perDay:true, area:"any", params:[5, 7],
       make:function(p){ var n = +p; return { label:"log money on " + n + " days", xp:50 + n * 10, prog:function(w){ return [w.moneyDays, n]; }, ok:function(){ return !!finDays; } }; } },
     reflw:{ perDay:true, area:"any", params:[3, 5, 7],
@@ -1192,7 +1250,7 @@ function mount(ctx){
     }
     return base;
   }
-  var ACH_VERSION = 5;   // bump when badges are added: ones already earned then unlock quietly
+  var ACH_VERSION = 7;   // bump when badges are added: ones already earned then unlock quietly
   var ACH_GROUPS = ["hardcore", "streaks", "cwes", "side hustle", "gym", "quests & bosses", "money & trackers", "xp", "life"];
   var ACH = [
     // streaks: cleared days
@@ -1216,6 +1274,17 @@ function mount(ctx){
     ["lab10", "lab rat", "finish 10 CWES labs", function(S){ return [S.labN, 10]; }, "cwes"],
     ["lab50", "pwned", "finish 50 CWES labs", function(S){ return [S.labN, 50]; }, "cwes"],
     ["rev10", "spaced repetition", "finish 10 revision sessions", function(S){ return [S.revN, 10]; }, "cwes"],
+    // from the CWES notes page: proof of learning, not time
+    ["jlab1", "first flag", "solve your first lab in the lab journal", function(S){ return [S.vLabs, 1]; }, "cwes"],
+    ["jlab10", "flag collector", "solve 10 labs in the lab journal", function(S){ return [S.vLabs, 10]; }, "cwes"],
+    ["jlab50", "exploit library", "solve 50 labs in the lab journal", function(S){ return [S.vLabs, 50]; }, "cwes"],
+    ["jlab100", "hundred flags", "solve 100 labs in the lab journal", function(S){ return [S.vLabs, 100]; }, "cwes"],
+    ["jwrite5", "write-up habit", "write up 5 solved labs as technique notes", function(S){ return [S.vWrite, 5]; }, "cwes"],
+    ["jfind1", "report writer", "write a practice finding (a #finding note of 120+ words)", function(S){ return [S.vFind, 1]; }, "cwes"],
+    ["jrecall500", "total recall", "remember 500 flashcards (good or easy)", function(S){ return [S.vRecall, 500]; }, "cwes"],
+    ["jrevrun30", "spaced out", "review flashcards 30 days in a row", function(S){ return [S.vRevRun, 30]; }, "cwes"],
+    ["jmods5", "proven", "finish 5 modules with evidence: done, with your own notes and a solved lab", function(S){ return [S.vMods, 5]; }, "cwes"],
+    ["jmods20", "exam ready", "finish 20 modules with evidence", function(S){ return [S.vMods, 20]; }, "cwes"],
     // side hustle
     ["side10", "side quest", "10h on the side hustle", function(S){ return [S.side / 60, 10, "h"]; }, "side hustle"],
     ["side50", "operator", "50h on the side hustle", function(S){ return [S.side / 60, 50, "h"]; }, "side hustle"],
@@ -1255,6 +1324,8 @@ function mount(ctx){
     ["lvl25", "level 25", "reach level 25", function(S){ return [S.level, 25]; }, "xp"],
     ["lvl50", "level 50", "reach level 50", function(S){ return [S.level, 50]; }, "xp"],
     ["lvl100", "level 100", "reach level 100", function(S){ return [S.level, 100]; }, "xp"],
+    ["prestige1", "second life", "prestige: choose to start again at level 1 (opens at level 20)", function(S){ return [S.prestige, 1]; }, "xp"],
+    ["prestige3", "eternal return", "prestige 3 times", function(S){ return [S.prestige, 3]; }, "hardcore"],
     // life
     ["early5", "early bird", "finish 5 things that start before 7:00", function(S){ return [S.early, 5]; }, "life"],
     ["early25", "dawn patrol", "finish 25 things that start before 7:00", function(S){ return [S.early, 25]; }, "life"],
@@ -1359,6 +1430,8 @@ function mount(ctx){
     flawless1:"sport-medal", flawless4:"medallist", bossrun4:"warhammer", bossrun12:"thor-hammer", raid1:"evil-tower", raid10:"grim-reaper",
     gymrun8:"weight-crush", elite25:"boss-key", comeback:"feathered-wing", crit200:"dice-eight-faces-eight", sidemonth50:"coins-pile",
     money100:"crown-coin", early30:"sunbeams", day1000:"crowned-explosion", triple30:"scroll-quill", xp100k:"fire-gem",
+    jlab1:"on-target", jlab10:"broadsword", jlab50:"all-seeing-eye", jlab100:"dragon-breath", jwrite5:"scroll-quill", jfind1:"ribbon-medal",
+    jrecall500:"brain-tentacle", jrevrun30:"dna2", jmods5:"medal", jmods20:"jewel-crown", prestige1:"angel-wings", prestige3:"hand-of-god",
     perfect12:"crown-of-thorns", wq1:"checklist", wsweep1:"target-prize", wq25:"flying-target", wsweep10:"medal-skull", fin7:"two-coins", finrun14:"receive-money", fin30:"take-my-money", fin100:"coins-pile", tick50:"check-mark", streak180:"fire-ace", streak365:"over-infinity", cwes500:"daemon-skull", focus1000:"hourglass", lvl150:"falling-star"
   };
   var RARE = {
@@ -1368,6 +1441,7 @@ function mount(ctx){
     boss12:3, day500:3, xp10k:3, lvl25:3,
     streak100:4, clear365:4, cwes250:4, side250:4, boss52:4, lvl50:4, lvl100:4,
     finrun14:2, fin30:2, tick50:2, fin100:3, wsweep1:2, wq25:3, wsweep10:4,
+    jlab10:2, jwrite5:2, jfind1:2, jlab50:3, jrecall500:3, jrevrun30:3, jmods5:3, jlab100:4, jmods20:5, prestige1:4, prestige3:5,
     deep1:3, flawless1:3, bossrun4:3, raid1:3, elite25:3, comeback:3, crit200:3,
     deep10:4, nozero30:4, flawless4:4, gymrun8:4, sidemonth50:4, money100:4, early30:4, day1000:4, triple30:4, xp100k:4,
     nozero100:5, bossrun12:5, raid10:5, perfect12:5, streak180:5, streak365:5, cwes500:5, focus1000:5, lvl150:5
@@ -1386,6 +1460,8 @@ function mount(ctx){
     var parts = FOCUS.filter(function(a){ return P.areas[a].target > 0; });
     var max = parts.length * 100, dmg = 0;
     parts.forEach(function(a){ dmg += Math.min(1, actual(w, a) / (P.areas[a].target * need)) * 100; });
+    // labs solved in the CWES notes hit the boss too: 25 each, up to 75 a week
+    if(vtDays && max > 0){ var vl = 0; for(var k = 0; k < 7; k++) vl += vtDays.labs[addDays(mon, k)] || 0; dmg = Math.min(max, dmg + Math.min(vl * 25, 75)); }
     var hp = Math.max(0, Math.round(max - dmg));
     var names = raid ? RAIDS : BOSSES;
     return { mon:mon, raid:raid, name:names[hash(mon) % names.length], max:max, hp:hp, dead:max > 0 && hp === 0 };
@@ -1393,9 +1469,13 @@ function mount(ctx){
   // this planner's share of the game; the main planner also brings the cleared-day streak,
   // quests and bosses (o.main). Other planners, trackers and money logging only add XP and stats.
   var finDays = null;   // dates with money logged, for the "log your money" quest
+  // what the CWES notes pages show you did, by date (worked out in score()):
+  // { labs, reviews, writeups, findings: { date: n }, pending: solved labs not written up, cards }
+  var vtDays = null;
   function planParts(o){
     o = o || {};
     finDays = o.financeDays || null;
+    vtDays = o.vaultDays || null;
     var t = today(), events = [], S = { cwes:0, side:0, money:0, gymN:0, early:0, firstDone:false, labN:0, revN:0, ideaN:0, critN:0 };
     var focusDay = {}, sideMonth = {}, early530 = {};
     var gymDay = {}, first = null;
@@ -1529,10 +1609,15 @@ function mount(ctx){
     S.bestSideMonth = 0; Object.keys(sideMonth).forEach(function(k){ if(sideMonth[k] > S.bestSideMonth) S.bestSideMonth = sideMonth[k]; });
     S.eliteN = events.filter(function(e){ return e.elite; }).length;
     S.finDays = extra.finDays || 0; S.finRun = extra.finRun || 0; S.ticks = extra.ticks || 0;
+    ["vLabs", "vWrite", "vFind", "vRecall", "vRevRun", "vMods"].forEach(function(k){ S[k] = extra[k] || 0; });
     var xp = 0; events.forEach(function(e){ xp += e.xp; });
-    var level = levelOf(xp);
+    // the level on screen counts from the last prestige; badges use the lifetime level,
+    // so prestiging never takes a badge away
+    var pres = GM.prestige || [], pBase = pres.length ? pres[pres.length - 1].xp : 0;
+    if(pBase > xp) pBase = 0;              // an undo past a prestige, say: never show negative progress
+    var life = levelOf(xp), level = levelOf(xp - pBase);
     S.clearN = M.clearN; S.best = M.best; S.bosses = M.bosses; S.gymWeeks = M.gymWeeks; S.fullWeeks = M.fullWeeks;
-    S.level = level; S.xp = xp; S.claims = GM.claims.length;
+    S.level = life; S.xp = xp; S.claims = GM.claims.length; S.prestige = pres.length;
     var perDay = {}, qDay = {};
     events.forEach(function(e){
       if(!e.date) return;
@@ -1550,7 +1635,8 @@ function mount(ctx){
     var nextBadge = ach.filter(function(x){ return !x.got && x.have > 0; })
       .sort(function(x, y){ return y.have / y.need - x.have / x.need; })[0] || null;
     var rank = rankOf(level);
-    return { xp:xp, level:level, base:lvlBase(level), next:lvlBase(level + 1), rank:rank, rankR:rankRarity(RANKS.indexOf(rank)), events:events, keys:keys, S:S, ach:ach,
+    return { xp:xp, level:level, life:life, stars:pres.length, form:formOf(perDay, today()), canPrestige:level >= PRESTIGE_AT,
+             base:pBase + lvlBase(level), next:pBase + lvlBase(level + 1), rank:rank, rankR:rankRarity(RANKS.indexOf(rank)), events:events, keys:keys, S:S, ach:ach,
              todayQ:M.todayQ, weekQ:M.weekQ || [], qFresh:M.qFresh || {}, thisMon:M.thisMon, qDate:M.qDate, qSig:M.qSig, boss:M.boss, streak:M.run, best:M.best, cleared:M.cleared, nextBadge:nextBadge,
              earned:Math.floor(xp / 10) + badgeCoins, spent:spent, coins:Math.floor(xp / 10) + badgeCoins - spent };
   }
@@ -1680,7 +1766,8 @@ function mount(ctx){
     var span = G.next - G.base, into = G.xp - G.base;
     return h("div", { class:"pl-xprow", title:G.xp + " xp in total" }, [
       emb(G.rank[2], "pl-remb"),
-      h("b", { text:"lvl " + G.level + " · " + G.rank[1] }),
+      h("b", { text:"lvl " + G.level + " · " + G.rank[1] + (G.stars ? " " + stars(G.stars) : "") }),
+      h("span", { class:"pl-formchip f-" + G.form.tier, title:"form: the last 28 days against your best 4 weeks (" + G.form.pct + "%)", text:G.form.tier }),
       h("span", { class:"pl-xpbar" }, [ h("i", { style:"width:" + Math.round(into / span * 100) + "%" }) ]),
       h("small", { text:into + "/" + span + " xp" }),
       h("small", { class:"pl-coins", text:G.coins + " coins" }),
@@ -1783,6 +1870,10 @@ function mount(ctx){
     if(key === "gym" || key === "gymw") return running("gym") || { label:"▶ start", run:function(){ startQuestTimer("gym", "gym", ""); } };
     if(key === "side" || key === "sidew") return running("side") || { label:"▶ start", run:function(){ startQuestTimer("side hustle", "side", ""); } };
     if(key === "money" || key === "moneyw") return ctx.openFinance ? { label:"open money", run:function(){ ctx.openFinance(); } } : null;
+    // CWES notes quests open the right tab there
+    if(key === "vlab" || key === "vlabw" || key === "vwrite") return ctx.openVault ? { label:"open labs", run:function(){ ctx.openVault("labs"); } } : null;
+    if(key === "vcards" || key === "vrevw") return ctx.openVault ? { label:"review", run:function(){ ctx.openVault("review"); } } : null;
+    if(key === "vfindw") return ctx.openVault ? { label:"write it", run:function(){ ctx.openVault("finding"); } } : null;
     if(key === "plan") return { label:arg === "cwes" ? "plan it" : "plan tomorrow", run:function(){
       if(arg === "cwes"){ u.view = "day"; u.date = addDays(today(), 1); var dr = blankDraft(u.date); dr.area = "cwes"; u.form = { key:null, d:dr };
         toPlanner(function(){ var x = document.querySelector(".pl-ftitle"); if(x){ x.focus(); x.scrollIntoView({ block:"nearest" }); } }); }
@@ -1825,6 +1916,36 @@ function mount(ctx){
       GM.off || !GM.loud ? null : h("label", { class:"pl-check pl-gamesw" }, [ h("input", { type:"checkbox", checked:GM.mute ? null : true,
         onchange:function(e){ GM.mute = !e.target.checked; commit(); } }), "sound" ]) ]);
   }
+  function stars(n){ return new Array(n + 1).join("★"); }
+  // form: the last 28 days, honestly. A level never drops; this does when you slip.
+  function formBlock(G){
+    var F = G.form, t = today();
+    var bits = [F.xp + " xp in the last 28 days", F.dark ? (F.dark === 1 ? "1 day with nothing" : F.dark + " days with nothing") : "no empty days",
+      F.trend == null ? "" : (F.trend >= 0 ? "▲ " : "▼ ") + Math.abs(F.trend) + "% on the 4 weeks before"].filter(Boolean);
+    return h("div", { class:"pl-form f-" + F.tier }, [
+      h("div", { class:"pl-formhead" }, [ h("span", { class:"pl-nlab", text:"form" }), h("b", { text:F.tier }),
+        h("small", { text:F.pct + "% of your best 4 weeks", title:"your best 28 days: " + F.best + " xp" }) ]),
+      h("div", { class:"pl-formstrip", role:"img", "aria-label":"xp on each of the last 28 days" }, F.strip.map(function(s){
+        var lv = !s.xp ? 0 : s.xp < 60 ? 1 : s.xp < 150 ? 2 : 3;
+        return h("i", { class:"l" + lv + (s.d === t ? " today" : ""), title:s.d + ": " + s.xp + " xp" });
+      })),
+      h("small", { class:"pl-formtxt", text:bits.join(" · ") })
+    ]);
+  }
+  // prestige: your choice, made when you're doing well, never a penalty for slipping.
+  // Level and rank start again at 1; lifetime xp, coins, badges and history stay.
+  function prestigeRow(G){
+    var mark = stars(G.stars + 1);
+    if(!G.canPrestige) return h("p", { class:"pl-hint pl-prest" }, [ "prestige opens at level " + PRESTIGE_AT +
+      ": start again at level 1 with a ★, keeping your badges, coins and history." + (G.stars ? " lifetime level " + G.life + "." : "") ]);
+    var b = armed(h("button", { type:"button", class:"pl-btn pl-prestbtn", text:"prestige " + mark }), "sure? back to level 1", function(){
+      GM.prestige = (GM.prestige || []).concat([{ date:today(), xp:G.xp }]);
+      GM.level = 1;
+      commit();
+      celebrate("level", "prestige " + mark, "back to level 1", "badges, coins and your history stay · climb again", { icon:"angel-wings", r:5 });
+    });
+    return h("div", { class:"pl-prest" }, [ b, h("small", { text:"start again at level 1 as " + mark + ". badges, coins and your history stay; only the level and rank climb again." }) ]);
+  }
   function gameView(){
     var G = curG;
     if(GM.off || !G){
@@ -1838,7 +1959,8 @@ function mount(ctx){
     body.appendChild(h("div", { class:"pl-hero" }, [
       medal(G.rank[2], G.rankR, true, "pl-heromedal"),
       h("div", { class:"pl-herotxt" }, [
-        h("div", { class:"pl-herolvl" }, [ h("b", { text:"lvl " + G.level }), h("span", { class:"pl-herorank", text:G.rank[1] }) ]),
+        h("div", { class:"pl-herolvl" }, [ h("b", { text:"lvl " + G.level }), h("span", { class:"pl-herorank", text:G.rank[1] }),
+          G.stars ? h("span", { class:"pl-stars", title:"prestige " + G.stars + " · lifetime level " + G.life, text:stars(G.stars) }) : null ]),
         h("div", { class:"bar pl-herobar" }, [ h("i", { style:"width:" + Math.round((G.xp - G.base) / span * 100) + "%" }) ]),
         h("p", { class:"pl-hint", text:(G.next - G.xp) + " xp to level " + (G.level + 1) + (nextRank ? " · next rank " + nextRank[1] + " at level " + nextRank[0] : " · top rank") }),
         h("div", { class:"pl-herostats" }, [[G.xp, "xp"], [G.coins, "coins"], [got + "/" + G.ach.length, "badges"], [G.streak, "run"], [G.best, "best run"], [G.S.bosses, "bosses"]].map(function(x){
@@ -1846,6 +1968,8 @@ function mount(ctx){
         }))
       ])
     ]));
+    body.appendChild(formBlock(G));
+    body.appendChild(prestigeRow(G));
     body.appendChild(section("ranks", [ h("div", { class:"pl-ranks" }, RANKS.map(function(r){
         return h("span", { class:"pl-rank" + (G.level >= r[0] ? " got" : "") + (G.rank[0] === r[0] ? " cur" : ""), title:"from level " + r[0] }, [ medal(r[2], rankRarity(RANKS.indexOf(r)), G.level >= r[0]), h("b", { text:r[1] }), h("small", { text:"lvl " + r[0] }) ]);
       })),
@@ -3376,6 +3500,29 @@ button.pl-quest:hover{color:var(--accent);}
 .pl-herostats span{display:flex; flex-direction:column; border:2px solid var(--line); padding:.45rem .5rem; min-width:0;}
 .pl-herostats b{font-size:1rem; font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .pl-herostats small{font-size:.56rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);}
+.pl-stars{color:var(--accent); letter-spacing:.1em; font-size:1rem; margin-left:.4rem;}
+.pl-form{border:2px solid var(--line); border-top:none; padding:.8rem 1rem .9rem; margin:-1.2rem 0 1.4rem; display:flex; flex-direction:column; gap:.5rem;}
+.pl-formhead{display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap;}
+.pl-formhead b{font-size:1.1rem; letter-spacing:.06em; text-transform:uppercase;}
+.pl-formhead small{color:var(--muted); font-size:.64rem; letter-spacing:.06em;}
+.pl-form.f-peak .pl-formhead b, .pl-form.f-sharp .pl-formhead b{color:var(--accent);}
+.pl-form.f-slipping .pl-formhead b{color:var(--accent); opacity:.75;}
+.pl-form.f-cold .pl-formhead b{color:var(--muted);}
+.pl-formstrip{display:grid; grid-template-columns:repeat(28, minmax(0, 1fr)); gap:3px;}
+.pl-formstrip i{display:block; height:14px; border:2px solid var(--line);}
+.pl-formstrip i.l1{background:#5a2021; border-color:#5a2021;}
+.pl-formstrip i.l2{background:#9a3133; border-color:#9a3133;}
+.pl-formstrip i.l3{background:var(--accent); border-color:var(--accent);}
+.pl-formstrip i.today{outline:2px solid var(--fg); outline-offset:1px;}
+.pl-formtxt{color:var(--muted); font-size:.64rem; letter-spacing:.04em;}
+.pl-formchip{font-size:.56rem; letter-spacing:.12em; text-transform:uppercase; padding:.05rem .35rem; border:2px solid var(--line); color:var(--muted); white-space:nowrap;}
+.pl-formchip.f-peak, .pl-formchip.f-sharp{border-color:var(--accent); color:var(--fg);}
+.pl-formchip.f-slipping{border-color:var(--accent); color:var(--accent);}
+.pl-prest{display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; margin:-.6rem 0 1.6rem;}
+.pl-prest small{color:var(--muted); font-size:.64rem; letter-spacing:.03em;}
+p.pl-prest{display:block;}
+.pl-prestbtn{border-color:var(--accent); color:var(--accent); letter-spacing:.12em;}
+.pl-prestbtn.armed{background:var(--accent); color:var(--accent-ink);}
 @media (max-width:640px){
   .pl-hero{grid-template-columns:minmax(0, 1fr); justify-items:center; text-align:center; padding:1.1rem;}
   .pl-heromedal{width:110px; height:110px;}
@@ -3541,8 +3688,10 @@ function score(src, GM){
   var others = cores.slice(1).map(function(c){ return c.parts({ main:false }); });
   var focusExtra = {};
   others.forEach(function(o){ Object.keys(o.focusDay).forEach(function(k){ focusExtra[k] = (focusExtra[k] || 0) + o.focusDay[k]; }); });
-  var main = cores[0].parts({ main:true, focusExtra:focusExtra, financeDays:hasFin ? finDays : null });
-  var extra = { events:[], ticks:0, finDays:0, finRun:0 };
+  var vt = vaultScore(src.vaults || [], t);
+  var main = cores[0].parts({ main:true, focusExtra:focusExtra, financeDays:hasFin ? finDays : null, vaultDays:vt ? vt.days : null });
+  var extra = { events:vt ? vt.events : [], ticks:0, finDays:0, finRun:0 };
+  if(vt) Object.keys(vt.S).forEach(function(k){ extra[k] = vt.S[k]; });
   (src.trackers || []).forEach(function(tr){
     if(!isDate(tr.start)) return;
     for(var i = 0; i < Math.min(tr.n || 0, (tr.days || []).length); i++){
@@ -3562,6 +3711,69 @@ function score(src, GM){
   extra.finDays = fds.length;
   return cores[0].finish(main, others, extra);
 }
+// The CWES notes pages (vault.js) as game input. Only outcomes earn XP, never
+// time or typing: a solved lab (40 to 130 by difficulty), flashcards you
+// remembered (2 xp each, up to 60 a day), a lab written up as a technique
+// note (+40), a practice finding (+60), a module finished with evidence
+// (+100). Every event is keyed by what it is, so toggling a lab or editing a
+// note can never count twice.
+var LAB_XP = { apprentice:40, easy:40, practitioner:70, medium:70, expert:100, hard:100, insane:130 };
+function vaultScore(vaults, t){
+  if(!vaults.length) return null;
+  function day(ms){ var d = new Date(ms); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function bump(m, d, n){ m[d] = (m[d] || 0) + (n || 1); }
+  var D = { labs:{}, reviews:{}, writeups:{}, findings:{}, pending:0, cards:0 }, events = [];
+  var S = { vLabs:0, vWrite:0, vFind:0, vRecall:0, vRevRun:0, vMods:0 }, revDays = {};
+  vaults.forEach(function(V, vi){
+    var notes = arr(V && V.notes), solved = [], writtenUp = {};
+    notes.forEach(function(n){
+      if(!n || typeof n.body !== "string") return;
+      // flashcards: a " :: " line or a Q:/A: pair (a close enough count for "is there enough to review")
+      D.cards += (n.body.match(/^(?![ \t]*[#|])[^\n]*\S :: \S/gm) || []).length + (n.body.match(/^\s*(?:>\s*)*Q:.+\n\s*(?:>\s*)*A:/gim) || []).length;
+      if(n.type === "lab" && n.lab && n.lab.status === "solved"){
+        var d = isDate(n.lab.date) && n.lab.date <= t ? n.lab.date : day(n.updatedAt || Date.now());
+        if(d > t) d = t;
+        solved.push(n); bump(D.labs, d); S.vLabs++;
+        events.push({ key:"vl:" + n.id, date:d, xp:LAB_XP[n.lab.diff] || 50, label:"solved " + (n.title || "a lab") });
+      }
+      if(n.type === "note" && !n.seed){
+        var m = /worked out in the lab \[\[([^\]\n]+)\]\]/.exec(n.body), cd = day(n.createdAt || Date.now());
+        if(cd > t) cd = t;
+        if(m){ writtenUp[m[1].trim().toLowerCase()] = 1; bump(D.writeups, cd); S.vWrite++;
+          events.push({ key:"vw:" + n.id, date:cd, xp:40, label:"wrote up " + m[1].trim() }); }
+        var tagged = arr(n.tags).indexOf("finding") >= 0 || /(^|\s)#finding\b/i.test(n.body);
+        if(tagged && (n.body.match(/\S+/g) || []).length >= 120){ bump(D.findings, cd); S.vFind++;
+          events.push({ key:"vf:" + n.id, date:cd, xp:60, label:"practice finding: " + (n.title || "untitled") }); }
+      }
+    });
+    D.pending += solved.filter(function(n){ return !writtenUp[String(n.title || "").trim().toLowerCase()]; }).length;
+    // flashcards you remembered, per day
+    var act = V && V.act && typeof V.act === "object" ? V.act : {};
+    Object.keys(act).forEach(function(d){
+      var a = act[d];
+      if(!isDate(d) || d > t || !a) return;
+      var r = +a.r || 0, ok = Math.min(+a.ok || 0, r);
+      if(r > 0){ bump(D.reviews, d, r); revDays[d] = 1; }
+      if(ok > 0){ S.vRecall += ok; events.push({ key:"vr:" + vi + ":" + d, date:d, xp:Math.min(ok * 2, 60), label:"remembered " + ok + " flashcard" + (ok === 1 ? "" : "s") }); }
+    });
+    // modules finished with evidence: done or reviewed, your own notes, and a solved lab
+    arr(V && V.modules).forEach(function(md){
+      if(!md || (md.status !== "done" && md.status !== "reviewed")) return;
+      var mine = notes.filter(function(n){ return n && n.mod === md.id; }), ids = {};
+      mine.forEach(function(n){ ids[n.id] = 1; });
+      var wrote = mine.some(function(n){ return n.type === "note" && !n.seed && (n.body.match(/\S+/g) || []).length >= 30; });
+      var lab = solved.some(function(n){ return n.mod === md.id || arr(n.rels).some(function(r){ return r && r.t === "practises" && ids[r.id]; }); });
+      if(!wrote || !lab) return;
+      S.vMods++;
+      var last = mine.reduce(function(x, n){ return Math.max(x, n.updatedAt || 0); }, 0), d2 = last ? day(last) : t;
+      events.push({ key:"vm:" + vi + ":" + md.id, date:d2 > t ? t : d2, xp:100, label:"finished " + md.name + " with evidence" });
+    });
+  });
+  // the longest run of days with a review
+  var run = 0, prev = null;
+  Object.keys(revDays).sort().forEach(function(d){ run = prev && addDays(prev, 1) === d ? run + 1 : 1; prev = d; if(run > S.vRevRun) S.vRevRun = run; });
+  return { days:D, events:events, S:S };
+}
 function medalHTML(icon, rarity){ return medalSvg(icon, rarity, true); }
 // index.html opens a planner on a given day from a tracker's Day card
 function show(pageId, date){
@@ -3571,5 +3783,5 @@ function show(pageId, date){
 window.Planner = { lockQuests:lockQuests, needsLock:needsLock, normalize:normalize, fresh:fresh, mount:mount, countDays:countDays, daySummary:daySummary, show:show,
   dayItems:dayItems, tick:tick, score:score, normGame:normGame, mergeGames:mergeGames, medalHTML:medalHTML, mountGame:function(ctx){ var c = {}; Object.keys(ctx).forEach(function(k){ c[k] = ctx[k]; }); c.gameOnly = true; return mount(c); },
   // exposed for tests
-  _test:{ addDays:addDays, monday:monday, wd:wd, parseHm:parseHm, parseQuick:parseQuick } };
+  _test:{ addDays:addDays, monday:monday, wd:wd, parseHm:parseHm, parseQuick:parseQuick, vaultScore:vaultScore, formOf:formOf } };
 })();

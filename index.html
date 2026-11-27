@@ -418,6 +418,8 @@
   .sbg-txt b{font-size:.74rem; letter-spacing:.08em; text-transform:uppercase;}
   .sbg-txt small{font-size:.56rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);}
   .sbg-coins{font-size:.6rem; color:var(--muted); white-space:nowrap;}
+  .sbg-txt small{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .sbg-txt small.sbg-slip{color:var(--accent);}
   .sbg-bar{grid-column:2 / span 2; height:4px; background:var(--line); position:relative;}
   .sbg-bar i{position:absolute; left:0; top:0; bottom:0; background:var(--accent);}
   .sbg-gain{position:absolute; right:.5rem; top:-.7rem; font-size:.6rem; font-weight:700; color:var(--accent); background:var(--bg); padding:0 .3rem;
@@ -637,13 +639,15 @@
     </div>
     <div class="fin" id="finView" hidden></div>
     <div class="pl" id="plView" hidden></div>
+    <div class="vt" id="vtView" hidden></div>
   </div>
   </div>
   </div>
 
-<!-- the Finance and Command Center page types live in their own files -->
+<!-- the Finance, Command Center and CWES notes page types live in their own files -->
 <script src="finance.js?v=3"></script>
-<script src="planner.js?v=28"></script>
+<script src="planner.js?v=30"></script>
+<script src="vault.js?v=7"></script>
 <script>
 // ---------- storage ----------
 // Everything is saved to IndexedDB, which has room for photos and covers
@@ -848,6 +852,9 @@ function app(BOOT){
       }else if(p.kind === "planner" && window.Planner){
         o = normFont({ kind:"planner", title:String(p.title || ""), label:String(p.label || "") }, p);
         o.planner = Planner.normalize(p.planner);
+      }else if(p.kind === "vault" && window.Vault){
+        o = normFont({ kind:"vault", title:String(p.title || ""), label:String(p.label || "") }, p);
+        o.vault = Vault.normalize(p.vault);
       }else if(p.kind && p.kind !== "doc"){
         // a page type this copy can't read (an older copy of the site, or its
         // script failed to load): keep it exactly as saved instead of turning
@@ -1940,6 +1947,7 @@ function app(BOOT){
       if(p.items && p.items.length) return true;
       if(p.kind === "doc") return !isBlank(p.blocks);
       if(p.kind === "finance") return !!(p.finance && p.finance.txns && p.finance.txns.length);
+      if(p.kind === "vault") return !!(window.Vault && Vault.hasData(p.vault));
       if(p.kind === "planner"){ var P = p.planner || {}; return !!((P.acts && P.acts.length) || (P.rules && P.rules.length) || (P.reflect && Object.keys(P.reflect).length)); }
       return false;
     });
@@ -1990,6 +1998,7 @@ function app(BOOT){
   var docView  = document.getElementById("docView");
   var finView  = document.getElementById("finView");
   var plView   = document.getElementById("plView");
+  var vtView   = document.getElementById("vtView");
   var docTitle = document.getElementById("docTitle");
   var docBody  = document.getElementById("docBody");
   var docTail  = document.getElementById("docTail");
@@ -2002,6 +2011,25 @@ function app(BOOT){
     var fp = state.pages.filter(function(p){ return p.kind === "finance"; })[0];
     if(fp) go(fp.id);
   }
+  // a quest button or the game page can open the CWES notes on a tab ("labs", "review", or "finding" for a new finding)
+  function openVaultPage(what){
+    var vp = state.pages.filter(function(p){ return p.kind === "vault"; })[0];
+    if(!vp) return;
+    if(window.Vault && Vault.show) Vault.show(vp.id, what);
+    go(vp.id);
+    if(isNarrow()) document.body.classList.remove("sb-shown");
+  }
+  // "▶ study" on a CWES module starts the main Command Center's timer, then opens it
+  function studyTimer(title){
+    var pl = state.pages.filter(function(p){ return p.kind === "planner" && p.planner; })[0];
+    if(!pl) return "make a command center first";
+    if(!pl.planner.timer){
+      pl.planner.timer = { title:String(title || "CWES study").slice(0, 120), area:"cwes", sub:"theory", at:Date.now() };
+      linkStreaks(); save();
+    }
+    go(pl.id);
+    return "";
+  }
   function openGamePage(){
     if(!window.Planner || !state.game) return;
     var gp = state.pages.filter(function(p){ return p.kind === "game"; })[0];
@@ -2010,6 +2038,12 @@ function app(BOOT){
     if(isNarrow()) document.body.classList.remove("sb-shown");
   }
   document.getElementById("sbGame").addEventListener("click", openGamePage);
+  // quick capture (Alt+C) works on every page: it saves into the first CWES notes page
+  if(window.Vault) Vault.attach({
+    page:function(){ return state.pages.filter(function(p){ return p.kind === "vault" && p.vault; })[0] || null; },
+    save:function(){ return save(); },
+    go:function(id){ go(id); }
+  });
 
   // ---- a Command Center page can keep one tracker's streak ----
   // planner.streak.page is "home" or a tracker page id. Every planner save
@@ -2052,7 +2086,9 @@ function app(BOOT){
       trackers:[state].concat(state.pages.filter(function(p){ return p.kind === "tracker"; }))
         .filter(function(tr){ return !plannerFor(tr); })
         .map(function(tr){ return { id:trackerKey(tr), title:tr.title, start:tr.start, n:tr.n, days:tr.days }; }),
-      finances:state.pages.filter(function(p){ return p.kind === "finance" && p.finance; }).map(function(p){ return p.finance; })
+      finances:state.pages.filter(function(p){ return p.kind === "finance" && p.finance; }).map(function(p){ return p.finance; }),
+      // CWES notes pages: solved labs, flashcards remembered, write-ups, findings
+      vaults:state.pages.filter(function(p){ return p.kind === "vault" && p.vault; }).map(function(p){ return p.vault; })
     };
   }
   function siteScore(){
@@ -2074,15 +2110,17 @@ function app(BOOT){
     card.innerHTML = "";
     var medal = document.createElement("i"); medal.className = "sbg-medal"; medal.innerHTML = Planner.medalHTML(G.rank[2], G.rankR);
     var txt = document.createElement("span"); txt.className = "sbg-txt";
-    var lv = document.createElement("b"); lv.textContent = "lvl " + G.level;
-    var rk = document.createElement("small"); rk.textContent = G.rank[1];
+    var lv = document.createElement("b"); lv.textContent = "lvl " + G.level + (G.stars ? " " + new Array(G.stars + 1).join("★") : "");
+    // the rank, and your form (the last 28 days): the level never drops, the form does
+    var rk = document.createElement("small"); rk.textContent = G.rank[1] + (G.form ? " · " + G.form.tier : "");
+    if(G.form && (G.form.tier === "slipping" || G.form.tier === "cold")) rk.className = "sbg-slip";
     txt.appendChild(lv); txt.appendChild(rk);
     var coins = document.createElement("span"); coins.className = "sbg-coins"; coins.textContent = G.coins + " coins";
     var bar = document.createElement("span"); bar.className = "sbg-bar";
     var fillEl = document.createElement("i"); fillEl.style.width = Math.round((G.xp - G.base) / (G.next - G.base) * 100) + "%";
     bar.appendChild(fillEl);
     card.appendChild(medal); card.appendChild(txt); card.appendChild(coins); card.appendChild(bar);
-    card.title = G.xp + " xp · " + (G.next - G.xp) + " to level " + (G.level + 1);
+    card.title = G.xp + " xp · " + (G.next - G.xp) + " to level " + (G.level + 1) + (G.form ? " · form " + G.form.tier + ": " + G.form.pct + "% of your best 4 weeks" : "");
     if(lastXp !== null && G.xp > lastXp){
       var gain = document.createElement("span"); gain.className = "sbg-gain"; gain.textContent = "+" + (G.xp - lastXp) + " xp";
       card.appendChild(gain);
@@ -2224,7 +2262,7 @@ function app(BOOT){
       row.setAttribute("role","link"); row.tabIndex = 0;
       var ico = document.createElement("span");
       ico.className = "sb-ico";
-      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : p.kind === "planner" ? "▦" : p.kind === "game" ? "★" : "·";
+      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : p.kind === "planner" ? "▦" : p.kind === "game" ? "★" : p.kind === "vault" ? "§" : "·";
       var name = p.title || "";
       var t = document.createElement("span");
       t.className = "sb-title" + (name ? "" : " empty");
@@ -2276,6 +2314,10 @@ function app(BOOT){
     // the first Command Center also brings the game page (once)
     if(state.game && !state.game.pageMade){ makeGamePage(state); save(); renderSidebar(); }
   }
+  function newVault(){
+    addNewPage({ kind:"vault", id:uid(), title:"cwes notes", label:"", icon:null, cover:null,
+                 items:[], vault:Vault.fresh() });
+  }
   function newDoc(){
     addNewPage({ kind:"doc", id:uid(), title:"", label:"", icon:null, cover:null,
                  blocks:[mkBlock("text","",false)], items:[] });
@@ -2301,6 +2343,13 @@ function app(BOOT){
       fin.innerHTML = "<b>finance</b><small>income, expenses, monthly overview</small>";
       fin.addEventListener("click", newFinance);
       pop.appendChild(fin);
+    }
+    if(window.Vault){
+      var vlt = document.createElement("button");
+      vlt.type = "button"; vlt.className = "np-doc";
+      vlt.innerHTML = "<b>cwes notes</b><small>linked notes, command arsenal, flashcards, syllabus</small>";
+      vlt.addEventListener("click", newVault);
+      pop.appendChild(vlt);
     }
     if(window.Planner){
       var pln = document.createElement("button");
@@ -2435,9 +2484,11 @@ function app(BOOT){
     var special = !tk && !!p.kind && p.kind !== "doc";
     var fin = special && p.kind === "finance" && !!window.Finance;
     var gm = special && p.kind === "game" && !!window.Planner;
-    var pl = special && !fin;
+    var vt = special && p.kind === "vault" && !!window.Vault;
+    var pl = special && !fin && !vt;
     homeView.hidden = !tk; homeHead.hidden = !tk;
-    docView.hidden = tk || special; docHead.hidden = tk; finView.hidden = !fin; plView.hidden = !pl;
+    docView.hidden = tk || special; docHead.hidden = tk; finView.hidden = !fin; plView.hidden = !pl; vtView.hidden = !vt;
+    document.body.classList.toggle("vt-wide", vt);   // the notes page uses a wider column
     if(tk){
       if(T !== p) loadTracker(p);
       else{ startEl.value = T.start; renderGrid(); refreshDayHead(); }
@@ -2446,12 +2497,13 @@ function app(BOOT){
       docTitle.value = p.title; docSub.value = p.label || "";
       if(special) applyFont(docHead, p, true);
       if(fin){ finView.innerHTML = ""; Finance.mount({ root:finView, page:p, save:save }); }
+      else if(vt){ vtView.innerHTML = ""; Vault.mount({ root:vtView, page:p, save:save, study:studyTimer }); }
       else if(pl){
         plView.innerHTML = "";
         if(gm){
           var mainPl = state.pages.filter(function(x){ return x.kind === "planner" && x.planner; })[0];
           if(mainPl) Planner.mountGame({ root:plView, page:mainPl, save:function(){ linkStreaks(); return save(); },
-            trackers:trackerList, streakOf:streakOf, game:state.game, score:siteScore, openFinance:openFinancePage,
+            trackers:trackerList, streakOf:streakOf, game:state.game, score:siteScore, openFinance:openFinancePage, openVault:openVaultPage,
             openPlanner:function(then){ go(mainPl.id); if(then) setTimeout(then, 0); } });
           else{
             // the game runs on a Command Center: offer to make one
@@ -2465,7 +2517,7 @@ function app(BOOT){
         }
         else if(p.kind === "planner" && window.Planner) Planner.mount({ root:plView, page:p,
           save:function(){ linkStreaks(); return save(); }, trackers:trackerList, streakOf:streakOf,
-          game:state.game, score:siteScore, openGame:openGamePage, openFinance:openFinancePage });
+          game:state.game, score:siteScore, openGame:openGamePage, openFinance:openFinancePage, openVault:openVaultPage });
         else{
           var msg = document.createElement("p");
           msg.className = "kind-missing";
