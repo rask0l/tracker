@@ -640,6 +640,7 @@
     <div class="fin" id="finView" hidden></div>
     <div class="pl" id="plView" hidden></div>
     <div class="vt" id="vtView" hidden></div>
+    <div class="jn" id="jnView" hidden></div>
   </div>
   </div>
   </div>
@@ -648,6 +649,7 @@
 <script src="finance.js?v=3"></script>
 <script src="planner.js?v=31"></script>
 <script src="vault.js?v=7"></script>
+<script src="journal.js?v=4"></script>
 <script>
 // ---------- storage ----------
 // Everything is saved to IndexedDB, which has room for photos and covers
@@ -852,6 +854,9 @@ function app(BOOT){
       }else if(p.kind === "planner" && window.Planner){
         o = normFont({ kind:"planner", title:String(p.title || ""), label:String(p.label || "") }, p);
         o.planner = Planner.normalize(p.planner);
+      }else if(p.kind === "journal" && window.Journal){
+        o = normFont({ kind:"journal", title:String(p.title || ""), label:String(p.label || "") }, p);
+        o.journal = Journal.normalize(p.journal);
       }else if(p.kind === "vault" && window.Vault){
         o = normFont({ kind:"vault", title:String(p.title || ""), label:String(p.label || "") }, p);
         o.vault = Vault.normalize(p.vault);
@@ -1948,6 +1953,7 @@ function app(BOOT){
       if(p.kind === "doc") return !isBlank(p.blocks);
       if(p.kind === "finance") return !!(p.finance && p.finance.txns && p.finance.txns.length);
       if(p.kind === "vault") return !!(window.Vault && Vault.hasData(p.vault));
+      if(p.kind === "journal") return !!(window.Journal && Journal.hasData(p.journal));
       if(p.kind === "planner"){ var P = p.planner || {}; return !!((P.acts && P.acts.length) || (P.rules && P.rules.length) || (P.reflect && Object.keys(P.reflect).length)); }
       return false;
     });
@@ -1999,6 +2005,7 @@ function app(BOOT){
   var finView  = document.getElementById("finView");
   var plView   = document.getElementById("plView");
   var vtView   = document.getElementById("vtView");
+  var jnView   = document.getElementById("jnView");
   var docTitle = document.getElementById("docTitle");
   var docBody  = document.getElementById("docBody");
   var docTail  = document.getElementById("docTail");
@@ -2262,7 +2269,7 @@ function app(BOOT){
       row.setAttribute("role","link"); row.tabIndex = 0;
       var ico = document.createElement("span");
       ico.className = "sb-ico";
-      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : p.kind === "planner" ? "▦" : p.kind === "game" ? "★" : p.kind === "vault" ? "§" : "·";
+      if(p.icon) paintIcon(ico, p.icon); else ico.textContent = isTracker(p) ? "#" : p.kind === "finance" ? "$" : p.kind === "planner" ? "▦" : p.kind === "game" ? "★" : p.kind === "vault" ? "§" : p.kind === "journal" ? "✎" : "·";
       var name = p.title || "";
       var t = document.createElement("span");
       t.className = "sb-title" + (name ? "" : " empty");
@@ -2314,6 +2321,27 @@ function app(BOOT){
     // the first Command Center also brings the game page (once)
     if(state.game && !state.game.pageMade){ makeGamePage(state); save(); renderSidebar(); }
   }
+  function newJournal(){
+    addNewPage({ kind:"journal", id:uid(), title:"journal", label:"", icon:null, cover:null,
+                 items:[], journal:Journal.fresh() });
+  }
+  // what the main Command Center shows as finished on a day, for the journal (read only):
+  // the titles, and the minutes of finished timed work (personal and flex left out)
+  var jwCache = { at:null, map:{} };
+  function journalWork(date){
+    if(!window.Planner) return null;
+    var pl = state.pages.filter(function(x){ return x.kind === "planner" && x.planner; })[0];
+    if(!pl) return null;
+    if(jwCache.at !== state.savedAt){ jwCache = { at:state.savedAt, map:{} }; }
+    if(jwCache.map[date]) return jwCache.map[date];
+    var seen = {}, items = [];
+    Planner.dayItems(pl.planner, date).forEach(function(it){ if(it.done && !it.allDay && !seen[it.title]){ seen[it.title] = 1; items.push(it.title); } });
+    var mins = 0;
+    pl.planner.acts.forEach(function(a){
+      if(a.date === date && a.done && a.start != null && a.end != null && a.area !== "personal" && a.sub !== "flex") mins += Math.max(0, a.end - a.start);
+    });
+    return (jwCache.map[date] = { items:items, mins:mins });
+  }
   function newVault(){
     addNewPage({ kind:"vault", id:uid(), title:"cwes notes", label:"", icon:null, cover:null,
                  items:[], vault:Vault.fresh() });
@@ -2343,6 +2371,13 @@ function app(BOOT){
       fin.innerHTML = "<b>finance</b><small>income, expenses, monthly overview</small>";
       fin.addEventListener("click", newFinance);
       pop.appendChild(fin);
+    }
+    if(window.Journal){
+      var jnb = document.createElement("button");
+      jnb.type = "button"; jnb.className = "np-doc";
+      jnb.innerHTML = "<b>journal</b><small>daily check-in, reflection, reviews, patterns</small>";
+      jnb.addEventListener("click", newJournal);
+      pop.appendChild(jnb);
     }
     if(window.Vault){
       var vlt = document.createElement("button");
@@ -2485,9 +2520,10 @@ function app(BOOT){
     var fin = special && p.kind === "finance" && !!window.Finance;
     var gm = special && p.kind === "game" && !!window.Planner;
     var vt = special && p.kind === "vault" && !!window.Vault;
-    var pl = special && !fin && !vt;
+    var jn = special && p.kind === "journal" && !!window.Journal;
+    var pl = special && !fin && !vt && !jn;
     homeView.hidden = !tk; homeHead.hidden = !tk;
-    docView.hidden = tk || special; docHead.hidden = tk; finView.hidden = !fin; plView.hidden = !pl; vtView.hidden = !vt;
+    docView.hidden = tk || special; docHead.hidden = tk; finView.hidden = !fin; plView.hidden = !pl; vtView.hidden = !vt; jnView.hidden = !jn;
     document.body.classList.toggle("vt-wide", vt);   // the notes page uses a wider column
     if(tk){
       if(T !== p) loadTracker(p);
@@ -2498,6 +2534,7 @@ function app(BOOT){
       if(special) applyFont(docHead, p, true);
       if(fin){ finView.innerHTML = ""; Finance.mount({ root:finView, page:p, save:save }); }
       else if(vt){ vtView.innerHTML = ""; Vault.mount({ root:vtView, page:p, save:save, study:studyTimer }); }
+      else if(jn){ jnView.innerHTML = ""; Journal.mount({ root:jnView, page:p, save:save, dayWork:journalWork }); }
       else if(pl){
         plView.innerHTML = "";
         if(gm){

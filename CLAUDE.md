@@ -10,8 +10,8 @@ linked from anywhere.
 
 - `index.html` is the site: a static page with inline CSS and JS, no
   framework, no Jekyll layout. The Finance page type lives in `finance.js`,
-  the Command Center (planner) in `planner.js` and the CWES notes vault in
-  `vault.js`, each loaded by a plain
+  the Command Center (planner) in `planner.js`, the CWES notes vault in
+  `vault.js` and the journal in `journal.js`, each loaded by a plain
   script tag before the app; bump its `?v=` when it changes so browsers
   don't keep an old copy. It works like a small Notion: a
   left sidebar lists pages, the first being the home tracker, and
@@ -157,7 +157,7 @@ linked from anywhere.
   same block editor and slash menu as notes) or the tracker fields
   above (`kind:"tracker"`), or `kind:"finance"` with a `finance` object, or
   `kind:"planner"` with a `planner` object, or `kind:"vault"` with a `vault`
-  object.
+  object, or `kind:"journal"` with a `journal` object.
   Pages saved before trackers existed have no `kind` and load as documents.
   A page whose kind this copy can't read (an older copy of the site, or its
   script failed to load) is kept exactly as saved and shows a "refresh"
@@ -702,6 +702,80 @@ linked from anywhere.
     every page. List pane and focus mode are remembered in localStorage
     `vault-layout`, not the state. Every text field in the vault uses
     `data-native-undo`, so Ctrl+Z there is the browser's text undo.
+- Journal pages (`journal.js`, `kind:"journal"`, sidebar icon `✎`, "+ new
+  page" → journal): honest daily reflection and self-accountability. It is
+  deliberately **not** part of the game: no xp, points, badges or streaks,
+  and a missed day only shows a neutral "last entry N days ago. no need to
+  fill the gap". Nothing is required. index.html calls
+  `Journal.normalize()` when loading, `Journal.fresh()` for a new page,
+  `Journal.hasData()` for the backup reminder and `Journal.mount({ root,
+  page, save, dayWork })` from `renderPage()`; `dayWork(date)`
+  (`journalWork()` in index.html, cached per save) reads the main
+  planner's finished titles and minutes for a day, read only.
+  - `journal` is `{ v:1, days, weeks, months, goals, moments }`. A day
+    (`days[YYYY-MM-DD]`) is `{ m:{ mood, energy, clarity, motivation,
+    stress, confidence } (1..5, absent = not recorded), feel, wins:[{ id,
+    text, hard }], chal, wrong, got:[tags], helped:[tags], lessons,
+    tom:{ first, hard, stop, keep, improve }, did ("yes"/"partly"/"no":
+    whether the previous entry's tom.first happened), at, upd }`. Weeks are
+    keyed by their Monday, months by YYYY-MM (review answers plus
+    `consistent` / `rate` 1..5). Goals are `{ id, name, desc, cat, per
+    (day/week/month), n, start, status, checks:{ date:1 } }`, checked by
+    hand. Moments are milestones and realizations `{ id, date, kind, text }`.
+    `normalize()` drops empty days and reviews, so opening one never keeps it.
+  - today tab: date nav (past days editable), the loop card (the previous
+    entry's "main thing for tomorrow" with did it / partly / didn't), the
+    2-minute check-in (mood, energy, biggest win = wins[0] with a "was
+    avoiding it" ★, biggest challenge = `chal`, tomorrow's main thing =
+    `tom.first`), then "full reflection" (remembered in localStorage
+    `journal-ui`): the other four scales and why, more wins plus one-click
+    wins from the Command Center, "what helped" and "what got in the way"
+    tags (defaults plus your own), what happened, lessons with a
+    milestone/realization adder, the rest of tomorrow, and the day's
+    commitments to tick. Everything saves as you type; "clear this day"
+    takes two clicks.
+  - week and month tabs: the period's own entries (a mood-coloured strip,
+    wins, top tags, last period's stated focus), a this-vs-previous table
+    (entries, scale averages, wins, follow-through), then the review
+    questions; each review can be cleared (two clicks).
+  - insights tab (7 / 30 / 90 days / all): consistency (worded without
+    judgement), a hand-made mood and energy chart (7-entry average),
+    follow-through overall and on the day after each tag, tags beside mood
+    and energy (only tags used on 3+ days, compared with days without), best
+    and hardest days with what was tagged on them, weekdays (mood, energy,
+    "slipped" share), recurring words in what went wrong, finished
+    Command Center work against how you felt, and commitments. Every
+    pattern is phrased as something seen together, never as cause; that
+    wording is deliberate, keep it.
+  - goals tab: commitments with progress this period, the last 8 periods
+    and follow-through (periods met of periods finished). timeline tab:
+    days, reviews, moments and commitments newest first, grouped by month,
+    with search and kind filters.
+  - "hide" blurs the page (localStorage `journal-ui`), for when someone is
+    near your screen. All text fields use `data-native-undo`.
+  - Evidence-informed, and says so: every section heading carries a label
+    (`EV`: research-based, research-inspired, experimental; `evTag()`), and
+    "why this works" (`aboutView()`, `EVIDENCE`) explains each feature,
+    the research behind it with named references, and its limits, under a
+    disclaimer that this is not diagnosis, therapy or prediction. Keep the
+    three categories honest when adding anything. Research-based techniques
+    in the page: self-monitoring (check-in, commitments), implementation
+    intentions (tomorrow is `tom.first` + `tom.when`, with an obstacle plan
+    `tom.obst`/`tom.cope`; commitments have `ifp`/`thenp`), WOOP in the
+    weekly review (`focus` = wish, `outcome`, `obstacle`, `plan`), CBT
+    thought records (`day.tr`, up to 5: situation, thought, feeling 0..100
+    before and after, evidence for/against, balanced thought), expressive
+    writing (`day.ex`: a ~15 minute session with its own screen and timer,
+    "keep it" or "let it go", which erases the text and keeps the minutes)
+    and self-compassion (`day.kind`, the weekly `kind`). Research-inspired:
+    concrete "what happened" prompts instead of "why am I like this"
+    (rumination research), emotion words (`day.emo`, affect labelling), a
+    short check-in, and no points or guilt. Experimental: all of insights,
+    including "planning and follow-through" (did the main thing after days
+    with vs without a when-and-where or obstacle plan) and the tools
+    summary, and `careNote()`: a gentle note when mood was 1 or 2 on at
+    least 60% of 6+ check-ins in two weeks, pointing to people and help,
+    worded as not a diagnosis.
 - Icons: every page can have an icon, `{ emoji }` or `{ src }` (a picture
   shrunk to 256px), plus `bw: true` for black and white (a grayscale filter
   on the page icon and the sidebar; a new icon keeps the setting), picked
