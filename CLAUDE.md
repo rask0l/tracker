@@ -526,6 +526,20 @@ linked from anywhere.
     return" (ACH_VERSION 7). There is deliberately no reset as a penalty:
     losing everything after a slip makes people quit, and broken runs and
     falling form already tell the truth.
+  - New game (game settings, "start a new game", two clicks; the owner
+    wanted a clean start after days of trying things out): `newGame(g,
+    keys)` sets `game.since` to today and `game.skip` to the keys of the
+    events already on today's record, and clears quests, wins, badge
+    unlock dates, claims, prestige and the seen level. Everything reads
+    those: `planParts()` skips activities and cleared days before `since`
+    or in `skip`, quest days and weeks before it, reflections and reviews
+    before it, and boss weeks only count days from it (`weekStats(mon,
+    from)`, also in `weekCtx()`); `score()` drops money days, tracker ticks
+    and CWES-notes events (`vaultScore(..., since, skip)`) the same way;
+    `finish()` filters any remaining event in `skip`. So XP, levels, ranks,
+    badges, coins, runs and form all start from the moment the button was
+    pressed, while the planner, notes, money and trackers are never
+    touched. Ctrl+Z undoes it like any change.
   - Coins and real rewards: 1 coin per 10 XP plus 25 per badge, minus what
     was spent. The
     reward shop (`game.rewards`, `{ id, name, cost }`, editable, three

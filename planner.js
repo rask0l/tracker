@@ -243,6 +243,12 @@ function normGame(gIn){
   o.claims = arr(g.claims).filter(function(c){ return c && typeof c.name === "string" && okCost(c.cost) && isDate(c.date); })
     .slice(-500).map(function(c){ return { id:str(c.id || rid(), 40), name:str(c.name, 60), cost:c.cost, date:c.date }; });
   Object.keys(obj(g.seen)).forEach(function(k){ if(/^[a-z0-9_]{1,30}$/.test(k) && isDate(g.seen[k])) o.seen[k] = g.seen[k]; });
+  // a new game: nothing dated before `since` counts (xp, badges, quests, bosses, runs, coins);
+  // the planner, notes, money and trackers themselves are never touched
+  o.since = isDate(g.since) ? g.since : "";
+  // what was already on the start day's record when the new game began: it doesn't count either,
+  // so only what you do after pressing the button does (event keys like "a:<id>", "vl:<id>")
+  o.skip = o.since ? arr(g.skip).filter(function(k){ return typeof k === "string" && /^[A-Za-z]{1,2}:[\w:.\-]{1,90}$/.test(k); }).slice(0, 3000) : [];
   // prestige: each time you chose to start again at level 1, { date, xp } with your
   // lifetime xp at that moment. Levels and ranks count from the last one; lifetime
   // xp, coins, badges and history never change. Kept in order, never going back.
@@ -266,6 +272,17 @@ function normGame(gIn){
   });
   return o;
 }
+// start the game over from today: XP, levels, ranks, badges, quests, bosses, runs, coins
+// and claims all count again from zero. Your rewards list and settings stay, and so does
+// everything you actually logged (it just stops counting before today). Undo brings it back.
+// `keys`: the events already dated today when you pressed it, which stay out too
+function newGame(g, keys){
+  g.since = today();
+  g.skip = (keys || []).filter(function(k){ return typeof k === "string"; }).slice(0, 3000);
+  g.seen = {}; g.quests = {}; g.wquests = {}; g.qwon = {}; g.claims = []; g.prestige = [];
+  g.level = 0;          // 0 = fresh: the first change records level and badges without toasts
+}
+function skipMap(g){ var m = {}; arr(g && g.skip).forEach(function(k){ m[k] = 1; }); return m; }
 // the first time the site-wide record is made, fold in what each planner page had
 function mergeGames(list){
   list = list.filter(Boolean).map(normGame);
@@ -1003,6 +1020,7 @@ function mount(ctx){
     for(var k = 0; k < 7; k++){
       var d = addDays(mon, k);
       if(d > t) break;
+      if(GM.since && d < GM.since) continue;      // before a new game's start: doesn't count
       var c = dayCtx(d);
       AREAS.forEach(function(a){ w.min[a] += c.doneMin[a]; });
       if(c.doneN.cwes > 0) w.cwesDays++;
@@ -1019,7 +1037,7 @@ function mount(ctx){
       if(vtDays){ w.vLabs += vtDays.labs[d] || 0; if(vtDays.reviews[d]) w.vRevDays++; w.vFind += vtDays.findings[d] || 0; }
       if(P.reflect[d]) w.reflDays++;
     }
-    var B = bossOf(mon, weekStats(mon));
+    var B = bossOf(mon, weekStats(mon, GM.since || ""));
     w.bossDead = B.dead; w.bossMax = B.max;
     var cd = cwesDone();
     for(var j = -7; j < 0; j++) w.lastCwes += cd[addDays(mon, j)] || 0;
@@ -1478,10 +1496,12 @@ function mount(ctx){
     vtDays = o.vaultDays || null;
     var t = today(), events = [], S = { cwes:0, side:0, money:0, gymN:0, early:0, firstDone:false, labN:0, revN:0, ideaN:0, critN:0 };
     var focusDay = {}, sideMonth = {}, early530 = {};
-    var gymDay = {}, first = null;
+    var gymDay = {}, first = null, SINCE = GM.since || "", SKIP = skipMap(GM);
     P.acts.forEach(function(a){ if(!first || a.date < first) first = a.date; });
+    // a new game counts from its start day: nothing before it earns xp or feeds a badge
+    if(SINCE && first && first < SINCE) first = SINCE;
     P.acts.forEach(function(a){
-      if(!a.done || notTask(a) || a.date > t) return;
+      if(!a.done || notTask(a) || a.date > t || (SINCE && a.date < SINCE) || SKIP["a:" + a.id]) return;
       S.firstDone = true;
       var m = a.start != null ? Math.min(240, a.end - a.start) : 0, xp;
       if(a.area === "gym"){ xp = gymDay[a.date] ? 15 : 50; if(!gymDay[a.date]) S.gymN++; gymDay[a.date] = 1; }
@@ -1504,7 +1524,8 @@ function mount(ctx){
       events.push({ key:"a:" + a.id, date:a.date, xp:xp, label:a.title, crit:crit });
     });
     var out = { events:events, S:S, focusDay:focusDay, sideMonth:sideMonth, early530:early530,
-      refl:Object.keys(P.reflect || {}).length, reviews:Object.keys(P.reviews || {}).length };
+      refl:Object.keys(P.reflect || {}).filter(function(d){ return !SINCE || d >= SINCE; }).length,
+      reviews:Object.keys(P.reviews || {}).filter(function(d){ return !SINCE || addDays(d, 6) >= SINCE; }).length };
     if(!o.main) return out;
     // focus from every planner counts toward "no zero days"
     var fd = {};
@@ -1516,7 +1537,7 @@ function mount(ctx){
     if(first && first < addDays(t, -800)) first = addDays(t, -800);
     if(first) for(var d = first; d <= t; d = addDays(d, 1)){
       if(P.rest[d]) continue;
-      if(countsFor(P, itemsOn(d))){ cleared[d] = 1; clearN++; run++; events.push({ key:"c:" + d, date:d, xp:50, label:"cleared the day" }); }
+      if(countsFor(P, itemsOn(d)) && !SKIP["c:" + d]){ cleared[d] = 1; clearN++; run++; events.push({ key:"c:" + d, date:d, xp:50, label:"cleared the day" }); }
       else if(d < t){ if(run >= 7) hadLong = true; run = 0; }
       if(hadLong && run >= 14) comeback = true;
       if(run > best) best = run;
@@ -1527,7 +1548,7 @@ function mount(ctx){
     var todayQ = [], qFresh = { daily:false, weekly:false };
     var qDays = Object.keys(GM.quests); if(qDays.indexOf(t) < 0) qDays.push(t);
     qDays.forEach(function(d){
-      if(d > t) return;
+      if(d > t || (SINCE && d < SINCE)) return;
       var c = dayCtx(d), ids = GM.quests[d];
       if(ids && d === t && misfit(ids, ids.some(function(id){ var Q = resolveQ(id); if(!Q) return false; var pr = Q.prog(c); return pr[0] >= pr[1]; }))) ids = null;
       if(!ids){ ids = pickDaily(d, c); if(d === t) qFresh.daily = true; }
@@ -1544,7 +1565,7 @@ function mount(ctx){
     var weekQ = [], thisMon = wkStart(t);
     var wDays = Object.keys(GM.wquests || {}); if(wDays.indexOf(thisMon) < 0) wDays.push(thisMon);
     wDays.forEach(function(mon){
-      if(mon > t) return;
+      if(mon > t || (SINCE && addDays(mon, 6) < SINCE)) return;
       var wc = weekCtx(mon), ids = (GM.wquests || {})[mon];
       if(ids && mon === thisMon && misfit(ids, ids.some(function(id){ var Q = resolveQ(id); if(!Q) return false; var pr = Q.prog(wc); return pr[0] >= pr[1]; }))) ids = null;
       if(!ids){ ids = mon === thisMon ? pickWeekly(mon, wc) : []; if(mon === thisMon) qFresh.weekly = true; }
@@ -1566,7 +1587,7 @@ function mount(ctx){
     var bosses = 0, gymWeeks = 0, fullWeeks = 0, boss = null, curMon = wkStart(t);
     var raids = 0, flawless = 0, bRun = 0, bossRun = 0, gRun = 0, gymRun = 0;
     for(var mon = wkStart(first || t); mon <= curMon; mon = addDays(mon, 7)){
-      var w = weekStats(mon), B = bossOf(mon, w), over = addDays(mon, 6) <= t;
+      var w = weekStats(mon, SINCE), B = bossOf(mon, w), over = addDays(mon, 6) <= t;
       if(B.dead){
         bosses++; if(B.raid) raids++;
         events.push({ key:"b:" + mon, date:over ? addDays(mon, 6) : t, xp:B.raid ? 500 : 200, label:"beat " + B.name, raid:B.raid });
@@ -1603,6 +1624,9 @@ function mount(ctx){
     });
     focus = mainPart.focusAll || mainPart.focusDay;
     events = events.concat(extra.events || []);
+    // a new game leaves out whatever was already on its first day's record
+    var SK = skipMap(GM);
+    if(GM.skip && GM.skip.length) events = events.filter(function(e){ return !SK[e.key]; });
     S.raids = M.raids; S.flawless = M.flawless; S.bossRun = M.bossRun; S.gymRun = M.gymRun; S.comeback = M.comeback; S.bestNZ = M.bestNZ;
     S.deepDays = Object.keys(focus).filter(function(k){ return focus[k] >= 240; }).length;
     S.early530 = Object.keys(early530).length;
@@ -1914,7 +1938,21 @@ function mount(ctx){
         return h("button", { type:"button", class:"pl-tog" + (GM.loud === m[1] ? " on" : ""), text:m[0], onclick:function(){ GM.loud = m[1]; commit(); } });
       })),
       GM.off || !GM.loud ? null : h("label", { class:"pl-check pl-gamesw" }, [ h("input", { type:"checkbox", checked:GM.mute ? null : true,
-        onchange:function(e){ GM.mute = !e.target.checked; commit(); } }), "sound" ]) ]);
+        onchange:function(e){ GM.mute = !e.target.checked; commit(); } }), "sound" ]),
+      GM.off ? null : newGameRow() ]);
+  }
+  // a clean start (after trying things out, say): the game counts from today, the data stays
+  function newGameRow(){
+    var b = armed(h("button", { type:"button", class:"pl-btn pl-newgame", text:"start a new game" }), "sure? everything starts from 0", function(){
+      // what's already on today's record when you press it stays out too: only what comes after counts
+      var t0 = today(), keys = curG ? curG.events.filter(function(e){ return e.date === t0; }).map(function(e){ return e.key; }) : [];
+      newGame(GM, keys);
+      commit();
+      toast("new game", "everything counts again from now");
+    });
+    return h("div", { class:"pl-newgamerow" }, [ b, h("small", { text:"xp, levels, ranks, badges, quests, bosses, runs and coins start again from now: anything you did before pressing this, today included, stops counting. " +
+      "your planner, notes, money and trackers stay exactly as they are. Ctrl+Z undoes it." +
+      (GM.since ? " this game started " + GM.since + "." : "") }) ]);
   }
   function stars(n){ return new Array(n + 1).join("★"); }
   // form: the last 28 days, honestly. A level never drops; this does when you slip.
@@ -2003,12 +2041,13 @@ function mount(ctx){
       " by Lorc, Delapouite and contributors, ", h("a", { href:"https://creativecommons.org/licenses/by/3.0/", target:"_blank", rel:"noopener", text:"CC BY 3.0" }) ]));
   }
 
-  function weekStats(mon){
+  // `from` (a new game's start) leaves out days before it, so a boss can't be beaten with old work
+  function weekStats(mon, from){
     var w = { area:{}, days:[] };
     AREAS.forEach(function(a){ w.area[a] = { sched:0, done:0, count:0, doneCount:0, days:{}, doneDays:{}, subs:{} }; });
     for(var k = 0; k < 7; k++){
       var d = addDays(mon, k), day = { date:d, total:0, done:0, sched:0 };
-      itemsOn(d).forEach(function(it){
+      (from && d < from ? [] : itemsOn(d)).forEach(function(it){
         if(notTask(it)) return;
         var A = w.area[it.area], m = mins(it);
         A.sched += m; A.count++; A.days[d] = 1;
@@ -3523,6 +3562,9 @@ button.pl-quest:hover{color:var(--accent);}
 p.pl-prest{display:block;}
 .pl-prestbtn{border-color:var(--accent); color:var(--accent); letter-spacing:.12em;}
 .pl-prestbtn.armed{background:var(--accent); color:var(--accent-ink);}
+.pl-newgamerow{display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; margin-top:1rem; padding-top:.9rem; border-top:2px solid var(--line);}
+.pl-newgamerow small{flex:1 1 20rem; color:var(--muted); font-size:.64rem; line-height:1.55; letter-spacing:.02em;}
+.pl-newgame.armed{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
 @media (max-width:640px){
   .pl-hero{grid-template-columns:minmax(0, 1fr); justify-items:center; text-align:center; padding:1.1rem;}
   .pl-heromedal{width:110px; height:110px;}
@@ -3683,12 +3725,14 @@ function score(src, GM){
   });
   if(!pages.length) return null;
   var t = today(), finDays = {}, hasFin = (src.finances || []).length > 0;
-  (src.finances || []).forEach(function(f){ arr(f && f.txns).forEach(function(x){ if(isDate(x.date) && x.date <= t) finDays[x.date] = 1; }); });
+  var since = GM && isDate(GM.since) ? GM.since : "";      // a new game: nothing earlier counts
+  var skip = skipMap(GM);                                    // ... nor what was on its first day's record already
+  (src.finances || []).forEach(function(f){ arr(f && f.txns).forEach(function(x){ if(isDate(x.date) && x.date <= t && (!since || x.date >= since) && !skip["m:" + x.date]) finDays[x.date] = 1; }); });
   var cores = pages.map(function(pg){ return mount({ page:pg, headless:true, game:GM }); });
   var others = cores.slice(1).map(function(c){ return c.parts({ main:false }); });
   var focusExtra = {};
   others.forEach(function(o){ Object.keys(o.focusDay).forEach(function(k){ focusExtra[k] = (focusExtra[k] || 0) + o.focusDay[k]; }); });
-  var vt = vaultScore(src.vaults || [], t);
+  var vt = vaultScore(src.vaults || [], t, since, skip);
   var main = cores[0].parts({ main:true, focusExtra:focusExtra, financeDays:hasFin ? finDays : null, vaultDays:vt ? vt.days : null });
   var extra = { events:vt ? vt.events : [], ticks:0, finDays:0, finRun:0 };
   if(vt) Object.keys(vt.S).forEach(function(k){ extra[k] = vt.S[k]; });
@@ -3697,7 +3741,7 @@ function score(src, GM){
     for(var i = 0; i < Math.min(tr.n || 0, (tr.days || []).length); i++){
       if(!tr.days[i]) continue;
       var d = addDays(tr.start, i);
-      if(d > t) continue;
+      if(d > t || (since && d < since) || skip["t:" + tr.id + ":" + i]) continue;
       extra.ticks++;
       extra.events.push({ key:"t:" + tr.id + ":" + i, date:d, xp:20, label:"ticked " + (tr.title || "a tracker") + " day " + (i + 1) });
     }
@@ -3718,8 +3762,10 @@ function score(src, GM){
 // (+100). Every event is keyed by what it is, so toggling a lab or editing a
 // note can never count twice.
 var LAB_XP = { apprentice:40, easy:40, practitioner:70, medium:70, expert:100, hard:100, insane:130 };
-function vaultScore(vaults, t){
+function vaultScore(vaults, t, since, skip){
   if(!vaults.length) return null;
+  since = since || ""; skip = skip || {};
+  function old(d, key){ return (!!since && d < since) || !!skip[key]; }     // before a new game's start, or already on its first day
   function day(ms){ var d = new Date(ms); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
   function bump(m, d, n){ m[d] = (m[d] || 0) + (n || 1); }
   var D = { labs:{}, reviews:{}, writeups:{}, findings:{}, pending:0, cards:0 }, events = [];
@@ -3733,16 +3779,20 @@ function vaultScore(vaults, t){
       if(n.type === "lab" && n.lab && n.lab.status === "solved"){
         var d = isDate(n.lab.date) && n.lab.date <= t ? n.lab.date : day(n.updatedAt || Date.now());
         if(d > t) d = t;
-        solved.push(n); bump(D.labs, d); S.vLabs++;
-        events.push({ key:"vl:" + n.id, date:d, xp:LAB_XP[n.lab.diff] || 50, label:"solved " + (n.title || "a lab") });
+        solved.push(n);      // still a solved lab (it can be written up, it backs a module) ...
+        if(!old(d, "vl:" + n.id)){         // ... but only earns in the game it was solved in
+          bump(D.labs, d); S.vLabs++;
+          events.push({ key:"vl:" + n.id, date:d, xp:LAB_XP[n.lab.diff] || 50, label:"solved " + (n.title || "a lab") });
+        }
       }
       if(n.type === "note" && !n.seed){
         var m = /worked out in the lab \[\[([^\]\n]+)\]\]/.exec(n.body), cd = day(n.createdAt || Date.now());
         if(cd > t) cd = t;
-        if(m){ writtenUp[m[1].trim().toLowerCase()] = 1; bump(D.writeups, cd); S.vWrite++;
+        if(m) writtenUp[m[1].trim().toLowerCase()] = 1;
+        if(m && !old(cd, "vw:" + n.id)){ bump(D.writeups, cd); S.vWrite++;
           events.push({ key:"vw:" + n.id, date:cd, xp:40, label:"wrote up " + m[1].trim() }); }
         var tagged = arr(n.tags).indexOf("finding") >= 0 || /(^|\s)#finding\b/i.test(n.body);
-        if(tagged && (n.body.match(/\S+/g) || []).length >= 120){ bump(D.findings, cd); S.vFind++;
+        if(tagged && !old(cd, "vf:" + n.id) && (n.body.match(/\S+/g) || []).length >= 120){ bump(D.findings, cd); S.vFind++;
           events.push({ key:"vf:" + n.id, date:cd, xp:60, label:"practice finding: " + (n.title || "untitled") }); }
       }
     });
@@ -3751,7 +3801,7 @@ function vaultScore(vaults, t){
     var act = V && V.act && typeof V.act === "object" ? V.act : {};
     Object.keys(act).forEach(function(d){
       var a = act[d];
-      if(!isDate(d) || d > t || !a) return;
+      if(!isDate(d) || d > t || !a || old(d, "vr:" + vi + ":" + d)) return;
       var r = +a.r || 0, ok = Math.min(+a.ok || 0, r);
       if(r > 0){ bump(D.reviews, d, r); revDays[d] = 1; }
       if(ok > 0){ S.vRecall += ok; events.push({ key:"vr:" + vi + ":" + d, date:d, xp:Math.min(ok * 2, 60), label:"remembered " + ok + " flashcard" + (ok === 1 ? "" : "s") }); }
@@ -3764,9 +3814,11 @@ function vaultScore(vaults, t){
       var wrote = mine.some(function(n){ return n.type === "note" && !n.seed && (n.body.match(/\S+/g) || []).length >= 30; });
       var lab = solved.some(function(n){ return n.mod === md.id || arr(n.rels).some(function(r){ return r && r.t === "practises" && ids[r.id]; }); });
       if(!wrote || !lab) return;
-      S.vMods++;
       var last = mine.reduce(function(x, n){ return Math.max(x, n.updatedAt || 0); }, 0), d2 = last ? day(last) : t;
-      events.push({ key:"vm:" + vi + ":" + md.id, date:d2 > t ? t : d2, xp:100, label:"finished " + md.name + " with evidence" });
+      if(d2 > t) d2 = t;
+      if(old(d2, "vm:" + vi + ":" + md.id)) return;
+      S.vMods++;
+      events.push({ key:"vm:" + vi + ":" + md.id, date:d2, xp:100, label:"finished " + md.name + " with evidence" });
     });
   });
   // the longest run of days with a review
@@ -3783,5 +3835,5 @@ function show(pageId, date){
 window.Planner = { lockQuests:lockQuests, needsLock:needsLock, normalize:normalize, fresh:fresh, mount:mount, countDays:countDays, daySummary:daySummary, show:show,
   dayItems:dayItems, tick:tick, score:score, normGame:normGame, mergeGames:mergeGames, medalHTML:medalHTML, mountGame:function(ctx){ var c = {}; Object.keys(ctx).forEach(function(k){ c[k] = ctx[k]; }); c.gameOnly = true; return mount(c); },
   // exposed for tests
-  _test:{ addDays:addDays, monday:monday, wd:wd, parseHm:parseHm, parseQuick:parseQuick, vaultScore:vaultScore, formOf:formOf } };
+  _test:{ addDays:addDays, monday:monday, wd:wd, parseHm:parseHm, parseQuick:parseQuick, vaultScore:vaultScore, formOf:formOf, newGame:newGame } };
 })();
